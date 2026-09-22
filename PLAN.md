@@ -6,6 +6,18 @@ translations**, doors and treasure chests are opened by **solving word
 puzzles**, and an optional LLM connection makes the dungeon react to how you
 are learning.
 
+**Audience:** secondary-school students, around 13 years old. The tone is
+friendly and adventurous, never gory, and all generated content is
+family-safe.
+
+**Languages (all English → target):**
+- French
+- Latin
+- Ancient Greek (polytonic)
+- Irish
+
+The UI is in English.
+
 ---
 
 ## 1. Design pillars
@@ -26,7 +38,7 @@ are learning.
 
 ## 2. Tech stack
 
-**Recommendation: Go + [Ebitengine](https://ebitengine.org) (v2).**
+**Chosen: Go + [Ebitengine](https://ebitengine.org) (v2).**
 
 | Need | Why Go + Ebitengine fits |
 |---|---|
@@ -66,8 +78,8 @@ halpwords/
 │   │                            # prompt templates, JSON validation, cache, budget
 │   └── save/                    # profiles, run saves, settings (JSON in user config dir)
 ├── assets/                      # embedded: font, word packs, puzzle bank, hero template
-│   ├── fonts/
-│   ├── packs/                   # e.g. es-en-basics.json, sv-en-basics.json
+│   ├── fonts/                   # Unifont subset (.hex) + OFL licence
+│   ├── words/                   # starter lists: french.txt, latin.txt, greek.txt, irish.txt
 │   └── puzzles/                 # hand-written riddles/cloze templates per pack
 └── overrides/                   # optional drop-in PNGs (AI art) that replace procedural sprites
 ```
@@ -79,37 +91,45 @@ Rules:
 - **Scenes are a stack** (explore → battle → back to explore; puzzle overlays).
 - **Seeded RNG everywhere**, so a dungeon seed can reproduce a run for debugging
   and sharing.
-- **Virtual resolution 320×180** (16:9), integer-scaled to the window, with
-  16×16 tiles, giving a 20×11 tile viewport.
+- **Logical screen 640×360** (16:9), integer-scaled to the window.
+  - The world uses 16×16 tiles drawn at 2×, so the art has a chunky 320×180
+    pixel grid and the viewport is 20×11 tiles.
+  - Text is drawn at 1× (8×16 Unifont glyphs), so Greek accents and breathings
+    stay readable. The typing line uses 2× or 3× text.
 
 ---
 
 ## 4. Words: packs, matching, learning
 
-### Word pack format (JSON, user-editable)
-```json
-{
-  "id": "es-en-basics-1",
-  "name": "Spanish: First Steps",
-  "prompt_lang": "en",
-  "answer_lang": "es",
-  "words": [
-    {
-      "prompt": "dog",
-      "answer": "perro",
-      "alternatives": [],
-      "tags": ["animal"],
-      "difficulty": 1,
-      "example": "El perro duerme.",
-      "hint": "Rolled double r"
-    }
-  ]
-}
+### Word list format: plain text, one word per line
+Teachers and students can write these in any text editor. Files end in `.txt`
+and go in the `words/` folder in the game's user folder, where the game picks
+them up without rebuilding.
+
 ```
-- Packs can be imported from JSON or CSV (`prompt,answer,tags`) through a file
-  in the user folder, so your own word lists load without rebuilding.
-- The game ships with a few starter packs. With an LLM connected, the
-  **Word Forge** can generate packs (see §9).
+# Lines starting with # are comments.
+title: French - Animals
+language: fr
+
+## animals
+dog = le chien
+cat = le chat
+horse = le cheval
+bird = l'oiseau | un oiseau
+
+## food
+bread = le pain
+```
+- `english = answer`. Extra accepted answers go after `|`.
+- `title:` and `language:` (`fr`, `la`, `grc`, `ga`) are the only header
+  fields.
+- `## name` starts a tag group, used by puzzles such as odd-one-out and by LLM
+  themes.
+- Difficulty is worked out automatically from word length, special characters
+  and your history, so there are no extra columns.
+- Answers are written in normal Unicode (é, ā, á, ἀ).
+- The game ships with starter packs for each language (§4a). With an LLM
+  connected, the **Word Forge** can generate more (see §10).
 
 ### Answer matching
 - Normalise to Unicode NFC, trim, case-insensitive (`golang.org/x/text`).
@@ -122,10 +142,53 @@ Rules:
 - The mistake type is classified locally (accent, doubled letter, swapped
   letters, missing letter, wrong word) for feedback and statistics.
 - **Accent helper:** after typing a letter, press `Tab` to cycle its variants
-  (e → é → è → ê → ë). This works the same on every OS and keyboard layout.
-  Native OS accent input also works.
-- A setting controls accent strictness: *strict* (an accent slip counts as a
-  miss), *normal* (reduced credit) or *lenient* (full credit).
+  (e → é → è → ê → ë, a → ā for Latin, a → á for Irish). This works the same on
+  every OS and keyboard layout. Native OS accent input also works.
+- **Configurable strictness**, set per language in Settings:
+
+  | Setting | Options | Default |
+  |---|---|---|
+  | Accents / fadas / macrons | strict · reduced credit · ignore | French *reduced*, Irish *reduced*, Latin macrons *ignore*, Greek *ignore* |
+  | Greek breathings (ἀ vs ἁ) | strict · reduced credit · ignore | *ignore* |
+  | Articles (French *le/la/l'/les*) | required · optional | *optional* |
+  | Capitals | strict · ignore | *ignore* |
+  | Live typo highlighting | on · off | *on* |
+  | Timer speed | relaxed · normal · fast | *normal* |
+
+### 4a. Language-specific details
+- **French:** é è ê ë à â ç î ï ô ù û ü œ.
+  - With articles *optional*, `chien` and `le chien` are both accepted.
+    With articles *required*, the article is checked too, which is good
+    practice for gender.
+  - Elision (`l'oiseau`) is handled, and typographic apostrophes (’) are treated
+    the same as `'`.
+- **Latin:** answers use the dictionary headword (nominative singular for
+  nouns, 1st person present for verbs, following common school courses).
+  Macrons (ā ē ī ō ū) are optional by default; *strict* is for advanced
+  students. Lists may give alternatives (`servus | serva`).
+- **Ancient Greek:** most keyboards can't type Greek, so the game has a
+  built-in **Greek input mode** that turns Latin keys into Greek letters as you
+  type:
+  - Letters follow Beta Code conventions: a→α b→β g→γ d→δ e→ε z→ζ h→η q→θ i→ι
+    k→κ l→λ m→μ n→ν c→ξ o→ο p→π r→ρ s→σ t→τ u→υ f→φ x→χ y→ψ w→ω.
+  - Final sigma (ς) is automatic.
+  - Diacritics are optional keys after a vowel: `)` smooth, `(` rough, `/`
+    acute, `\` grave, `=` circumflex, `|` iota subscript. For example,
+    `a)/` → ἄ.
+  - An on-screen key chart is shown during Greek battles. With breathings and
+    accents on *ignore* (the default), students only need the letters.
+  - Students with a real Greek keyboard layout can switch the input mode off.
+- **Irish:** fadas (á é í ó ú) are part of the spelling and can change the
+  meaning (e.g. *sean* "old" vs *Seán*), so the default is *reduced credit* and
+  *strict* is available.
+  - Answers follow the Official Standard (An Caighdeán Oifigiúil). Dialect
+    variants can be listed as alternatives.
+  - Lenition and eclipsis (`bhean`, `mbróg`) are compared as normal letters.
+- **Starter packs:** about 60–100 words per language, grouped into themes
+  (animals, family, house, school, food, body, numbers, colours, verbs,
+  myths/gods). They follow typical secondary-school vocabulary: GCSE-style
+  French, Cambridge Latin Course-style Latin, Athenaze/JACT-style Greek, and
+  Junior Cycle Irish. Each pack is checked by a person before release.
 
 ### Spaced repetition
 - A Leitner box system (5 boxes) per word per profile. Misses send a word back
@@ -246,12 +309,53 @@ so none need an LLM.
   (e.g. +10% dodge window).
 - **Shops and campfires:** a merchant on some floors; campfires restore HP and
   show your Grimoire and your weakest words.
-- **Modes:**
-  - *Story*: generous timers, keep progress when you die, lose some gold.
-  - *Adventurer*: the default balance.
-  - *Hardcore*: permadeath, strict accents, no live feedback.
-- **Saves:** JSON in `os.UserConfigDir()/halpwords/`: profiles (with SRS data),
-  the current run, and settings.
+### Game modes
+Runs are roguelite: the dungeon is new every run, and dying ends the run. Word
+mastery (SRS data) is **always** kept, so every run makes you better.
+
+**Adventure mode (default)**
+- **Save Shrines** appear every few floors (and always before a boss). Using
+  one saves your hero, inventory and floor.
+- When you die, you wake up at the last shrine you used with some gold lost,
+  and that floor is regenerated.
+- You can save and quit at a shrine. Quitting elsewhere keeps a suspend save
+  that is deleted when you load it, so saves can't be abused.
+- All strictness and timer settings are available.
+
+**Hardcore mode (competitive)**
+- One life and no shrines. Quitting only suspends the run (and the suspend save
+  is deleted when you load it).
+- **Fixed rules**, so scores are comparable: each language has a set
+  strictness preset, normal timers, and no Hourglass or Rune of Clarity.
+  Settings are locked during the run.
+- **Score:** one number that grows as you go deeper.
+  ```
+  score = floor_reached × 1000
+        + Σ damage dealt
+        + perfect_words × 50
+        + best_combo × 100
+        + bosses × 2500
+        + chests × 150
+        − misses × 25
+  ```
+  The HUD shows the floor, score and a "personal best" marker.
+- **Compete with friends:**
+  - **Daily Dungeon:** the seed comes from the date plus the word list, so
+    everyone playing that day with the same list gets the same dungeon.
+  - **Seed challenge:** share a 6-character seed code so friends can play the
+    same dungeon.
+  - At the end of a run you get a **share code**, e.g.
+    `HW-FR-0922-F12-18450-K7QX`. It holds the language, date/seed, floor, score
+    and a checksum, so it can be pasted into a group chat. The game can check a
+    friend's code. This isn't cheat-proof, but it catches typos and casual
+    edits.
+  - A local **Hall of Fame** lists the top 10 per language and per mode.
+- An online leaderboard is a possible later addition (it needs a small server,
+  which is out of scope for now).
+
+**Saves:** JSON in `os.UserConfigDir()/halpwords/`: profiles (with SRS data),
+shrine save, suspend save, Hall of Fame, and settings. Word lists go in the
+`words/` folder next to them.
 
 ---
 
@@ -287,10 +391,15 @@ built from blade/guard/hilt parts).
 **Effects:** particles, damage numbers, screen shake, torch flicker, and a
 CRT/scanline filter as an optional shader (Kage).
 
-**Font:** the only required external asset. An open-licence pixel font with
-Latin Extended coverage (candidates: *monogram* (CC0), *Pixel Operator*). Check
-glyph coverage for each target language. Non-Latin scripts (Japanese, Arabic)
-need a larger font later.
+**Font:** the only required external asset is **GNU Unifont**, an 8×16 pixel
+bitmap font dual-licensed under the SIL OFL 1.1 and GPLv2+ with the font
+embedding exception.
+- It covers Latin-1, Latin Extended-A (macrons), and Greek plus Greek Extended
+  (all polytonic forms such as ἄ ᾧ ῥ).
+- We embed a small subset in Unifont's simple `.hex` text format and parse it
+  ourselves, so no font library is needed. The OFL licence text ships with
+  the game.
+- Unifont's 8×16 glyphs already look retro.
 
 **Audio (no files):**
 - An sfxr-style synth (square, triangle, saw and noise with ADSR and pitch
@@ -325,8 +434,13 @@ boss portraits, NPC portraits.
   and puzzles must be solvable by the local checker.
 - **The LLM never grades spelling.** Correctness is always checked locally. The
   one exception is free-form conversation with the Oracle.
-- Disk cache of generated content, a per-session cost/token cap, and a
-  "family-friendly" content setting.
+- Disk cache of generated content and a per-session cost/token cap.
+- **Always family-safe:** every prompt includes an age-appropriate
+  (13-year-old) content policy, and output is run through a local word filter.
+  This can't be turned off.
+- **Set up by a parent or teacher:** the LLM settings (key, provider, budget)
+  sit in a separate "Parent/Teacher" settings page. Students never have to
+  handle API keys.
 
 ### Ideas for a more dynamic game (ordered by value)
 1. **Dungeon Director:** before each floor, the LLM gets the words that are due,
@@ -399,29 +513,28 @@ boss portraits, NPC portraits.
 |---|---|---|
 | **M0** | Skeleton | Go module, Ebitengine window on Arm Mac, pixel-perfect scaling, scene stack, font rendering, Unicode text input, Makefile, CI. |
 | **M1** | Dungeon | BSP generator, procedural tiles, grid movement, camera, FOV and fog, minimap and full map, stairs to the next floor. |
-| **M2** | Words and combat | Word pack loader and starter packs, grading engine with accent helper, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** |
+| **M2** | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** |
 | **M3** | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. |
-| **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, save/load, title and menus. |
-| **M5** | Learning layer | Spaced repetition, Grimoire stats screen, CSV import, difficulty modes, accent strictness setting. |
+| **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. |
+| **M5** | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. |
 | **M6** | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. |
 | **M7** | Polish and ship | Procedural music, CRT shader, juice pass, balance simulation, `.app` bundle, Windows/Linux/Web release builds. |
 
-Stretch: Oracle NPC, side quests, Bard's Tale, text-to-speech pronunciation,
-two-player race mode, non-Latin scripts.
+Stretch: Oracle NPC, side quests, Bard's Tale, text-to-speech pronunciation
+(useful for French and Irish), two-player race mode, online leaderboard, a
+teacher "class pack" export.
 
 ---
 
-## 14. Open questions
+## 14. Decisions
 
-1. **Languages:** which language pair(s) first? Is the UI in English?
-2. **Word lists:** do you already have lists (and in what format), or should we
-   start with generated starter packs?
-3. **Audience:** kids, adults, or both? This affects timer defaults, content
-   filter and tone.
-4. **Progression:** roguelite runs (restart on death, keep word mastery) or one
-   persistent adventure? The plan assumes roguelite with a gentle Story mode.
-5. **Accents:** how strict should accents be by default? The plan assumes
-   *normal*, with reduced credit for a missing accent.
-6. **LLM provider:** is Claude first, with OpenAI-compatible/local as the second
-   option, OK?
-7. **Stack:** is Go + Ebitengine OK?
+| Topic | Decision |
+|---|---|
+| Languages | English → French, Latin, Ancient Greek, Irish. UI in English. |
+| Word list format | Plain text, `english = answer \| alternative`, with `## tag` groups (§4). |
+| Audience | Secondary school, about 13. Family-safe, encouraging tone, relaxed default timers. |
+| Progression | Roguelite runs. Adventure mode has Save Shrines; Hardcore has one life and a comparable score, share codes and a Daily Dungeon (§8). |
+| Strictness | Configurable per language: accents, breathings, articles, capitals, timers (§4). |
+| LLM | Optional. Claude first, OpenAI-compatible/local second. Set up by a parent or teacher. Always family-safe. |
+| Stack | Go + Ebitengine. |
+| Font | GNU Unifont subset (OFL 1.1). |
