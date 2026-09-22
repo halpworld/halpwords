@@ -53,3 +53,30 @@ func Fade(c color.RGBA, a float64) color.RGBA {
 	}
 	return color.RGBA{uint8(float64(c.R) * a), uint8(float64(c.G) * a), uint8(float64(c.B) * a), uint8(255 * a)}
 }
+
+// All lists the palette in DawnBringer order. Indexed images store positions
+// in this slice.
+var All = []color.RGBA{
+	Black, Night, Plum, Mahogany, Brown, Orange, Tan, Skin,
+	Yellow, Lime, Green, Teal, Forest, Olive, Slate, Indigo,
+	Navy, Blue, Sky, Cyan, Ice, White, Steel, Ash,
+	Stone, Granite, Purple, Red, Rose, Pink, Moss, Bronze,
+}
+
+// Index returns the position of c in All, or of the nearest palette colour
+// if c is not in the palette.
+func Index(c color.RGBA) uint8 {
+	best, bestD := 0, 1<<30
+	for i, p := range All {
+		dr, dg, db := int(c.R)-int(p.R), int(c.G)-int(p.G), int(c.B)-int(p.B)
+		// Weighted distance: the eye is most sensitive to green.
+		d := 3*dr*dr + 4*dg*dg + 2*db*db
+		if d < bestD {
+			best, bestD = i, d
+			if d == 0 {
+				break
+			}
+		}
+	}
+	return uint8(best)
+}

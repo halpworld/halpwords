@@ -12,7 +12,7 @@ import (
 )
 
 // Version is shown on the title screen.
-const Version = "v0.1 (milestone 0)"
+const Version = "v0.2 (milestone 1: dungeon crawl)"
 
 // Title is the title screen and main menu.
 type Title struct {
@@ -27,7 +27,7 @@ func NewTitle(*game.Context) game.Scene {
 	return &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []string{"Spelling Practice", "Quit"},
+		items:   []string{"New Adventure", "Spelling Practice", "Quit"},
 	}
 }
 
@@ -44,8 +44,10 @@ func (t *Title) Update(ctx *game.Context) error {
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		switch t.sel {
 		case 0:
-			ctx.Replace(NewPractice(ctx))
+			ctx.Replace(NewAdventure(ctx))
 		case 1:
+			ctx.Replace(NewPractice(ctx))
+		case 2:
 			return ebiten.Termination
 		}
 	}
