@@ -1,0 +1,27 @@
+# Starter list for Ancient (Attic) Greek. Nouns: nominative singular. Verbs: 1st person present.
+title: Ancient Greek - First Steps
+language: grc
+
+## people
+human being = ἄνθρωπος
+brother = ἀδελφός
+child = παῖς
+farmer = γεωργός
+god = θεός
+
+## world
+word = λόγος
+horse = ἵππος
+house = οἰκία
+sea = θάλαττα | θάλασσα
+road = ὁδός
+field = ἀγρός
+sun = ἥλιος
+water = ὕδωρ
+gift = δῶρον
+soul = ψυχή
+
+## verbs
+I have = ἔχω
+I write = γράφω
+I say = λέγω

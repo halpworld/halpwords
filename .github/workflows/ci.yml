@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Ebitengine dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev
+      - run: make vet
+      - run: make test
+      - name: Build all platforms
+        run: make build-linux build-mac build-windows build-web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: halpwords-builds
+          path: dist/
+
+  macos:
+    runs-on: macos-latest # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test
+      - run: make bundle-mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Halpwords-mac-arm64
+          path: dist/Halpwords.app

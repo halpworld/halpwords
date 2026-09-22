@@ -1,0 +1,31 @@
+# Starter list for Latin. Nouns: nominative singular. Verbs: 1st person present.
+title: Latin - First Steps
+language: la
+
+## people
+girl = puella
+boy = puer
+farmer = agricola
+sailor = nauta
+friend = amīcus | amīca
+king = rēx
+queen = rēgīna
+master = dominus
+
+## gods
+god = deus
+goddess = dea
+
+## things
+road = via
+water = aqua
+gift = dōnum
+island = īnsula
+war = bellum
+sword = gladius
+shield = scūtum
+
+## verbs
+I love = amō
+I see = videō
+I am = sum

@@ -1,0 +1,31 @@
+# Starter list for Irish (An Caighdeán Oifigiúil).
+title: Irish - First Steps
+language: ga
+
+## animals
+dog = madra
+cat = cat
+horse = capall
+bird = éan
+fish = iasc
+
+## home
+house = teach
+book = leabhar
+door = doras
+window = fuinneog
+
+## people
+friend = cara
+girl = cailín
+boy = buachaill
+mother = máthair
+father = athair
+teacher = múinteoir
+
+## dungeon
+castle = caisleán
+sea = farraige
+gold = ór
+sword = claíomh
+key = eochair
