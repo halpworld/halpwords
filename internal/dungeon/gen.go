@@ -147,9 +147,10 @@ type ringCell struct {
 	out Dir
 }
 
-// placeDoors puts doors where a one-wide corridor enters a room.
+// placeDoors puts doors where a one-wide corridor enters a room. The start
+// room (room 0) is never sealed, so the hero can always walk out of it.
 func (f *Level) placeDoors(rng *rand.Rand) {
-	for _, r := range f.Rooms {
+	for i, r := range f.Rooms {
 		var ring []ringCell
 		for x := r.X; x < r.X+r.W; x++ {
 			ring = append(ring, ringCell{Point{x, r.Y - 1}, North}, ringCell{Point{x, r.Y + r.H}, South})
@@ -170,7 +171,7 @@ func (f *Level) placeDoors(rng *rand.Rand) {
 				continue
 			}
 			switch v := rng.IntN(10); {
-			case v < 3:
+			case v < 3 && i > 0:
 				f.Set(c.p, Sealed)
 			case v < 7:
 				f.Set(c.p, Door)

@@ -51,6 +51,23 @@ func TestGenerateIsSolvable(t *testing.T) {
 	}
 }
 
+// The hero must be able to leave the start room without solving a puzzle.
+func TestStartRoomIsNotSealed(t *testing.T) {
+	for seed := uint64(1); seed <= 300; seed++ {
+		for _, depth := range []int{1, 2, 5, 8} {
+			f := Generate(seed, depth)
+			r := f.Rooms[0]
+			for y := r.Y - 1; y <= r.Y+r.H; y++ {
+				for x := r.X - 1; x <= r.X+r.W; x++ {
+					if f.At(Point{x, y}) == Sealed {
+						t.Fatalf("seed %d depth %d: sealed door %v on the start room", seed, depth, Point{x, y})
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestChestsDoNotBlockPaths(t *testing.T) {
 	for seed := uint64(1); seed <= 200; seed++ {
 		f := Generate(seed, 2)

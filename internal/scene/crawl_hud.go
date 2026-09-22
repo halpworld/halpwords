@@ -244,5 +244,7 @@ func (c *Crawl) drawPanel(dst *ebiten.Image, ctx *game.Context) {
 		}
 		f.DrawShadow(dst, l.text, x+12, y+9+i*16, 1, col)
 	}
-	f.DrawShadow(dst, exploreHelp, x+12, y+h-24, 1, pal.Ash)
+	if c.mode == modeExplore {
+		f.DrawShadow(dst, exploreHelp, x+12, y+h-24, 1, pal.Ash)
+	}
 }

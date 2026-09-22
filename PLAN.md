@@ -312,7 +312,8 @@ so none need an LLM.
 *Now (M1):* **sealed doors** glow with runes and open when you spell a word
 correctly, and **locked chests** show the answer with missing letters. Accent
 slips are accepted; anything worse zaps you for 2 HP. Chests give gold and
-potions. Puzzles have no timer.
+potions. Puzzles have no timer. The start room of a floor never has a sealed
+door, so you can always walk out of it.
 
 - **Doors** use the easier or mid-level puzzles. Failing costs a little HP (a
   trap) and gives a short cooldown. Hints cost MP or a *Hint Scroll*.
