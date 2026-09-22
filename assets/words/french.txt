@@ -1,0 +1,29 @@
+# Starter list for French. Format: english = answer | other accepted answer
+title: French - First Steps
+language: fr
+
+## animals
+dog = le chien
+cat = le chat
+horse = le cheval
+bird = l'oiseau
+fish = le poisson
+
+## home
+house = la maison
+book = le livre
+door = la porte
+window = la fenêtre
+
+## people
+friend = l'ami | l'amie
+sister = la sœur
+brother = le frère
+
+## dungeon
+castle = le château
+forest = la forêt
+sword = l'épée
+treasure = le trésor
+key = la clé | la clef
+dragon = le dragon

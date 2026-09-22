@@ -511,7 +511,7 @@ boss portraits, NPC portraits.
 
 | # | Milestone | Deliverable |
 |---|---|---|
-| **M0** | Skeleton | Go module, Ebitengine window on Arm Mac, pixel-perfect scaling, scene stack, font rendering, Unicode text input, Makefile, CI. |
+| **M0** ✅ | Skeleton | Go module, Ebitengine window on Arm Mac, pixel-perfect scaling, scene stack, font rendering, Unicode text input, Makefile, CI. *Done: also includes the grading engine, Tab accents, Greek input mode, and a spelling practice screen.* |
 | **M1** | Dungeon | BSP generator, procedural tiles, grid movement, camera, FOV and fog, minimap and full map, stairs to the next floor. |
 | **M2** | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** |
 | **M3** | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. |
