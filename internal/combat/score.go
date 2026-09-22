@@ -36,3 +36,43 @@ func Accuracy(t words.Tier) float64 {
 func clamp(v, lo, hi float64) float64 {
 	return max(lo, min(hi, v))
 }
+
+// MaxCombo is the largest combo multiplier a streak can build.
+const MaxCombo = 2.0
+
+// Combo returns the damage multiplier for a streak of good answers in a row.
+func Combo(streak int) float64 {
+	return min(1+0.1*float64(streak), MaxCombo)
+}
+
+// Damage returns the damage of an attack by a hero with attack power atk,
+// and whether it was a critical hit. A perfect answer typed very fast
+// (speed 1.5 or more) is critical and deals half as much again.
+func Damage(atk int, tier words.Tier, speed float64, streak int) (int, bool) {
+	d := float64(atk) * Accuracy(tier) * speed * Combo(streak)
+	crit := tier == words.Perfect && speed >= 1.5
+	if crit {
+		d *= 1.5
+	}
+	if d > 0 && d < 1 {
+		d = 1
+	}
+	return int(d + 0.5), crit
+}
+
+// DefendTime is how long the hero has to type a dodge for an answer of n
+// characters.
+func DefendTime(n int) float64 { return TargetTime(n)*2 + 1.5 }
+
+// Block returns the share of a monster's hit the hero takes after typing a
+// dodge graded tier: none for a clean answer, half for a slip or graze.
+func Block(tier words.Tier) float64 {
+	switch {
+	case tier >= words.Correct:
+		return 0
+	case tier >= words.Graze:
+		return 0.5
+	default:
+		return 1
+	}
+}

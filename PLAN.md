@@ -1,7 +1,9 @@
 # Halpwords: Plan
 
 An 8-bit dungeon-crawler RPG for learning to spell words in a foreign language.
-You explore a randomly generated dungeon. Monsters are fought by **typing
+You explore a randomly generated dungeon **in first person, one grid step at a
+time**, like the classic Commodore 64 crawlers (The Bard's Tale, Dungeon
+Master, Eye of the Beholder). Monsters are fought by **typing
 translations**, doors and treasure chests are opened by **solving word
 puzzles**, and an optional LLM connection makes the dungeon react to how you
 are learning.
@@ -66,7 +68,8 @@ halpwords/
 │   ├── game/                    # top-level Game, scene stack, fixed-timestep loop
 │   ├── scene/                   # title, charcreate, explore, battle, puzzle,
 │   │                            # inventory, shop, campfire, gameover, settings
-│   ├── dungeon/                 # generation, FOV/shadowcasting, pathfinding, fog of war
+│   ├── dungeon/                 # generation, monsters, automap memory
+│   ├── raycast/                 # first-person view: walls, floor, ceiling, sprites
 │   ├── gfx/                     # palette, procedural tiles, sprite generator,
 │   │                            # text rendering, particles, screen shake, lighting
 │   ├── audio/                   # sfxr-style synth, procedural music sequencer
@@ -92,8 +95,11 @@ Rules:
 - **Seeded RNG everywhere**, so a dungeon seed can reproduce a run for debugging
   and sharing.
 - **Logical screen 640×360** (16:9), integer-scaled to the window.
-  - The world uses 16×16 tiles drawn at 2×, so the art has a chunky 320×180
-    pixel grid and the viewport is 20×11 tiles.
+  - The screen is laid out like a C64 crawler: the 3D view top left, the hero
+    and automap windows on the right, and a message log below that turns into
+    the typing panel in battles and puzzles.
+  - The 3D view is raycast at half resolution and drawn at 2×, so the art has
+    a chunky pixel grid.
   - Text is drawn at 1× (8×16 Unifont glyphs), so Greek accents and breathings
     stay readable. The typing line uses 2× or 3× text.
 
@@ -202,7 +208,23 @@ bread = le pain
 
 ## 5. Dungeon and exploration
 
-- **Generation:** BSP room placement plus corridors, joined into a spanning tree
+The dungeon is a **first-person, grid-based crawler** (a "blobber"): the hero
+stands in one cell, faces north, east, south or west, and moves one cell or a
+quarter turn at a time.
+
+- **View:** a raycaster draws textured walls, floors and ceilings, doors,
+  wall torches that light their surroundings, and billboarded monster and
+  chest sprites. Steps and turns are tweened over a few frames, and a bump
+  nudges the camera when you walk into a wall.
+- **Movement:** `↑`/`W` forward, `↓`/`S` back, `←`/`A` and `→`/`D` turn,
+  `Q`/`E` strafe. A tap moves exactly one cell and holding a key repeats.
+  Walking into something uses it: doors open, monsters are attacked, chests and
+  sealed doors start puzzles. `Space` or `Enter` does the same for the cell in
+  front, and descends when standing on the stairs.
+- **Turns:** monsters act each time the hero steps, waits or opens a door.
+  They wander, chase when close, and **ambush** when they reach you: the hero
+  turns to face them and the fight opens with a dodge.
+- **Generation:** rooms plus corridors, joined into a spanning tree
   with a few extra loops. Each room gets a tag: start, stairs, treasure,
   monster den, puzzle vault, shop, campfire or boss.
 - **Locked doors** gate parts of the floor. The generator guarantees solvability
@@ -210,24 +232,26 @@ bread = le pain
   (some doors guard the stairs, some guard optional loot).
 - **Floors:** each floor goes deeper, with a palette and theme change (Crypt →
   Flooded Caves → Ice Halls → Lava Forge → …) and a boss before the stairs.
-- **Movement:** grid-based and turn-based (roguelike ticks) with smooth
-  tweening between tiles for an 8-bit feel. Arrow keys or WASD; `Space`
-  interacts.
-- **FOV and fog of war:** recursive shadowcasting and a torch radius with
-  dithered darkness and flicker. Explored tiles stay dimly remembered.
-- **Monsters on the map** wander, chase within an aggro range and start a battle
-  on contact. Sneaking up on a sleeping monster grants a free first strike.
-- **Minimap:** top-right, one pixel per tile, explored tiles only, with icons for
-  player, doors, chests and stairs. `M` opens a full-screen map.
-- **HUD:** HP/MP bars, level, gold, floor number, and a message log in a retro
-  text box with a typewriter effect.
+- **Light:** the hero's torch fades with distance, with dithered darkness.
+- **Automap:** cells the raycaster sees (up to 7 cells away) are remembered and
+  drawn in the map window with walls, torches, doors, sealed doors, chests,
+  stairs, nearby monsters, and the hero with an arrow for facing. `M` opens
+  the full map over the 3D view. A compass shows the facing.
+- **HUD:** level, language, HP and XP bars, ATK, gold, potions and combo, plus
+  a four-line message log.
+- **Save points:** arriving on a floor saves the hero. Dying restarts the floor
+  with the hero as they arrived.
+- **Later:** sneaking up on a sleeping monster for a free first strike, and
+  shadowcast fog for the full map.
 
 ---
 
 ## 6. Combat: typing battles
 
-A JRPG-style battle screen with a big procedural monster sprite, the hero at the
-bottom, and a text-entry line in large pixel letters.
+Battles happen in the 3D view, crawler-style: the camera closes in on the
+monster, its name and HP bar appear at the top of the view, and the bottom
+panel becomes a text-entry line in large pixel letters. The monster flashes
+when hit, lunges when it attacks, and shrinks away when defeated.
 
 ### Turn flow
 1. **Your attack:** a prompt word appears (e.g. *"dog"*). Type the translation
@@ -235,8 +259,9 @@ bottom, and a text-entry line in large pixel letters.
 2. **Monster attack:** the monster telegraphs ("The Ghoul raises its claws!"),
    shows a word, and a timer bar starts shrinking. Type it before the bar
    empties to **dodge**.
-3. Repeat until someone drops. Other actions: `F1` item menu, `Esc` flee
-   (chance-based, taking a hit if it fails).
+3. Repeat until someone drops. Other actions: `F1` drinks a potion (costs your
+   attack), `Esc` flees (50% chance; a failed escape lets the monster attack,
+   and a monster you escape from is stunned for a few turns).
 
 ### Formulas (starting values, to be tuned)
 ```
@@ -283,6 +308,11 @@ so none need an LLM.
 | **Mini crossword** | 2 or 3 pack words crossing on a shared letter. |
 | **Riddle / cloze** | Hand-written riddles and fill-in-the-blank sentences from `assets/puzzles/`. |
 | **Reverse rune** | Given the foreign word, type the native one (recognition practice). |
+
+*Now (M1):* **sealed doors** glow with runes and open when you spell a word
+correctly, and **locked chests** show the answer with missing letters. Accent
+slips are accepted; anything worse zaps you for 2 HP. Chests give gold and
+potions. Puzzles have no timer.
 
 - **Doors** use the easier or mid-level puzzles. Failing costs a little HP (a
   trap) and gives a short cooldown. Hints cost MP or a *Hint Scroll*.
@@ -365,7 +395,7 @@ shrine save, suspend save, Hall of Fame, and settings. Word lists go in the
 blues for the Ice Halls, reds for the Forge). Palette cycling animates fire and
 water.
 
-**Tiles** (generated into a texture atlas at startup, per floor):
+**Textures** (generated at startup, per floor, for the 3D view):
 - Walls: brick or stone patterns with value noise, ordered dithering, and
   bitmask autotiling for edges, tops and shadows.
 - Floors: noise speckle, cracks, moss and puddles, placed with seeded
@@ -380,7 +410,7 @@ water.
   shading, and eye placement.
 - 2-frame idle animation from squash/offset. Hit, flash and death-dissolve
   effects are done in code.
-- The same generator renders at 16×16 for the map and 48×48 for battles.
+- Sprites are billboarded in the 3D view and scale with distance.
 - Elite and boss variants get size, palette and extra features (horns, crowns).
 
 **Hero:** a 16×16 template in code (string art), recoloured by class and gear.
@@ -512,7 +542,7 @@ boss portraits, NPC portraits.
 | # | Milestone | Deliverable |
 |---|---|---|
 | **M0** ✅ | Skeleton | Go module, Ebitengine window on Arm Mac, pixel-perfect scaling, scene stack, font rendering, Unicode text input, Makefile, CI. *Done: also includes the grading engine, Tab accents, Greek input mode, and a spelling practice screen.* |
-| **M1** | Dungeon | BSP generator, procedural tiles, grid movement, camera, FOV and fog, minimap and full map, stairs to the next floor. |
+| **M1** ✅ | Dungeon crawl | First-person grid movement with a raycast view, room-and-corridor generator, procedural wall/floor/ceiling textures per floor theme, wall torches, automap and full map, compass, stairs and floor save points. *Done: also pulls forward the battle loop from M2 (attack/dodge in the 3D view, procedural monster sprites, XP and levels, potions, fleeing) and the first two puzzles from M3 (sealed doors, missing-letter chests).* |
 | **M2** | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** |
 | **M3** | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. |
 | **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. |
