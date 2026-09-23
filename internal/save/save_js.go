@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"sort"
+	"strings"
 	"syscall/js"
 )
 
@@ -51,4 +53,28 @@ func Write(name string, data []byte) error {
 func Remove(name string) error {
 	_, err := storage("removeItem", prefix+name)
 	return err
+}
+
+// List returns the names of the files in the folder dir, sorted.
+func List(dir string) ([]string, error) {
+	ls, err := storage("valueOf") // the storage itself, or an error when it is off
+	if err != nil {
+		return nil, err
+	}
+	want := prefix + strings.TrimSuffix(dir, "/") + "/"
+	var names []string
+	for i := 0; i < ls.Get("length").Int(); i++ {
+		k, err := storage("key", i)
+		if err != nil {
+			return nil, err
+		}
+		if k.IsNull() {
+			continue
+		}
+		if name, ok := strings.CutPrefix(k.String(), want); ok && name != "" && !strings.Contains(name, "/") {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }

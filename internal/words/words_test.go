@@ -138,3 +138,79 @@ func TestAccentCycle(t *testing.T) {
 		t.Fatal("z should have no accents")
 	}
 }
+
+func TestParseImport(t *testing.T) {
+	src := "title: Spreadsheet\ndog\tle chien\ncat = le chat | la chatte\n"
+	l, err := ParseImport(strings.NewReader(src), "export.tsv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Language != "" || len(l.Entries) != 2 || l.Entries[0].Answers[0] != "le chien" {
+		t.Fatalf("got %+v", l)
+	}
+	l, err = ParseImport(strings.NewReader("language: French\ndog = le chien"), "fr.txt")
+	if err != nil || l.Language != "fr" || l.Title != "fr" {
+		t.Fatalf("got %+v, %v", l, err)
+	}
+	if _, err := Parse(strings.NewReader("language: fr\ndog\tle chien"), "t.txt"); err == nil {
+		t.Error("Parse accepted a tab-separated word")
+	}
+	if _, err := ParseImport(strings.NewReader("language: xx\ndog = x"), "t.txt"); err == nil {
+		t.Error("ParseImport accepted an unknown language")
+	}
+}
+
+func TestFormatRoundTrip(t *testing.T) {
+	src := "title: Test\nlanguage: la\n\n## a\nwater = aqua\n\nfire = ignis\n## b\nrose = rosa | rosae\n## a\nland = terra\n"
+	l, err := Parse(strings.NewReader(src), "t.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Entries = append(l.Entries, Entry{Prompt: "war", Answers: []string{"bellum"}})
+	back, err := Parse(strings.NewReader(string(l.Format())), "t.txt")
+	if err != nil {
+		t.Fatalf("%v in:\n%s", err, l.Format())
+	}
+	if back.Title != l.Title || back.Language != l.Language || len(back.Entries) != len(l.Entries) {
+		t.Fatalf("got %+v", back)
+	}
+	tags := map[string]string{}
+	for _, e := range back.Entries {
+		tags[e.Prompt] = e.Tag + ":" + strings.Join(e.Answers, ",")
+	}
+	want := map[string]string{"water": "a:aqua", "land": "a:terra", "rose": "b:rosa,rosae", "war": ":bellum"}
+	for p, w := range want {
+		if tags[p] != w {
+			t.Errorf("%s: got %q, want %q", p, tags[p], w)
+		}
+	}
+}
+
+func TestMerge(t *testing.T) {
+	l := &List{Entries: []Entry{{Prompt: "dog", Answers: []string{"le chien"}}}}
+	o := &List{Entries: []Entry{
+		{Prompt: "Dog", Answers: []string{"Le chien", "un chien"}},
+		{Prompt: "cat", Answers: []string{"le chat"}},
+	}}
+	if n := l.Merge(o); n != 1 {
+		t.Errorf("added %d, want 1", n)
+	}
+	if len(l.Entries) != 2 || strings.Join(l.Entries[0].Answers, ",") != "le chien,un chien" {
+		t.Errorf("got %+v", l.Entries)
+	}
+	if n := l.Merge(o); n != 0 {
+		t.Errorf("merging again added %d", n)
+	}
+}
+
+func TestFileName(t *testing.T) {
+	for in, want := range map[string]string{
+		"French - Animals": "french-animals.txt",
+		"  Mé  Chéile!! ":  "me-cheile.txt",
+		"Ἑλληνικά":         "words.txt",
+	} {
+		if got := FileName(in); got != want {
+			t.Errorf("FileName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
