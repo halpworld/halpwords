@@ -1,0 +1,74 @@
+# Riddles for riddle puzzles. Format: english word = riddle
+# The key is the English side of a word list line (the part before "=").
+# The hero reads the riddle and types the word in the language they are
+# learning, so one riddle works for every language. A word can have more
+# than one riddle. Keep them short (under 110 characters), friendly, and
+# never use the answer word itself.
+
+## animals
+dog = I wag my tail, fetch sticks and bark at the postman. What am I?
+dog = I am called man's best friend, and I love a walk in the park.
+cat = I purr when I am happy, I chase mice, and I always land on my feet.
+cat = I have whiskers, I say "meow", and I nap in the sunniest spot.
+horse = Knights ride me into battle. I have a mane, hooves, and I say "neigh".
+horse = I pull carts and wear shoes made of iron. What am I?
+bird = I have feathers and wings, I build a nest, and I sing in the morning.
+fish = I live in water, I breathe with gills, and I swim with my fins.
+dragon = I am a huge winged beast. I breathe fire and sleep on a pile of gold.
+
+## home
+house = I have walls, a roof and a front door. A family lives inside me.
+book = I have a spine but no bones, and pages full of words to read.
+door = You knock on me, open me and close me to go in or out of a room.
+window = I am made of glass. You look through me to see outside.
+
+## people
+friend = I play with you, help you, and keep your secrets. Who am I?
+sister = I am a girl with the same mother and father as you.
+brother = I am a boy with the same mother and father as you.
+mother = I am your mum. I looked after you from the day you were born.
+father = I am your dad. I am married to your mum.
+girl = I am a young female person. I am not yet a woman.
+boy = I am a young male person. I am not yet a man.
+child = I am young and still growing up. I go to school every day.
+human being = I walk on two legs and I can talk. So can you, because you are one.
+teacher = I stand at the front of the class and mark your homework.
+farmer = I plough the fields, grow wheat and look after cows and sheep.
+sailor = I work on a ship and sail across the sea.
+king = I wear a crown and sit on a throne. I rule the whole land.
+queen = I wear a crown and rule the land. I am married to the king.
+master = I am in charge. The servants of the house must obey me.
+
+## gods
+god = People built temples for me and prayed to me. Zeus and Jupiter were two of us.
+goddess = I am a female god, like Athena or Venus.
+soul = I am the part of you that thinks and feels, and it is said I live forever.
+
+## places
+castle = I have towers, thick stone walls and a moat. Kings and knights live in me.
+castle = I have a drawbridge and a keep. A lord and his knights live safely inside me.
+forest = I am full of trees. Owls, deer and wolves live in me.
+sea = I am wide, salty and full of waves. Ships sail across me.
+road = People travel along me from town to town. The Romans built me straight.
+field = I am open land where a farmer grows crops or keeps animals.
+island = I am land with water all around me.
+
+## things
+sword = I am a long sharp blade that a knight carries into battle.
+shield = A soldier holds me up to stop arrows and blows.
+treasure = I am gold, jewels and riches hidden in a chest.
+key = I am small and made of metal. Turn me in a lock to open it.
+gold = I am a shiny yellow metal. Coins and crowns are made of me.
+gift = I come wrapped in paper on your birthday. Someone gives me to you.
+water = You drink me when you are thirsty. Rain and rivers are made of me.
+sun = I rise in the east, shine all day and set in the west.
+word = I am made of letters. You are learning lots of us right now.
+war = I am a great fight between armies or countries. Peace is my opposite.
+
+## verbs
+I have = Say that something belongs to you: "____ a dog."
+I write = Say what you do with a pen: "____ a letter."
+I say = Say what you do when you speak words: "____ hello."
+I love = Say how you feel about your best friend or your family: "____ you."
+I see = Say what you do with your eyes: "____ a dragon!"
+I am = Say who you are: "____ a hero."

@@ -13,3 +13,8 @@ var UnifontHex []byte
 //
 //go:embed words/*.txt
 var Words embed.FS
+
+// Riddles is the riddle bank for riddle puzzles: "english = riddle" lines.
+//
+//go:embed puzzles/riddles.txt
+var Riddles []byte

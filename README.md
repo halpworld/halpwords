@@ -40,7 +40,7 @@ adventurous tone. It runs offline, needs no accounts, and ships as a single
 file.
 
 > [!NOTE]
-> **Status: milestone 3 (puzzles) in progress.** The game is playable from the
+> **Status: milestone 3 (puzzles) done; milestone 4 (RPG layer) is next.** The game is playable from the
 > first floor down, with sound, but it is early. Expect rough edges and balance changes. See the
 > [roadmap](#roadmap).
 
@@ -56,11 +56,12 @@ file.
   only take damage from exact spelling, **Ghostly** ones make their words
   fade away, **Mirrored** ones write them backwards, and **Swift** ones leave
   less time to dodge.
-- **Word puzzles.** Rune-sealed doors and locked chests hold five kinds of
-  puzzle: read a rune and give its meaning, pick the odd one out, unscramble
-  letter tiles, fill in missing letters, or spell a word from memory. A wrong
-  answer springs a trap, and from floor 2 some chests are **Mimics** that bite
-  back.
+- **Word puzzles.** Rune-sealed doors and locked chests hold nine kinds of
+  puzzle: read a rune and give its meaning, pick the odd one out, match words
+  to their meanings, solve a riddle, unscramble letter tiles, fill in missing
+  letters, turn the letter wheels of a tumbler lock, fill in a mini
+  crossword, or spell a word from memory. A wrong answer springs a trap, and
+  from floor 2 some chests are **Mimics** that bite back.
 - **Pause and save.** <kbd>Esc</kbd> pauses the game, battle clock
   included. Save from the pause menu and pick up where you left off with
   **Continue**.
@@ -101,6 +102,14 @@ file.
   <tr>
     <td align="center"><b>Treasure chests:</b> fill in the missing letters.</td>
     <td align="center"><b>Ancient Greek:</b> type polytonic Greek on any keyboard.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/tumbler-lock.png" alt="A tumbler lock on a chest: letter wheels to turn until they spell the French for 'fish'"></td>
+    <td width="50%"><img src="docs/media/crossword.png" alt="A mini crossword over the dungeon view: 'frère' across, crossed by the French for 'dog' and 'treasure'"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Tumbler locks:</b> turn the wheels to spell the word.</td>
+    <td align="center"><b>Mini crosswords:</b> words that share a letter.</td>
   </tr>
 </table>
 
@@ -190,8 +199,9 @@ Then open <http://localhost:8000>.
      The first time you meet one, the game explains it. From floor 4, any
      monster can have an extra trait, such as a *Swift Grumpy Rat*.
 3. **Unlock.** Walk into a sealed door or a treasure chest to get a word
-   puzzle. Doors ask for meanings, odd words out and anagrams; chests ask for
-   careful spelling and hold gold and potions. A wrong answer sets off a
+   puzzle. Doors ask for meanings, odd words out, matching pairs, riddles
+   and anagrams; chests ask for careful spelling (missing letters, tumbler
+   locks and, from floor 3, crosswords) and hold gold and potions. A wrong answer sets off a
    trap, or wakes a Mimic: it keeps the loot until you defeat it.
 4. **Go deeper.** Find the stairs down on each floor. Each new floor is a
    checkpoint: if you are defeated, you wake up at the start of the floor with
@@ -225,6 +235,9 @@ Then open <http://localhost:8000>.
 |---|---|
 | Type + <kbd>Enter</kbd> | Attack, dodge, or solve |
 | <kbd>1</kbd>–<kbd>4</kbd>, or <kbd>←</kbd> / <kbd>→</kbd> + <kbd>Enter</kbd> | Pick a word (odd-one-out puzzles) |
+| <kbd>↑</kbd> / <kbd>↓</kbd> to choose a word, <kbd>←</kbd> / <kbd>→</kbd> to swap its meaning | Pair matching |
+| <kbd>←</kbd> / <kbd>→</kbd> to choose a wheel, <kbd>↑</kbd> / <kbd>↓</kbd> to turn it | Tumbler locks |
+| <kbd>↑</kbd> / <kbd>↓</kbd> to choose a word, <kbd>Enter</kbd> for the next one | Crosswords (<kbd>Enter</kbd> checks when every word is filled in) |
 | <kbd>F1</kbd> | Drink a potion (in battle, instead of attacking) |
 | <kbd>Esc</kbd> | Pause (flee from the pause menu), or leave a puzzle |
 
@@ -317,6 +330,9 @@ friend = l'ami | l'amie
   and `ga` (Irish).
 - `## name` starts a group of related words. Groups are used for odd-one-out
   puzzles, so give each group at least three words.
+- Riddle puzzles use the English riddles in
+  [`assets/puzzles/riddles.txt`](assets/puzzles/riddles.txt), so they work
+  for any language. Words without a riddle there just get other puzzles.
 - A file with the same name as a starter list (such as `french.txt`)
   replaces that starter list.
 
@@ -352,13 +368,14 @@ internal/raycast/  first-person 3D view
 internal/words/    word lists, languages, answer grading
 internal/typing/   text entry, Tab accents, Greek input mode
 internal/combat/   battle formulas and monster trait effects
+internal/puzzle/   door and chest word puzzles (no Ebitengine dependency)
 internal/audio/    sound effect synth (no Ebitengine dependency)
 internal/input/    keyboard helpers
 internal/proc/     procedural pixel art (no Ebitengine dependency)
 internal/gfx/      drawing: text, windows, torches
 internal/pal/      the 32-colour palette
 internal/unifont/  bitmap font parser
-assets/            embedded font and starter word lists
+assets/            embedded font, starter word lists and riddle bank
 tools/fontsubset/  regenerates the font subset from GNU Unifont
 tools/sfxdump/     writes the sound effects as WAV files
 docs/media/        README screenshots and GIFs
@@ -376,9 +393,9 @@ The full design is in [PLAN.md](PLAN.md). In short:
       stairs and floor save points, typing battles, sealed doors, chests.
 - [x] **M2: Words and combat.** Mostly done early in M0 and M1, plus sound
       effects and monster traits (Armored, Ghostly, Mirrored, Swift).
-- [ ] **M3: Puzzles.** *In progress:* the Mimic and five puzzle types
-      (reverse rune, odd one out, anagram, missing letters, spelling) are in.
-      Still to come: more puzzle types and a riddle bank.
+- [x] **M3: Puzzles.** Nine puzzle types (reverse rune, odd one out, pair
+      matching, riddle, anagram, missing letters, tumbler lock, mini
+      crossword, spelling), a riddle bank, and the Mimic.
 - [ ] **M4: RPG layer.** Classes, items, a shop, campfires, bosses, Save
       Shrines.
 - [ ] **M5: Learning and competition.** Spaced repetition, stats, Hardcore
@@ -397,7 +414,8 @@ Contributions are welcome, from bug reports to new word lists to code.
 - **Sending a pull request?** Run `make vet test` first. CI runs the same
   checks and builds every platform.
 - **Know one of the languages?** Corrections to the
-  [starter word lists](assets/words) are very welcome.
+  [starter word lists](assets/words) are very welcome, and so are new
+  [riddles](assets/puzzles/riddles.txt).
 
 ## License
 
