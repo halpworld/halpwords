@@ -2,6 +2,7 @@ package puzzle
 
 import (
 	"math/rand/v2"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -41,28 +42,60 @@ func each(t *testing.T, fn func(p Puzzle, lang *words.Language, lock Lock, depth
 	}
 }
 
+// solve returns the right answer to p.
+func solve(p Puzzle) Attempt {
+	switch q := p.(type) {
+	case *oddOneOut:
+		return Attempt{Pick: q.Odd()}
+	case *pairs:
+		a := Attempt{}
+		for i := range q.entries {
+			a.Choice = append(a.Choice, i)
+		}
+		return a
+	case *tumbler:
+		a := Attempt{}
+		for i, w := range q.slots {
+			a.Choice = append(a.Choice, slices.Index(w, q.want[i]))
+		}
+		return a
+	case *crossword:
+		return Attempt{Texts: q.answers}
+	}
+	return Attempt{Text: p.Check(Attempt{}).Expected}
+}
+
 func TestRightAnswerOpens(t *testing.T) {
 	each(t, func(p Puzzle, lang *words.Language, lock Lock, depth int) {
-		if p.Answer() == Pick {
-			odd := p.(*oddOneOut).Odd()
-			if r := p.Check(Attempt{Pick: odd}); r.Tier != words.Perfect || !r.Passed() {
-				t.Errorf("%s: right pick graded %v", p.Kind(), r.Tier)
-			}
-			if r := p.Check(Attempt{Pick: (odd + 1) % 4}); r.Passed() {
+		right := solve(p)
+		if r := p.Check(right); r.Tier != words.Perfect || !r.Passed() || len(r.Solution) == 0 {
+			t.Errorf("%s %q: right answer %+v graded %v", p.Kind(), p.Clue(), right, r.Tier)
+		}
+		if p.Answer() != Pick && p.Check(Attempt{}).Passed() {
+			t.Errorf("%s %q: empty answer passed", p.Kind(), p.Clue())
+		}
+		switch p.Answer() {
+		case Pick:
+			if p.Check(Attempt{Pick: (right.Pick + 1) % len(p.Tiles())}).Passed() {
 				t.Errorf("%s: wrong pick passed", p.Kind())
 			}
 			return
+		case Match, Dial:
+			if start := p.(Chooser).Start(); p.Check(Attempt{Choice: start}).Passed() {
+				t.Errorf("%s: passed as it starts, %v", p.Kind(), start)
+			}
+			return
+		case Grid:
+			wrong := slices.Clone(right.Texts)
+			wrong[len(wrong)-1] = "qqqqqq"
+			if p.Check(Attempt{Texts: wrong}).Passed() {
+				t.Errorf("crossword with a wrong word passed")
+			}
+			return
 		}
-		empty := p.Check(Attempt{})
-		if empty.Passed() {
-			t.Errorf("%s %q: empty answer passed", p.Kind(), p.Clue())
-		}
-		r := p.Check(Attempt{Text: empty.Expected})
-		if r.Tier != words.Perfect {
-			t.Errorf("%s %q: %q graded %v", p.Kind(), p.Clue(), empty.Expected, r.Tier)
-		}
-		if len(r.Solution) == 0 || !strings.Contains(r.Solution[0], empty.Expected) {
-			t.Errorf("%s: solution %q does not show %q", p.Kind(), r.Solution, empty.Expected)
+		r := p.Check(right)
+		if !strings.Contains(r.Solution[0], right.Text) {
+			t.Errorf("%s: solution %q does not show %q", p.Kind(), r.Solution, right.Text)
 		}
 		if p.Check(Attempt{Text: "qqqqqq"}).Passed() {
 			t.Errorf("%s: nonsense passed", p.Kind())
@@ -184,12 +217,12 @@ func TestReverseAcceptsEveryMeaning(t *testing.T) {
 func TestKinds(t *testing.T) {
 	for depth := 1; depth <= 10; depth++ {
 		for _, k := range Kinds(Door, depth) {
-			if k == Missing {
-				t.Errorf("doors have missing-letter puzzles on floor %d", depth)
+			if k == Missing || k == Tumbler || k == Crossword {
+				t.Errorf("doors have %s puzzles on floor %d", k, depth)
 			}
 		}
 		for _, k := range Kinds(Chest, depth) {
-			if k == Reverse || k == OddOneOut {
+			if k == Reverse || k == OddOneOut || k == Pairs || k == Riddle {
 				t.Errorf("chests have %s puzzles on floor %d", k, depth)
 			}
 		}
@@ -204,7 +237,7 @@ func TestKinds(t *testing.T) {
 			seen[New(Chest, 5, deck, lang, rng).Kind()] = true
 		}
 	}
-	for k := Reverse; k <= Spell; k++ {
+	for k := Reverse; k <= Crossword; k++ {
 		if !seen[k] {
 			t.Errorf("no %s puzzles on floor 5", k)
 		}

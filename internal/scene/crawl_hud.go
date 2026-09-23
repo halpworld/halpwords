@@ -47,6 +47,9 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 		bar(view, cx-80, viewY+21, 160, 8, float64(max(0, m.HP))/float64(m.MaxHP), pal.Rose, pal.Plum)
 		c.drawHint(view, ctx, c.battleHelp())
 	case modePuzzle:
+		if c.puzzle.fields != nil {
+			c.drawCrossword(view, ctx)
+		}
 		c.drawHint(view, ctx, c.puzzleHelp())
 	case modeMap:
 		gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Black, 0.85))

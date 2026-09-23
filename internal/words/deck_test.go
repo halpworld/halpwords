@@ -66,6 +66,29 @@ func TestDeckReview(t *testing.T) {
 	}
 }
 
+func TestDeckNextWhere(t *testing.T) {
+	d := NewDeck(testEntries(20), rand.New(rand.NewPCG(5, 6)))
+	even := func(e Entry) bool { return (e.Prompt[0]-'a')%2 == 0 }
+	d.Mark(1, false) // odd: must never be dealt, though it is up for review
+	d.Mark(4, false)
+	fours := 0
+	for n := 0; n < 100; n++ {
+		e, i, ok := d.NextWhere(even)
+		if !ok || !even(e) || d.Entries()[i].Prompt != e.Prompt {
+			t.Fatalf("dealt %v (%d, %v)", e, i, ok)
+		}
+		if i == 4 {
+			fours++
+		}
+	}
+	if fours < 10 {
+		t.Errorf("missed word came back %d times in 100 deals", fours)
+	}
+	if _, i, ok := d.NextWhere(func(Entry) bool { return false }); ok || i != -1 {
+		t.Errorf("no word fits, got %d, %v", i, ok)
+	}
+}
+
 func TestBlank(t *testing.T) {
 	rng := rand.New(rand.NewPCG(5, 6))
 	for _, s := range []string{"le chien", "l'ami", "canis", "ὁ ἵππος", "an madra", "tu"} {

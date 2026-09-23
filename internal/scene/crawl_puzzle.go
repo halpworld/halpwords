@@ -3,6 +3,7 @@ package scene
 import (
 	"fmt"
 	"image/color"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -23,8 +24,12 @@ type lockPuzzle struct {
 	lock  puzzle.Lock
 	at    dungeon.Point
 	p     puzzle.Puzzle
-	field *typing.Field // nil for Pick puzzles
-	pick  int           // the highlighted tile, for Pick puzzles
+	field *typing.Field // the typing field; in a crossword, the chosen word's
+	// pick is the highlighted tile (Pick), row (Match), wheel (Dial) or
+	// word (Grid).
+	pick   int
+	choice []int           // the option on each slot, for Match and Dial
+	fields []*typing.Field // one per word, for Grid
 
 	showing  bool // showing the result
 	solved   bool
@@ -52,15 +57,29 @@ func (c *Crawl) dealPuzzle() {
 	lp := c.puzzle
 	lp.p = puzzle.New(lp.lock, c.run.depth, c.run.deck, c.run.lang, c.run.rng)
 	lp.pick, lp.showing = 0, false
+	lp.field, lp.choice, lp.fields = nil, nil, nil
 	switch lp.p.Answer() {
 	case puzzle.Foreign:
-		lp.field = typing.NewField(c.run.lang)
-		lp.field.Greek = c.run.greek
+		lp.field = c.foreignField()
 	case puzzle.Native:
 		lp.field = typing.NewField(words.English)
-	default:
-		lp.field = nil
+	case puzzle.Match, puzzle.Dial:
+		lp.choice = lp.p.(puzzle.Chooser).Start()
+		lp.pick = nextWheel(lp, -1, 1)
+	case puzzle.Grid:
+		_, _, placed := lp.p.(puzzle.Crossworder).Layout()
+		for range placed {
+			lp.fields = append(lp.fields, c.foreignField())
+		}
+		lp.field = lp.fields[0]
 	}
+}
+
+// foreignField returns a field for typing in the language being learned.
+func (c *Crawl) foreignField() *typing.Field {
+	f := typing.NewField(c.run.lang)
+	f.Greek = c.run.greek
+	return f
 }
 
 var pickKeys = [][2]ebiten.Key{
@@ -97,14 +116,24 @@ func (c *Crawl) updatePuzzle(ctx *game.Context) {
 	if c.muted {
 		return
 	}
-	if lp.field == nil {
+	switch lp.p.Answer() {
+	case puzzle.Pick:
 		c.updatePick(lp)
 		return
+	case puzzle.Match:
+		c.updateMatch(lp)
+		return
+	case puzzle.Dial:
+		c.updateDial(lp)
+		return
+	case puzzle.Grid:
+		c.updateGrid(ctx, lp)
+	default:
+		if typeInto(ctx, lp.field) {
+			c.solvePuzzle()
+		}
 	}
-	if typeInto(ctx, lp.field) {
-		c.solvePuzzle()
-	}
-	if lp.p.Answer() == puzzle.Foreign {
+	if lp.field != nil && lp.p.Answer() != puzzle.Native {
 		c.run.greek = lp.field.Greek
 	}
 }
@@ -132,13 +161,128 @@ func (c *Crawl) updatePick(lp *lockPuzzle) {
 	}
 }
 
+// updateMatch chooses a row with ↑/↓ and swaps meanings with ←/→, so every
+// meaning stays on one row. Enter checks.
+func (c *Crawl) updateMatch(lp *lockPuzzle) {
+	n := len(lp.choice)
+	switch {
+	case input.Up():
+		lp.pick = (lp.pick + n - 1) % n
+		c.play(audio.Blip)
+	case input.Down():
+		lp.pick = (lp.pick + 1) % n
+		c.play(audio.Blip)
+	case input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyA):
+		c.swapMeaning(lp, n-1)
+	case input.Repeat(ebiten.KeyArrowRight) || input.Repeat(ebiten.KeyD):
+		c.swapMeaning(lp, 1)
+	case input.Confirm():
+		c.solvePuzzle()
+	}
+}
+
+// swapMeaning gives the chosen row the meaning by places further down the
+// list, and the row that had it this row's old meaning.
+func (c *Crawl) swapMeaning(lp *lockPuzzle, by int) {
+	n := len(lp.choice)
+	want := (lp.choice[lp.pick] + by) % n
+	for r, m := range lp.choice {
+		if m == want {
+			lp.choice[r] = lp.choice[lp.pick]
+		}
+	}
+	lp.choice[lp.pick] = want
+	c.play(audio.Key)
+}
+
+// updateDial chooses a wheel with ←/→ and turns it with ↑/↓. Enter checks.
+func (c *Crawl) updateDial(lp *lockPuzzle) {
+	opts := lp.p.(puzzle.Chooser).Options()
+	turn := func(by int) {
+		n := len(opts[lp.pick])
+		lp.choice[lp.pick] = (lp.choice[lp.pick] + by + n) % n
+		c.play(audio.Key)
+	}
+	switch {
+	case input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyA):
+		lp.pick = nextWheel(lp, lp.pick, -1)
+		c.play(audio.Blip)
+	case input.Repeat(ebiten.KeyArrowRight) || input.Repeat(ebiten.KeyD):
+		lp.pick = nextWheel(lp, lp.pick, 1)
+		c.play(audio.Blip)
+	case input.Up():
+		turn(-1)
+	case input.Down():
+		turn(1)
+	case input.Confirm():
+		c.solvePuzzle()
+	}
+}
+
+// nextWheel returns the next slot from i in direction dir that is not a
+// fixed plate, wrapping around. For Match puzzles every row counts.
+func nextWheel(lp *lockPuzzle, i, dir int) int {
+	opts := lp.p.(puzzle.Chooser).Options()
+	n := len(opts)
+	for k := 1; k <= n; k++ {
+		j := ((i+dir*k)%n + n) % n
+		if len(opts[j]) > 1 {
+			return j
+		}
+	}
+	return max(0, i)
+}
+
+// updateGrid types into the chosen crossword word. ↑/↓ choose a word, and
+// Enter moves to the next empty word, or checks when all are filled in.
+func (c *Crawl) updateGrid(ctx *game.Context, lp *lockPuzzle) {
+	n := len(lp.fields)
+	choose := func(i int) {
+		lp.pick = i
+		lp.field = lp.fields[i]
+		lp.field.Greek = c.run.greek
+		c.play(audio.Blip)
+	}
+	switch {
+	case input.Repeat(ebiten.KeyArrowUp):
+		choose((lp.pick + n - 1) % n)
+		return
+	case input.Repeat(ebiten.KeyArrowDown):
+		choose((lp.pick + 1) % n)
+		return
+	}
+	typeInto(ctx, lp.field)
+	if !input.Confirm() {
+		return
+	}
+	for k := 0; k < n; k++ {
+		if i := (lp.pick + k) % n; lp.fields[i].Len() == 0 {
+			if k > 0 {
+				choose(i)
+			}
+			return
+		}
+	}
+	c.solvePuzzle()
+}
+
 // solvePuzzle checks the answer. Accents may slip; anything worse zaps the
 // hero, or wakes a Mimic.
 func (c *Crawl) solvePuzzle() {
 	lp, h := c.puzzle, &c.run.hero
-	a := puzzle.Attempt{Pick: lp.pick}
-	if lp.field != nil {
+	a := puzzle.Attempt{Pick: lp.pick, Choice: lp.choice}
+	switch {
+	case lp.fields != nil:
+		for _, f := range lp.fields {
+			a.Texts = append(a.Texts, f.Text())
+			a.UsedBackspace = a.UsedBackspace || f.UsedBackspace
+		}
+	case lp.field != nil:
 		a.Text, a.UsedBackspace = lp.field.Text(), lp.field.UsedBackspace
+	}
+	shown := a.Text // what the hero answered, in words
+	if lp.p.Answer() == puzzle.Dial {
+		shown = dialed(lp)
 	}
 	res := lp.p.Check(a)
 	c.scoreAnswer(lp.p.Word(), res.Tier)
@@ -146,13 +290,19 @@ func (c *Crawl) solvePuzzle() {
 	for _, s := range res.Solution {
 		lp.lines = append(lp.lines, logLine{s, pal.White})
 	}
+	verb := "You typed "
+	if lp.p.Answer() == puzzle.Dial {
+		verb = "The wheels showed "
+	}
 	switch {
-	case lp.field == nil && !res.Passed():
+	case lp.p.Answer() == puzzle.Pick && !res.Passed():
 		lp.lines = append(lp.lines, logLine{"You picked " + lp.p.Tiles()[lp.pick] + ".", pal.Steel})
+	case res.Tier == words.AccentSlip && shown != "":
+		lp.lines = append(lp.lines, logLine{verb + shown + ". Watch the accents!", pal.Cyan})
 	case res.Tier == words.AccentSlip:
-		lp.lines = append(lp.lines, logLine{"You typed " + a.Text + ". Watch the accents!", pal.Cyan})
-	case !res.Passed() && a.Text != "":
-		lp.lines = append(lp.lines, logLine{"You typed " + a.Text + ".", pal.Steel})
+		lp.lines = append(lp.lines, logLine{"Watch the accents!", pal.Cyan})
+	case !res.Passed() && shown != "":
+		lp.lines = append(lp.lines, logLine{verb + shown + ".", pal.Steel})
 	}
 	lp.showing = true
 	if !res.Passed() {
@@ -181,6 +331,15 @@ func (c *Crawl) solvePuzzle() {
 	lp.lines = append(lp.lines, logLine{loot, pal.Yellow})
 	c.run.say(loot, pal.Yellow)
 	c.float(fmt.Sprintf("+%d gold", ch.Gold), pal.Yellow)
+}
+
+// dialed returns the word the tumbler's wheels show.
+func dialed(lp *lockPuzzle) string {
+	var b strings.Builder
+	for i, w := range lp.p.(puzzle.Chooser).Options() {
+		b.WriteString(w[lp.choice[i]])
+	}
+	return b.String()
 }
 
 // failPuzzle punishes a wrong answer: the runes or a needle sting the hero,
@@ -234,9 +393,28 @@ func (c *Crawl) drawPuzzlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 	}
 	f.DrawShadow(dst, label+lp.p.Ask(), x+12, y+10, 1, pal.Pink)
 	tiles := lp.p.Tiles()
-	switch {
-	case lp.field == nil:
+	switch lp.p.Answer() {
+	case puzzle.Pick:
 		c.drawPicks(dst, ctx, tiles, x+12, y+32, w-24)
+		return
+	case puzzle.Match:
+		c.drawPairs(dst, ctx, cx, y+28)
+		return
+	case puzzle.Dial:
+		f.DrawShadow(dst, lp.p.Clue(), x+12+f.Width(label+lp.p.Ask(), 1)+8, y+10, 1, pal.White)
+		c.drawWheels(dst, ctx, cx, y+28)
+		return
+	case puzzle.Grid:
+		c.drawClues(dst, ctx, x+12, y+30)
+		return
+	}
+	switch clue := lp.p.Clue(); {
+	case f.Width(clue, 1) > w-40:
+		// A riddle: a sentence or two at the normal size.
+		for i, line := range wrap(f, clue, w-40) {
+			f.DrawCentered(dst, line, cx, y+26+i*16, 1, pal.White)
+		}
+		drawTyped(dst, ctx, lp.field.Text(), cx, y+62, min(560, w-40), 2, !c.muted)
 	case len(tiles) > 0:
 		f.DrawCentered(dst, lp.p.Clue(), cx, y+26, f.FitScale(lp.p.Clue(), w-40, 1), pal.White)
 		drawTiles(dst, ctx, tiles, cx, y+44)
@@ -244,6 +422,151 @@ func (c *Crawl) drawPuzzlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 	default:
 		f.DrawCentered(dst, lp.p.Clue(), cx, y+28, f.FitScale(lp.p.Clue(), w-40, 2), pal.White)
 		drawTyped(dst, ctx, lp.field.Text(), cx, y+60, min(560, w-40), 2, !c.muted)
+	}
+}
+
+// wrap splits s into lines no wider than width at scale 1.
+func wrap(f *gfx.Font, s string, width int) []string {
+	var lines []string
+	line := ""
+	for _, word := range strings.Fields(s) {
+		if line != "" && f.Width(line+" "+word, 1) > width {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line != "" {
+			line += " "
+		}
+		line += word
+	}
+	return append(lines, line)
+}
+
+// drawPairs draws the words to match, each with the meaning it is set to,
+// in rows centred on cx. The chosen row is highlighted.
+func (c *Crawl) drawPairs(dst *ebiten.Image, ctx *game.Context, cx, y int) {
+	lp, f := c.puzzle, ctx.Font
+	meanings := lp.p.(puzzle.Chooser).Options()
+	for i, word := range lp.p.Tiles() {
+		ry := y + i*17
+		meaning, col := meanings[i][lp.choice[i]], pal.Ice
+		if i == lp.pick && !c.muted {
+			gfx.FillRect(dst, cx-200, ry, 400, 16, pal.Indigo)
+			col = pal.White
+			f.Draw(dst, "←", cx+14, ry, 1, pal.Yellow)
+			f.Draw(dst, "→", cx+32+f.Width(meaning, 1), ry, 1, pal.Yellow)
+		}
+		f.DrawShadow(dst, word, cx-24-f.Width(word, 1), ry, 1, pal.White)
+		f.Draw(dst, "=", cx-4, ry, 1, pal.Ash)
+		f.DrawShadow(dst, meaning, cx+26, ry, 1, col)
+	}
+}
+
+// drawWheels draws the tumbler lock: a column per wheel with the letter it
+// is on large in the middle, and the letters before and after it above and
+// below. Fixed plates show their text. The chosen wheel is outlined.
+func (c *Crawl) drawWheels(dst *ebiten.Image, ctx *game.Context, cx, y int) {
+	const gap, h = 4, 64
+	lp, f := c.puzzle, ctx.Font
+	opts := lp.p.(puzzle.Chooser).Options()
+	width := func(o []string) int {
+		if len(o) == 1 {
+			return f.Width(o[0], 2) + 4
+		}
+		return 28
+	}
+	total := -gap
+	for _, o := range opts {
+		total += width(o) + gap
+	}
+	x := cx - total/2
+	for i, o := range opts {
+		bw := width(o)
+		if len(o) == 1 {
+			f.DrawShadow(dst, o[0], x+2, y+h/2-16, 2, pal.Tan)
+			x += bw + gap
+			continue
+		}
+		edge := pal.Stone
+		if i == lp.pick && !c.muted {
+			edge = pal.Yellow
+		}
+		gfx.FillRect(dst, x, y, bw, h, edge)
+		gfx.FillRect(dst, x+2, y+2, bw-4, h-4, pal.Night)
+		gfx.FillRect(dst, x+2, y+h/2-17, bw-4, 34, pal.Granite)
+		n, k := len(o), lp.choice[i]
+		f.DrawCentered(dst, o[(k+n-1)%n], x+bw/2, y+2, 1, pal.Slate)
+		f.DrawCentered(dst, o[k], x+bw/2, y+h/2-16, 2, pal.White)
+		f.DrawCentered(dst, o[(k+1)%n], x+bw/2, y+h-18, 1, pal.Slate)
+		x += bw + gap
+	}
+}
+
+// drawClues lists the crossword's words, with what has been typed for
+// each. The chosen word is marked.
+func (c *Crawl) drawClues(dst *ebiten.Image, ctx *game.Context, x, y int) {
+	lp, f := c.puzzle, ctx.Font
+	_, _, placed := lp.p.(puzzle.Crossworder).Layout()
+	for i, pl := range placed {
+		ry := y + i*18
+		dir, col := "Across", pal.Ice
+		if pl.Down {
+			dir = "Down"
+		}
+		if i == lp.pick {
+			f.Draw(dst, "▶", x, ry, 1, pal.Yellow)
+			col = pal.White
+		}
+		f.DrawShadow(dst, fmt.Sprintf("%s: %s (%d letters)", dir, pl.Clue, pl.Len), x+16, ry, 1, col)
+		text := lp.fields[i].Text()
+		f.DrawShadow(dst, text, x+340, ry, 1, pal.Ice)
+		if i == lp.pick && !c.muted && ctx.Tick/16%2 == 0 {
+			gfx.FillRect(dst, x+340+f.Width(text, 1)+1, ry+1, 3, 14, pal.Yellow)
+		}
+	}
+}
+
+// drawCrossword draws the crossword grid over the 3D view, filled with
+// what has been typed. The chosen word's cells are outlined.
+func (c *Crawl) drawCrossword(view *ebiten.Image, ctx *game.Context) {
+	const cell = 22
+	lp, f := c.puzzle, ctx.Font
+	w, h, placed := lp.p.(puzzle.Crossworder).Layout()
+	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
+	gx, gy := viewX+(vw-w*cell)/2, viewY+(vh-22-h*cell)/2
+	gfx.FillRect(view, gx-8, gy-8, w*cell+16, h*cell+16, pal.Fade(pal.Black, 0.7))
+
+	// Each cell shows the chosen word's letter if it has one there, or
+	// else another word's.
+	type square struct {
+		letter string
+		mine   bool
+	}
+	grid := map[[2]int]*square{}
+	for i, pl := range placed {
+		typed := []rune(lp.fields[i].Text())
+		for k := 0; k < pl.Len; k++ {
+			x, y := pl.Cell(k)
+			sq := grid[[2]int{x, y}]
+			if sq == nil {
+				sq = &square{}
+				grid[[2]int{x, y}] = sq
+			}
+			if k < len(typed) && (sq.letter == "" || i == lp.pick) {
+				sq.letter = string(typed[k])
+			}
+			sq.mine = sq.mine || i == lp.pick
+		}
+	}
+	for at, sq := range grid {
+		x, y := gx+at[0]*cell, gy+at[1]*cell
+		edge := pal.Stone
+		if sq.mine && !lp.showing {
+			edge = pal.Yellow
+		}
+		gfx.FillRect(view, x, y, cell, cell, edge)
+		gfx.FillRect(view, x+2, y+2, cell-4, cell-4, pal.Night)
+		f.DrawCentered(view, sq.letter, x+cell/2, y+3, 1, pal.White)
 	}
 }
 
@@ -294,8 +617,16 @@ func (c *Crawl) puzzleHelp() string {
 		return "Enter try another puzzle · Esc leave"
 	case c.muted:
 		return "Let go of the movement keys to start"
-	case lp.field == nil:
+	}
+	switch lp.p.Answer() {
+	case puzzle.Pick:
 		return "1-4 or ←/→ and Enter pick · Esc leave"
+	case puzzle.Match:
+		return "↑↓ word · ←→ swap meaning · Enter check"
+	case puzzle.Dial:
+		return "←→ wheel · ↑↓ turn · Enter check · Esc leave"
+	case puzzle.Grid:
+		return "↑↓ word · Enter next word or check · Esc leave"
 	}
 	return "Enter check · Esc leave"
 }

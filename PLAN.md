@@ -316,9 +316,11 @@ so none need an LLM.
 | **Riddle / cloze** | Hand-written riddles and fill-in-the-blank sentences from `assets/puzzles/`. |
 | **Reverse rune** | Given the foreign word, type the native one (recognition practice). |
 
-*Now (M3):* `internal/puzzle` has a `Puzzle` interface (`Kind`, `Answer`,
-`Ask`, `Clue`, `Tiles`, `Check`, `Word`) with no Ebitengine dependency; the
-crawl scene draws it and reads the keys. Five kinds are in:
+*Now (M3, done):* `internal/puzzle` has a `Puzzle` interface (`Kind`,
+`Answer`, `Ask`, `Clue`, `Tiles`, `Check`, `Word`) with no Ebitengine
+dependency; the crawl scene draws it and reads the keys. Puzzles answered by
+setting slots (pairs, tumblers) also implement `Chooser`, and crosswords
+implement `Crossworder`. Nine kinds are in:
 
 - **Reverse rune** (doors): read the foreign word, type it in English. Every
   meaning the lists give that word is accepted.
@@ -331,6 +333,23 @@ crawl scene draws it and reads the keys. Five kinds are in:
   to 60%.
 - **Spelling** (doors from floor 2, chests from floor 3): the English word
   only.
+- **Pair matching** (doors): four foreign words, each next to one of their
+  English meanings, shuffled so none starts right. `↑`/`↓` choose a word and
+  `←`/`→` swap its meaning with another word's. All four must be right.
+  Words that share a meaning or a spelling are never in the same puzzle.
+- **Riddle** (doors): an English riddle from `assets/puzzles/riddles.txt`,
+  answered in the target language. The bank is keyed by English word, so it
+  works for every language; every starter word has at least one riddle.
+- **Tumbler lock** (chests): a wheel per letter (3 to 10 letters) with the
+  right letter and decoys from the lists: 3 letters per wheel on floors 1–2,
+  4 on floors 3–5, then 5. At most one decoy is the right letter with other
+  accents. Wheels start on wrong letters; the article and punctuation are
+  fixed plates.
+- **Mini crossword** (chests from floor 3): an across word crossed by one
+  down word, or two from floor 6 (at least two columns apart), drawn over
+  the 3D view. Words are typed without articles, `↑`/`↓` choose a word and
+  `Enter` moves to the next empty one or checks. The crossword is as good
+  as its worst word.
 
 Accent slips are accepted; anything worse zaps you for 2 HP, and
 <kbd>Enter</kbd> deals a new puzzle for the same lock. Chests give gold and
@@ -340,6 +359,31 @@ door, so you can always walk out of it. From floor 2, some chests are
 chest; solve the puzzle and it opens as usual, fail it and the Mimic ambushes
 you. It never moves, and when defeated it drops the chest's gold and potions.
 Hints come with MP in M4.
+
+**Finishing M3: work plan** (all done)
+
+- [x] **Riddle bank** (doors): `assets/puzzles/riddles.txt` holds English
+  riddles keyed by English word (`dog = I wag my tail and bark at the
+  postman.`). The hero reads the riddle and types the answer in the target
+  language, so one bank works for every language. Only words in the active
+  lists with a riddle can be used; otherwise the lock gets another puzzle.
+  Cloze sentences in the target language wait for LLM generation (M6).
+- [x] **Pair matching** (doors): four foreign words on the left, their
+  English meanings shuffled on the right. `↑`/`↓` choose a row and `←`/`→`
+  swap its meaning with another row's. All four pairs must be right. Needs
+  four words with different meanings.
+- [x] **Tumbler lock** (chests): one letter wheel per letter of the word,
+  each with the right letter and a few decoys from the lists, set to a wrong
+  position. `←`/`→` choose a wheel, `↑`/`↓` turn it. The article and
+  punctuation are fixed plates. Words of 3 to 10 letters.
+- [x] **Mini crossword** (chests, from floor 3): two words crossing on a
+  shared letter, three from floor 6, drawn as a grid over the 3D view. The
+  clues are the English words; `↑`/`↓` or `Enter` move between words. Words
+  are without articles, and a crossing must be the same letter.
+- [x] Puzzle mix: doors get riddles and pair matching; chests get tumblers
+  and crosswords. Tests: every generated puzzle is solvable and its right
+  answer passes; wrong answers fail.
+- [x] Update README, and mark M3 done.
 
 - **Doors** use the easier or mid-level puzzles. Failing costs a little HP (a
   trap) and gives a short cooldown. Hints cost MP or a *Hint Scroll*.
@@ -576,8 +620,8 @@ boss portraits, NPC portraits.
 | **M0** ✅ | Skeleton | Go module, Ebitengine window on Arm Mac, pixel-perfect scaling, scene stack, font rendering, Unicode text input, Makefile, CI. *Done: also includes the grading engine, Tab accents, Greek input mode, and a spelling practice screen.* |
 | **M1** ✅ | Dungeon crawl | First-person grid movement with a raycast view, room-and-corridor generator, procedural wall/floor/ceiling textures per floor theme, wall torches, automap and full map, compass, stairs and floor save points. *Done: also pulls forward the battle loop from M2 (attack/dodge in the 3D view, procedural monster sprites, XP and levels, potions, fleeing) and the first two puzzles from M3 (sealed doors, missing-letter chests).* |
 | **M2** ✅ | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** *Done: also includes the monster traits Armored, Ghostly, Mirrored and Swift (§6). Trickster, Mimic and Boss come later.* |
-| **M3** 🚧 | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. *Started: the `Puzzle` interface, five generators (reverse rune, odd one out, anagram, missing letters, spelling) and the Mimic. Still to do: tumbler lock, pair matching, mini crossword, riddle bank.* |
-| **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. |
+| **M3** ✅ | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. *Done: the `Puzzle` interface, nine generators (reverse rune, odd one out, pair matching, riddle, anagram, missing letters, tumbler lock, mini crossword, spelling), an English riddle bank that works for every language, and the Mimic. Target-language cloze sentences wait for M6.* |
+| **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. *Started early: XP and levels, potions, a title screen, a pause menu with one save slot and Continue, and a Word Lists screen.* |
 | **M5** | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. |
 | **M6** | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. |
 | **M7** | Polish and ship | Procedural music, CRT shader, juice pass, balance simulation, `.app` bundle, Windows/Linux/Web release builds. |
