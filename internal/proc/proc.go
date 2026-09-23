@@ -10,9 +10,11 @@ import (
 )
 
 // NewRand returns a deterministic random source for seed.
-func NewRand(seed uint64) *rand.Rand {
-	return rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))
-}
+func NewRand(seed uint64) *rand.Rand { return rand.New(NewPCG(seed)) }
+
+// NewPCG returns the generator behind NewRand, for callers that need to save
+// and restore its state.
+func NewPCG(seed uint64) *rand.PCG { return rand.NewPCG(seed, seed^0x9e3779b97f4a7c15) }
 
 // hash2 returns a stable pseudo-random value in [0,1) for a lattice point.
 func hash2(x, y int, seed uint64) float64 {

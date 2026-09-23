@@ -36,7 +36,8 @@ const (
 	modeBattle
 	modePuzzle
 	modeMap
-	modeQuit
+	modePause // the pause menu
+	modeQuit  // asking whether to quit without saving
 	modeDead
 )
 
@@ -153,6 +154,12 @@ type Crawl struct {
 	pending *dungeon.Monster // a monster to fight once the hero faces it
 	muted   bool             // ignore typing until movement keys are released
 
+	resume   mode   // where the pause menu goes back to
+	pausedAt uint64 // tick the game was paused
+	menuSel  int    // the highlighted pause menu item
+	lastSave []byte // the game as last saved or loaded
+	unsaved  bool   // something has happened since lastSave
+
 	shake, hurt int // ticks of screen shake and red flash left
 	banner      string
 	sub         string // smaller line under the banner
@@ -162,9 +169,16 @@ type Crawl struct {
 
 // newCrawl starts the floor r.depth.
 func newCrawl(r *run) *Crawl {
-	l := dungeon.Generate(r.floorSeed(r.depth), r.depth)
+	c := crawlOn(r, dungeon.Generate(r.floorSeed(r.depth), r.depth))
+	c.showBanner(fmt.Sprintf("Floor %d", r.depth), c.theme.Name)
+	r.say(fmt.Sprintf("Floor %d: %s. Find the stairs down!", r.depth, c.theme.Name), pal.Yellow)
+	return c
+}
+
+// crawlOn puts the hero at the start of floor l.
+func crawlOn(r *run, l *dungeon.Level) *Crawl {
 	th := proc.ThemeFor(r.depth)
-	c := &Crawl{
+	return &Crawl{
 		run:    r,
 		level:  l,
 		theme:  th,
@@ -177,9 +191,6 @@ func newCrawl(r *run) *Crawl {
 		facing: l.StartDir,
 		angle:  raycast.Angle(l.StartDir),
 	}
-	c.showBanner(fmt.Sprintf("Floor %d", r.depth), th.Name)
-	r.say(fmt.Sprintf("Floor %d: %s. Find the stairs down!", r.depth, th.Name), pal.Yellow)
-	return c
 }
 
 func (c *Crawl) showBanner(text, sub string) {
@@ -208,6 +219,19 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
+	switch {
+	case c.mode == modePause:
+		c.updatePause(ctx)
+		return nil
+	case c.mode == modeQuit:
+		c.updateQuit(ctx)
+		return nil
+	case c.mode == modeBattle && !ebiten.IsFocused():
+		// Don't let the battle clock run while the player is in another
+		// window.
+		c.pause(ctx)
+		return nil
+	}
 	if c.shake > 0 {
 		c.shake--
 	}
@@ -257,14 +281,6 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		if input.Back() || input.Confirm() || input.Pressed(ebiten.KeyM, ebiten.KeySpace) {
 			c.mode = modeExplore
 		}
-	case modeQuit:
-		switch {
-		case input.Pressed(ebiten.KeyY) || input.Confirm():
-			c.play(audio.Back)
-			ctx.Replace(NewTitle(ctx))
-		case input.Pressed(ebiten.KeyN) || input.Back():
-			c.mode = modeExplore
-		}
 	case modeDead:
 		switch {
 		case input.Confirm():
@@ -293,7 +309,7 @@ func (c *Crawl) explore(ctx *game.Context) {
 	}
 	switch {
 	case input.Back():
-		c.mode = modeQuit
+		c.pause(ctx)
 		return
 	case input.Pressed(ebiten.KeyM):
 		c.mode = modeMap

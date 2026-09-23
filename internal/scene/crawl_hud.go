@@ -53,14 +53,20 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 		cell := max(3, min((vw-8)/c.level.W, (vh-8)/c.level.H))
 		c.drawAutomap(view, viewX+4, viewY+4, vw-8, vh-8, cell, true)
 		c.drawHint(view, ctx, "M or Esc close")
+	case modePause:
+		c.drawPause(view, ctx)
 	case modeQuit:
-		c.drawDialog(view, ctx, "Leave the dungeon?", "Your progress will be lost.", "Y leave · N stay")
+		text := "Unsaved progress will be lost."
+		if c.lastSave == nil {
+			text = "This adventure has not been saved."
+		}
+		c.drawDialog(view, ctx, "Quit without saving?", text, "Y quit · N go back")
 	case modeDead:
 		gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Red, 0.35))
 		c.drawDialog(view, ctx, "YOU HAVE FALLEN", fmt.Sprintf("Wake at the start of floor %d?", c.run.depth), "Enter try again · Esc give up")
 	}
 
-	if c.bannerT > 0 {
+	if c.bannerT > 0 && c.mode != modePause && c.mode != modeQuit {
 		a := min(1, float64(c.bannerT)/30)
 		y := viewY + 70
 		if c.mode == modeBattle {

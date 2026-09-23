@@ -15,6 +15,7 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/internal/words"
 )
@@ -78,13 +79,7 @@ func (c *Context) ListsFor(code string) []*words.List {
 
 // UserDir is where saves, settings and the user's own word lists live, e.g.
 // ~/Library/Application Support/halpwords on macOS.
-func UserDir() (string, error) {
-	d, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(d, "halpwords"), nil
-}
+func UserDir() (string, error) { return save.Dir() }
 
 // Game implements ebiten.Game.
 type Game struct {

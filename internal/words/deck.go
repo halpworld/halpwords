@@ -83,6 +83,32 @@ func (d *Deck) Mark(i int, ok bool) {
 	}
 }
 
+// DeckState is the deck's memory of recent and missed words, for saving.
+type DeckState struct {
+	Recent []int `json:",omitempty"`
+	Review []int `json:",omitempty"`
+}
+
+// State returns the deck's memory, to be restored with SetState.
+func (d *Deck) State() DeckState {
+	return DeckState{Recent: append([]int(nil), d.recent...), Review: append([]int(nil), d.review...)}
+}
+
+// SetState restores the deck's memory. Words that are no longer in the deck,
+// because a word list got shorter, are dropped.
+func (d *Deck) SetState(s DeckState) {
+	keep := func(ids []int) []int {
+		var out []int
+		for _, i := range ids {
+			if i >= 0 && i < len(d.entries) {
+				out = append(out, i)
+			}
+		}
+		return out
+	}
+	d.recent, d.review = keep(s.Recent), keep(s.Review)
+}
+
 // Blank hides about share (0 to 1) of the letters of s behind underscores
 // for a fill-in puzzle. The first letter of each word and all punctuation
 // stay visible, and at least one letter is always hidden when s has any to
