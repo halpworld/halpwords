@@ -1,7 +1,10 @@
 // Package words loads word lists and grades typed answers.
 package words
 
-import "unicode"
+import (
+	"strings"
+	"unicode"
+)
 
 // Script is the writing system a language is typed in.
 type Script int
@@ -107,6 +110,18 @@ var English = &Language{
 func Lookup(code string) (*Language, bool) {
 	for _, l := range Languages {
 		if l.Code == code {
+			return l, true
+		}
+	}
+	return nil, false
+}
+
+// Find returns the language with the given code or name, such as "fr" or
+// "French", ignoring case.
+func Find(s string) (*Language, bool) {
+	s = strings.TrimSpace(s)
+	for _, l := range Languages {
+		if strings.EqualFold(l.Code, s) || strings.EqualFold(l.Name, s) {
 			return l, true
 		}
 	}

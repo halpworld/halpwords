@@ -3,11 +3,12 @@
 package game
 
 import (
+	"bytes"
 	"fmt"
 	"image/color"
 	"math"
-	"os"
-	"path/filepath"
+	"path"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -77,6 +78,69 @@ func (c *Context) ListsFor(code string) []*words.List {
 	return out
 }
 
+// WordsDir is the folder, inside the user's folder, that holds their own
+// word lists.
+const WordsDir = "words"
+
+// StarterLists returns the word lists built into the game.
+func StarterLists() ([]*words.List, error) {
+	lists, err := words.LoadFS(assets.Words, "words")
+	if err != nil {
+		return nil, fmt.Errorf("starter word lists: %w", err)
+	}
+	return lists, nil
+}
+
+// UserLists returns the user's own word lists, and describes the files that
+// could not be read.
+func UserLists() (lists []*words.List, errs []string) {
+	names, err := save.List(WordsDir)
+	if err != nil {
+		if _, dirErr := save.Dir(); dirErr != nil {
+			return nil, nil // a web browser with no stored lists
+		}
+		return nil, []string{err.Error()}
+	}
+	for _, n := range names {
+		if !strings.EqualFold(path.Ext(n), ".txt") {
+			continue
+		}
+		data, err := save.Read(WordsDir + "/" + n)
+		if err == nil {
+			var l *words.List
+			if l, err = words.Parse(bytes.NewReader(data), n); err == nil {
+				lists = append(lists, l)
+				continue
+			}
+		}
+		errs = append(errs, err.Error())
+	}
+	return lists, errs
+}
+
+// LoadLists (re)loads the starter word lists and the user's own. A user list
+// with the same file name as a starter list replaces it.
+func (c *Context) LoadLists() error {
+	starters, err := StarterLists()
+	if err != nil {
+		return err
+	}
+	user, errs := UserLists()
+	own := map[string]bool{}
+	for _, l := range user {
+		own[l.Source] = true
+	}
+	c.Lists = nil
+	for _, l := range starters {
+		if !own[l.Source] {
+			c.Lists = append(c.Lists, l)
+		}
+	}
+	c.Lists = append(c.Lists, user...)
+	c.ListErrors = errs
+	return nil
+}
+
 // UserDir is where saves, settings and the user's own word lists live, e.g.
 // ~/Library/Application Support/halpwords on macOS.
 func UserDir() (string, error) { return save.Dir() }
@@ -98,19 +162,8 @@ func New(first func(*Context) Scene) (*Game, error) {
 		Sound:  newSound(),
 		scenes: &manager{},
 	}
-	ctx.Lists, err = words.LoadFS(assets.Words, "words")
-	if err != nil {
-		return nil, fmt.Errorf("starter word lists: %w", err)
-	}
-	if dir, err := UserDir(); err == nil {
-		wdir := filepath.Join(dir, "words")
-		if _, err := os.Stat(wdir); err == nil {
-			user, err := words.LoadFS(os.DirFS(wdir), ".")
-			ctx.Lists = append(ctx.Lists, user...)
-			if err != nil {
-				ctx.ListErrors = append(ctx.ListErrors, err.Error())
-			}
-		}
+	if err := ctx.LoadLists(); err != nil {
+		return nil, err
 	}
 	ctx.scenes.stack = []Scene{first(ctx)}
 	return &Game{ctx: ctx}, nil

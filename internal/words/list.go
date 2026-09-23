@@ -6,8 +6,10 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"golang.org/x/text/unicode/norm"
 )
@@ -36,6 +38,25 @@ type List struct {
 //	dog = le chien
 //	friend = l'ami | l'amie
 func Parse(r io.Reader, source string) (*List, error) {
+	l, err := parse(r, source, false)
+	if err != nil {
+		return nil, err
+	}
+	if l.Language == "" {
+		return nil, fmt.Errorf("%s: missing \"language:\" line", source)
+	}
+	return l, nil
+}
+
+// ParseImport reads a word list being imported. It is more forgiving than
+// Parse: the language may be left out (Language is then ""), and a word can
+// also be written "english<Tab>answer", as spreadsheets and flashcard sites
+// export them.
+func ParseImport(r io.Reader, source string) (*List, error) {
+	return parse(r, source, true)
+}
+
+func parse(r io.Reader, source string, loose bool) (*List, error) {
 	l := &List{Source: source}
 	tag := ""
 	sc := bufio.NewScanner(r)
@@ -52,7 +73,11 @@ func Parse(r io.Reader, source string) (*List, error) {
 		case strings.HasPrefix(line, "#"):
 			continue
 		}
-		if prompt, answers, ok := strings.Cut(line, "="); ok {
+		prompt, answers, ok := strings.Cut(line, "=")
+		if !ok && loose {
+			prompt, answers, ok = strings.Cut(line, "\t")
+		}
+		if ok {
 			e := Entry{Prompt: clean(prompt), Tag: tag}
 			for _, a := range strings.Split(answers, "|") {
 				if a = clean(a); a != "" {
@@ -74,6 +99,9 @@ func Parse(r io.Reader, source string) (*List, error) {
 			l.Title = clean(val)
 		case "language":
 			l.Language = strings.ToLower(clean(val))
+			if lang, ok := Find(l.Language); ok {
+				l.Language = lang.Code
+			}
 		default:
 			return nil, fmt.Errorf("%s line %d: unknown setting %q (use title: or language:)", source, n, strings.TrimSpace(key))
 		}
@@ -81,10 +109,7 @@ func Parse(r io.Reader, source string) (*List, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
-	if l.Language == "" {
-		return nil, fmt.Errorf("%s: missing \"language:\" line", source)
-	}
-	if _, ok := Lookup(l.Language); !ok {
+	if _, ok := Lookup(l.Language); !ok && l.Language != "" {
 		return nil, fmt.Errorf("%s: unknown language %q", source, l.Language)
 	}
 	if len(l.Entries) == 0 {
@@ -124,4 +149,76 @@ func LoadFS(fsys fs.FS, dir string) ([]*List, error) {
 
 func clean(s string) string {
 	return norm.NFC.String(strings.Join(strings.Fields(s), " "))
+}
+
+// Format writes l in the plain text format that Parse reads. Words are
+// grouped by tag, in the order each tag first appears.
+func (l *List) Format() []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, "title: %s\nlanguage: %s\n", l.Title, l.Language)
+	var tags []string
+	byTag := map[string][]Entry{}
+	for _, e := range l.Entries {
+		if _, ok := byTag[e.Tag]; !ok {
+			tags = append(tags, e.Tag)
+		}
+		byTag[e.Tag] = append(byTag[e.Tag], e)
+	}
+	// Untagged words must come before the first "##" line.
+	sort.SliceStable(tags, func(i, j int) bool { return tags[i] == "" && tags[j] != "" })
+	for _, t := range tags {
+		b.WriteString("\n")
+		if t != "" {
+			fmt.Fprintf(&b, "## %s\n", t)
+		}
+		for _, e := range byTag[t] {
+			fmt.Fprintf(&b, "%s = %s\n", e.Prompt, strings.Join(e.Answers, " | "))
+		}
+	}
+	return []byte(b.String())
+}
+
+// Merge adds the words in o that l does not have yet, and any new answers
+// for words it has, and returns how many words it added.
+func (l *List) Merge(o *List) (added int) {
+	for _, e := range o.Entries {
+		i := slices.IndexFunc(l.Entries, func(x Entry) bool { return strings.EqualFold(x.Prompt, e.Prompt) })
+		if i < 0 {
+			e.Answers = slices.Clone(e.Answers)
+			l.Entries = append(l.Entries, e)
+			added++
+			continue
+		}
+		for _, a := range e.Answers {
+			if !slices.ContainsFunc(l.Entries[i].Answers, func(x string) bool { return strings.EqualFold(x, a) }) {
+				l.Entries[i].Answers = append(l.Entries[i].Answers, a)
+			}
+		}
+	}
+	return added
+}
+
+// FileName suggests a file name for a list called title, such as
+// "french-animals.txt".
+func FileName(title string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range norm.NFD.String(strings.ToLower(title)) {
+		switch {
+		case r < 0x80 && (unicode.IsLetter(r) || unicode.IsDigit(r)):
+			if dash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			b.WriteRune(r)
+			dash = false
+		case unicode.Is(unicode.Mn, r):
+			// accents: é becomes e
+		default:
+			dash = true
+		}
+	}
+	if b.Len() == 0 {
+		return "words.txt"
+	}
+	return b.String() + ".txt"
 }

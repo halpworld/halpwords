@@ -31,17 +31,18 @@ const (
 	titleContinue titleItem = iota
 	titleNew
 	titlePractice
+	titleWordLists
 	titleQuit
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Spelling Practice", "Quit"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Spelling Practice", "Word Lists", "Quit"}
 
 // NewTitle creates the title screen.
 func NewTitle(*game.Context) game.Scene {
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleQuit},
+		items:   []titleItem{titleNew, titlePractice, titleWordLists, titleQuit},
 	}
 	if s, ok := saveSummary(); ok {
 		t.saved = s
@@ -79,6 +80,9 @@ func (t *Title) Update(ctx *game.Context) error {
 		case titlePractice:
 			ctx.Sound.Play(audio.Select)
 			ctx.Replace(NewPractice(ctx))
+		case titleWordLists:
+			ctx.Sound.Play(audio.Select)
+			ctx.Replace(NewWordLists(ctx))
 		case titleQuit:
 			return ebiten.Termination
 		}
@@ -117,14 +121,15 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 		mw = max(mw, w)
 	}
 	mw += 88
-	mh := 28*len(t.items) + 28
-	mx, my := game.ScreenW/2-mw/2, 205
-	if len(t.items) > 3 {
-		my = 192
+	step := 28
+	if len(t.items) > 4 {
+		step = 26
 	}
+	mh := step*len(t.items) + 24
+	mx, my := game.ScreenW/2-mw/2, min(205, game.ScreenH-26-mh)
 	gfx.Window(dst, mx, my, mw, mh)
 	for i, it := range t.items {
-		y := my + 18 + i*28
+		y := my + 14 + i*step
 		c := pal.Steel
 		if i == t.sel {
 			c = pal.White

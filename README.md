@@ -75,7 +75,8 @@ file.
   (e → é → è → ê → ë). Ancient Greek has a built-in Greek keyboard with
   breathings and accents.
 - **Bring your own words.** Word lists are plain text files you can write in
-  any editor.
+  any editor. Import them by dropping them on the game, add to or delete
+  lists, and save them from the **Word Lists** screen.
 - **Spelling Practice mode.** Drill words without the dungeon.
 - **Nearly all generated in code.** Textures, monsters, effects and sound
   effects are procedural. The only art asset is a pixel font.
@@ -270,7 +271,29 @@ HALPWORDS_SEED=42 make run
 
 ## Your own word lists
 
-Put `.txt` files in the game's `words` folder:
+Choose **Word Lists** on the title screen to manage your lists in the game:
+
+<p align="center">
+  <img src="docs/media/word-lists.png" width="640" alt="The Word Lists screen, importing a list of farm animals: it can become a new list or be added to French - First Steps">
+</p>
+
+- **Import:** drag one or more files onto the game window (or the web page),
+  or press <kbd>I</kbd> and type the file's path. Then choose to make it
+  **a new list** or **add** its words to an existing list in the same
+  language. Words that are already in the list are skipped. If the file has no
+  `language:` line, pick the language with <kbd>←</kbd> / <kbd>→</kbd>.
+- **Delete:** mark lists with <kbd>Space</kbd> (<kbd>A</kbd> marks them all),
+  then press <kbd>X</kbd> or <kbd>Delete</kbd>. With nothing marked, it
+  deletes the selected list. Starter lists can't be deleted, but deleting one
+  you've added words to puts it back as it was.
+- **Save:** changes are kept until you press <kbd>S</kbd>, which saves all
+  lists at once. Leaving with unsaved changes asks first.
+
+Imported files can use the format below, or be a plain two-column
+`english<Tab>answer` file, as spreadsheets and flashcard sites export them.
+
+You can also put `.txt` files in the game's `words` folder yourself (in a web
+browser, lists are kept in the page's local storage instead):
 
 | OS | Folder |
 |---|---|
@@ -294,6 +317,8 @@ friend = l'ami | l'amie
   and `ga` (Irish).
 - `## name` starts a group of related words. Groups are used for odd-one-out
   puzzles, so give each group at least three words.
+- A file with the same name as a starter list (such as `french.txt`)
+  replaces that starter list.
 
 The built-in lists are in [`assets/words/`](assets/words).
 
