@@ -68,7 +68,7 @@ func TestDeckReview(t *testing.T) {
 func TestBlank(t *testing.T) {
 	rng := rand.New(rand.NewPCG(5, 6))
 	for _, s := range []string{"le chien", "l'ami", "canis", "ὁ ἵππος", "an madra", "tu"} {
-		b := Blank(s, rng)
+		b := Blank(s, 0.4, rng)
 		if utf8.RuneCountInString(b) != utf8.RuneCountInString(s) {
 			t.Errorf("Blank(%q) = %q changed length", s, b)
 		}
@@ -85,7 +85,20 @@ func TestBlank(t *testing.T) {
 			}
 		}
 	}
-	if Blank("a", rng) != "a" {
+	if Blank("a", 0.4, rng) != "a" {
 		t.Error("one-letter words have nothing to hide")
+	}
+}
+
+func TestBlankShare(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 8))
+	for _, c := range []struct {
+		share float64
+		want  int
+	}{{0, 1}, {0.3, 3}, {0.6, 6}, {1, 10}} {
+		b := Blank("abcdefghijk", c.share, rng) // ten letters can be hidden
+		if n := strings.Count(b, "_"); n != c.want {
+			t.Errorf("share %v hid %d letters (%q), want %d", c.share, n, b, c.want)
+		}
 	}
 }

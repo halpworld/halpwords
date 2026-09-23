@@ -107,6 +107,12 @@ func TestGrade(t *testing.T) {
 		{"grc full polytonic strict", "ἄνθρωπος", e("ἄνθρωπος"), grc, Rules{Accents: Strict, Breathings: Strict}, false, Perfect},
 		{"grc oxia vs tonos", "λόγος", e("λόγος"), grc, Rules{Accents: Strict, Breathings: Strict}, false, Perfect},
 		{"grc wrong accent strict", "λογός", e("λόγος"), grc, Rules{Accents: Strict, Breathings: Strict}, false, Miss},
+		{"en exact", "dog", e("dog"), English, English.Defaults, false, Perfect},
+		{"en article", "the dog", e("dog"), English, English.Defaults, false, Perfect},
+		{"en verb", "love", e("I love"), English, English.Defaults, false, Perfect},
+		{"en to", "to love", e("I love"), English, English.Defaults, false, Perfect},
+		{"en synonym", "gift", e("present", "gift"), English, English.Defaults, false, Perfect},
+		{"en wrong", "cat", e("dog"), English, English.Defaults, false, Miss},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

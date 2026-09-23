@@ -199,9 +199,12 @@ func (c *Crawl) grade(typed string) words.Result {
 }
 
 // scoreAnswer records an answer for spaced practice and the combo streak.
-// An accent slip neither builds nor breaks the streak.
+// An accent slip neither builds nor breaks the streak. An id below 0 is an
+// answer that was not about one word, such as an odd-one-out pick.
 func (c *Crawl) scoreAnswer(id int, t words.Tier) {
-	c.run.deck.Mark(id, t >= words.Correct)
+	if id >= 0 {
+		c.run.deck.Mark(id, t >= words.Correct)
+	}
 	h := &c.run.hero
 	switch {
 	case t >= words.Correct:
@@ -338,6 +341,12 @@ func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []log
 	c.run.sound.PlayLater(audio.Defeat, 12)
 	lines = append(lines, logLine{fmt.Sprintf("The %s is defeated! +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow})
 	c.run.say(fmt.Sprintf("You defeat the %s. +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow)
+	if m.Loot != nil && m.Loot.Potions > 0 {
+		h.Potions += m.Loot.Potions
+		loot := "It was guarding " + potions(m.Loot.Potions) + "!"
+		lines = append(lines, logLine{loot, pal.Yellow})
+		c.run.say(loot, pal.Yellow)
+	}
 	if n := h.GainXP(xp); n > 0 {
 		lines = append(lines, logLine{fmt.Sprintf("LEVEL UP! You are level %d.", h.Level), pal.Lime})
 		c.run.say(fmt.Sprintf("Level up! You are now level %d. HP %d, ATK %d.", h.Level, h.MaxHP, h.ATK), pal.Lime)

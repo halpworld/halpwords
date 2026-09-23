@@ -15,6 +15,7 @@ const (
 	Golem
 	Imp
 	Rat
+	Mimic // a chest with teeth; it waits and never moves
 )
 
 // Kind is a type of monster.
@@ -47,6 +48,19 @@ var Kinds = []Kind{
 	{"Fire Imp", Imp, 22, 8, 13, 9, 5, 9, 0.6, 0},
 }
 
+// MimicKind is the monster hiding in a mimic chest. It is not in Kinds:
+// mimics only appear by waking up.
+var MimicKind = Kind{"Mimic", Mimic, 16, 6, 12, 0, 2, 11, 0.5, 0}
+
+// MimicChance is how likely a chest on floor depth is to be a mimic. There
+// are none on the first floor; after that it grows to 35%.
+func MimicChance(depth int) float64 {
+	if depth < 2 {
+		return 0
+	}
+	return min(0.35, 0.15+0.05*float64(depth-2))
+}
+
 // RandomKind picks a monster that can appear at depth.
 func RandomKind(depth int, rng *rand.Rand) *Kind {
 	var pool []*Kind
@@ -75,6 +89,7 @@ type Monster struct {
 	Awake  bool   // has noticed the hero
 	Stun   int    // turns left before it moves again
 	Facing Dir
+	Loot   *Chest // what a mimic was guarding, won by defeating it
 }
 
 // NewMonster creates a monster of kind k, with stats scaled for depth.
@@ -120,8 +135,13 @@ func (m *Monster) maybeAddTrait(depth int, rng *rand.Rand) {
 }
 
 // XP and Gold are the rewards for defeating the monster.
-func (m *Monster) XP() int   { return m.Kind.XP + m.MaxHP/5 }
-func (m *Monster) Gold() int { return m.Kind.Gold }
+func (m *Monster) XP() int { return m.Kind.XP + m.MaxHP/5 }
+func (m *Monster) Gold() int {
+	if m.Loot != nil {
+		return m.Kind.Gold + m.Loot.Gold
+	}
+	return m.Kind.Gold
+}
 
 // SightRange is how far away (in steps) a monster notices the hero.
 const SightRange = 6
@@ -150,6 +170,9 @@ func (f *Level) MoveMonsters(hero Point, rng *rand.Rand) *Monster {
 			if attacker == nil {
 				attacker = m
 			}
+			continue
+		}
+		if m.Kind.Family == Mimic {
 			continue
 		}
 		if m.Awake && d > 0 {

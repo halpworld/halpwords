@@ -146,7 +146,7 @@ func (c *Crawl) typingField() *typing.Field {
 	switch {
 	case c.mode == modeBattle && (c.battle.phase == phaseAttack || c.battle.phase == phaseDefend):
 		return c.battle.field
-	case c.mode == modePuzzle && !c.puzzle.showing:
+	case c.mode == modePuzzle && !c.puzzle.showing && c.puzzle.field != nil:
 		return c.puzzle.field
 	}
 	return nil

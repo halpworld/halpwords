@@ -295,7 +295,7 @@ Swift (Crypt Spider, 70% of the usual dodge time). No monster on floor 1 has
 a trait. From floor 4, any monster can get one extra trait (10% per floor
 past 3, up to 40%), which goes in front of its name ("Swift Grumpy Rat").
 The first time the hero meets a trait, the battle opens with a card that
-explains it.
+explains it. The Mimic came in M3 (§7).
 
 ---
 
@@ -316,11 +316,30 @@ so none need an LLM.
 | **Riddle / cloze** | Hand-written riddles and fill-in-the-blank sentences from `assets/puzzles/`. |
 | **Reverse rune** | Given the foreign word, type the native one (recognition practice). |
 
-*Now (M1):* **sealed doors** glow with runes and open when you spell a word
-correctly, and **locked chests** show the answer with missing letters. Accent
-slips are accepted; anything worse zaps you for 2 HP. Chests give gold and
+*Now (M3):* `internal/puzzle` has a `Puzzle` interface (`Kind`, `Answer`,
+`Ask`, `Clue`, `Tiles`, `Check`, `Word`) with no Ebitengine dependency; the
+crawl scene draws it and reads the keys. Five kinds are in:
+
+- **Reverse rune** (doors): read the foreign word, type it in English. Every
+  meaning the lists give that word is accepted.
+- **Odd one out** (doors): pick one of four words with <kbd>1</kbd>–<kbd>4</kbd>
+  or the arrow keys. Needs lists with `## tag` groups; otherwise it becomes a
+  spelling puzzle.
+- **Anagram rune** (doors and chests): the letters are on stone tiles and the
+  article stays in place. From floor 4, chest anagrams have one extra letter.
+- **Missing letters** (chests): hides 35% of the letters on floor 1, growing
+  to 60%.
+- **Spelling** (doors from floor 2, chests from floor 3): the English word
+  only.
+
+Accent slips are accepted; anything worse zaps you for 2 HP, and
+<kbd>Enter</kbd> deals a new puzzle for the same lock. Chests give gold and
 potions. Puzzles have no timer. The start room of a floor never has a sealed
-door, so you can always walk out of it.
+door, so you can always walk out of it. From floor 2, some chests are
+**Mimics** (15%, plus 5% per floor, up to 35%). They look like any other
+chest; solve the puzzle and it opens as usual, fail it and the Mimic ambushes
+you. It never moves, and when defeated it drops the chest's gold and potions.
+Hints come with MP in M4.
 
 - **Doors** use the easier or mid-level puzzles. Failing costs a little HP (a
   trap) and gives a short cooldown. Hints cost MP or a *Hint Scroll*.
@@ -557,7 +576,7 @@ boss portraits, NPC portraits.
 | **M0** ✅ | Skeleton | Go module, Ebitengine window on Arm Mac, pixel-perfect scaling, scene stack, font rendering, Unicode text input, Makefile, CI. *Done: also includes the grading engine, Tab accents, Greek input mode, and a spelling practice screen.* |
 | **M1** ✅ | Dungeon crawl | First-person grid movement with a raycast view, room-and-corridor generator, procedural wall/floor/ceiling textures per floor theme, wall torches, automap and full map, compass, stairs and floor save points. *Done: also pulls forward the battle loop from M2 (attack/dodge in the 3D view, procedural monster sprites, XP and levels, potions, fleeing) and the first two puzzles from M3 (sealed doors, missing-letter chests).* |
 | **M2** ✅ | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** *Done: also includes the monster traits Armored, Ghostly, Mirrored and Swift (§6). Trickster, Mimic and Boss come later.* |
-| **M3** | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. |
+| **M3** 🚧 | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. *Started: the `Puzzle` interface, five generators (reverse rune, odd one out, anagram, missing letters, spelling) and the Mimic. Still to do: tumbler lock, pair matching, mini crossword, riddle bank.* |
 | **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. |
 | **M5** | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. |
 | **M6** | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. |

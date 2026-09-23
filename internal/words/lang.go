@@ -91,6 +91,18 @@ var Languages = []*Language{
 	},
 }
 
+// English grades answers typed in English, for puzzles that show a foreign
+// word and ask what it means. It is not a language to learn, so it is not in
+// Languages. Leading articles, "to" and "I" are optional, so "the dog" and
+// "dog", or "I love" and "love", are both right.
+var English = &Language{
+	Code:     "en",
+	Name:     "English",
+	Script:   ScriptLatin,
+	Articles: []string{"the ", "a ", "an ", "to ", "i "},
+	Defaults: Rules{Accents: Ignore, Breathings: Ignore},
+}
+
 // Lookup returns the language with the given code.
 func Lookup(code string) (*Language, bool) {
 	for _, l := range Languages {

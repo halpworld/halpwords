@@ -47,6 +47,7 @@ const (
 	Chest  // a chest opens
 	Zap    // a trap or rune stings the hero
 	Stairs // going down the stairs
+	Chomp  // a mimic chest wakes up
 
 	Count // the number of sounds
 )
@@ -58,7 +59,7 @@ var names = [Count]string{
 	"perfect", "correct", "slip", "graze", "wrong",
 	"alert", "hit", "crit", "weak", "fumble", "clang", "hurt", "dodge",
 	"defeat", "levelup", "potion", "flee", "fall",
-	"step", "bump", "door", "unseal", "chest", "zap", "stairs",
+	"step", "bump", "door", "unseal", "chest", "zap", "stairs", "chomp",
 }
 
 func (id ID) String() string {
@@ -187,4 +188,12 @@ var Sounds = [Count]Sound{
 		{Wave: Square, Freq: 1600, Slide: -5, Duty: 0.2, Vibrato: 4, VibratoHz: 40, Attack: 0.002, Hold: 0.12, Release: 0.08, Volume: 0.8},
 	},
 	Stairs: arpeggio(Triangle, 0.1, 0.06, 0.4, nG5, nE5, nC5, nG4, nE4, nC4),
+	Chomp: {
+		// Two bites: a wooden snap and a low growl under them.
+		{Wave: Noise, Freq: 1800, Slide: -2, Attack: 0.002, Hold: 0.03, Release: 0.06, Volume: 0.6},
+		{Wave: Square, Freq: 160, Slide: -1.5, Duty: 0.5, Attack: 0.002, Hold: 0.05, Release: 0.06, Volume: 0.45},
+		{Wave: Noise, Freq: 1800, Slide: -2, Delay: 0.16, Attack: 0.002, Hold: 0.03, Release: 0.06, Volume: 0.6},
+		{Wave: Square, Freq: 140, Slide: -1.5, Duty: 0.5, Delay: 0.16, Attack: 0.002, Hold: 0.05, Release: 0.06, Volume: 0.45},
+		{Wave: Saw, Freq: 70, Vibrato: 2, VibratoHz: 9, Delay: 0.05, Attack: 0.05, Hold: 0.3, Release: 0.2, Volume: 0.35},
+	},
 }

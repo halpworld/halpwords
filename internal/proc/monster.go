@@ -41,6 +41,7 @@ var monsterLooks = []monsterLook{
 	{[]color.RGBA{pal.Slate, pal.Granite, pal.Stone, pal.Ash}, [2]color.RGBA{pal.Forest, pal.Green}, pal.Yellow},  // 8 moss golem
 	{[]color.RGBA{pal.Mahogany, pal.Red, pal.Orange, pal.Yellow}, [2]color.RGBA{pal.Night, pal.Plum}, pal.Yellow}, // 9 fire imp
 	{[]color.RGBA{pal.Indigo, pal.Purple, pal.Steel, pal.Ice}, [2]color.RGBA{pal.Navy, pal.Cyan}, pal.Cyan},       // 10 mirror imp
+	{[]color.RGBA{pal.Plum, pal.Mahogany, pal.Brown, pal.Tan}, [2]color.RGBA{pal.Rose, pal.Pink}, pal.Yellow},     // 11 mimic
 }
 
 // canvas is a grid of parts.
@@ -266,6 +267,27 @@ func MonsterSprite(fam dungeon.Family, hue int, seed uint64, frame int) *Indexed
 		c.rect(12, 3, 8, 3, partDark)
 		c.rect(13, 4, 2, 1, partGlow)
 		c.rect(17, 4, 2, 1, partGlow)
+	case dungeon.Mimic:
+		// A chest whose lid chomps open and shut.
+		open := 5 + 2*f
+		top := 18 - open // top of the mouth
+		c.rect(3, 18, 26, 12, partBody)
+		c.rect(3, 24, 26, 1, partDark) // plank line
+		c.rect(4, int(top), 24, int(open), partDark)
+		c.ellipse(16, top-4, 13, 2.5, partBody) // curved lid
+		c.rect(3, int(top)-4, 26, 4, partBody)
+		for x := 5.0; x < 26; x += 4 {
+			c.tri(x, 18, x+3, 18, x+1.5, 15.5, partWhite)        // bottom teeth
+			c.tri(x+2, top, x+5, top, x+3.5, top+2.5, partWhite) // top teeth
+		}
+		c.rect(8, int(top)-3, 4, 1, partDark) // angry brows
+		c.rect(20, int(top)-3, 4, 1, partDark)
+		c.disc(10, top-1.5, 1.3, partGlow)
+		c.disc(22, top-1.5, 1.3, partGlow)
+		c.ellipse(21+j(1), 20.5, 3, 4, partAccent) // tongue
+		c.line(21, 18, 21, 23, 0.8, partDark)
+		c.disc(12, 21.5, 1.5, partDark) // keyhole
+		c.rect(11, 22, 2, 3, partDark)
 	default: // Imp
 		for _, s := range []float64{-1, 1} {
 			c.tri(16+s*3, 6, 16+s*7, 0, 16+s*6, 7, partAccent)         // horns

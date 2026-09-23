@@ -277,6 +277,7 @@ func (f *Level) placeChests(rng *rand.Rand) {
 		if rng.IntN(2) == 0 {
 			c.Potions = 1
 		}
+		c.Mimic = rng.Float64() < MimicChance(f.Depth)
 		f.Chests[p] = c
 		want--
 	}

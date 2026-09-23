@@ -16,6 +16,7 @@ import (
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/internal/puzzle"
 	"github.com/halpworld/halpwords/internal/raycast"
 )
 
@@ -148,7 +149,7 @@ type Crawl struct {
 
 	mode    mode
 	battle  *battle
-	puzzle  *puzzle
+	puzzle  *lockPuzzle
 	pending *dungeon.Monster // a monster to fight once the hero faces it
 	muted   bool             // ignore typing until movement keys are released
 
@@ -382,7 +383,7 @@ func (c *Crawl) step(ctx *game.Context, d dungeon.Dir, forward bool) {
 	if ch := l.Chests[to]; ch != nil {
 		switch {
 		case forward && !ch.Open:
-			c.startPuzzle(to, puzzleChest)
+			c.startPuzzle(to, puzzle.Chest)
 		case forward:
 			c.run.info("The chest is empty.")
 			c.bump(d)
@@ -397,7 +398,7 @@ func (c *Crawl) step(ctx *game.Context, d dungeon.Dir, forward bool) {
 		return
 	case dungeon.Sealed:
 		if forward {
-			c.startPuzzle(to, puzzleDoor)
+			c.startPuzzle(to, puzzle.Door)
 		} else {
 			c.bump(d)
 		}
@@ -457,7 +458,7 @@ func (c *Crawl) interact(ctx *game.Context) {
 		if ch.Open {
 			c.run.info("The chest is empty.")
 		} else {
-			c.startPuzzle(ahead, puzzleChest)
+			c.startPuzzle(ahead, puzzle.Chest)
 		}
 		return
 	}
@@ -465,7 +466,7 @@ func (c *Crawl) interact(ctx *game.Context) {
 	case dungeon.Door:
 		c.openDoor(ahead)
 	case dungeon.Sealed:
-		c.startPuzzle(ahead, puzzleDoor)
+		c.startPuzzle(ahead, puzzle.Door)
 	default:
 		c.run.info("You wait and listen...")
 		c.wait()
