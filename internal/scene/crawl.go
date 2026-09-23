@@ -9,6 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
+	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
@@ -184,6 +185,8 @@ func (c *Crawl) showBanner(text, sub string) {
 	c.banner, c.sub, c.bannerT = text, sub, 150
 }
 
+func (c *Crawl) play(id audio.ID) { c.run.sound.Play(id) }
+
 func (c *Crawl) float(text string, col color.RGBA) {
 	c.floats = append(c.floats, floater{text: text, col: col})
 }
@@ -256,6 +259,7 @@ func (c *Crawl) Update(ctx *game.Context) error {
 	case modeQuit:
 		switch {
 		case input.Pressed(ebiten.KeyY) || input.Confirm():
+			c.play(audio.Back)
 			ctx.Replace(NewTitle(ctx))
 		case input.Pressed(ebiten.KeyN) || input.Back():
 			c.mode = modeExplore
@@ -351,6 +355,7 @@ func (c *Crawl) turnTo(d dungeon.Dir) {
 }
 
 func (c *Crawl) bump(d dungeon.Dir) {
+	c.play(audio.Bump)
 	c.animate(c.pos.Step(d), c.angle, turnTicks, true)
 }
 
@@ -405,10 +410,12 @@ func (c *Crawl) step(ctx *game.Context, d dungeon.Dir, forward bool) {
 	c.monstersTurn(to)
 	c.animate(to, c.angle, stepTicks, false)
 	c.pos = to
+	c.play(audio.Step)
 }
 
 func (c *Crawl) openDoor(p dungeon.Point) {
 	c.level.Set(p, dungeon.OpenDoor)
+	c.play(audio.Door)
 	c.run.info("The door creaks open.")
 	c.wait()
 }
@@ -478,6 +485,7 @@ func (c *Crawl) drinkPotion() bool {
 	n := min(h.PotionHeal(), h.MaxHP-h.HP)
 	h.Heal(n)
 	h.Potions--
+	c.play(audio.Potion)
 	c.run.say(fmt.Sprintf("You drink a potion and recover %d HP.", n), pal.Lime)
 	c.float(fmt.Sprintf("+%d", n), pal.Lime)
 	return true
@@ -488,6 +496,7 @@ func (c *Crawl) descend(ctx *game.Context) {
 	r := c.run
 	r.depth++
 	r.saved = r.hero
+	c.play(audio.Stairs)
 	ctx.Replace(newCrawl(r))
 }
 
@@ -495,6 +504,7 @@ func (c *Crawl) die() {
 	c.mode = modeDead
 	c.battle, c.puzzle = nil, nil
 	c.run.hero.HP = 0
+	c.play(audio.Fall)
 	c.run.say("You have fallen!", pal.Rose)
 }
 

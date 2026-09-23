@@ -14,6 +14,7 @@ import (
 	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/internal/words"
 )
@@ -39,9 +40,15 @@ type Context struct {
 	// can see what to fix.
 	ListErrors []string
 	Tick       uint64
+	Sound      *Sound
 
-	scenes *manager
+	scenes  *manager
+	notice  string // a short message in the corner, like "Sound off"
+	noticeT int
 }
+
+// Notify shows a short message in the top corner for a moment.
+func (c *Context) Notify(msg string) { c.notice, c.noticeT = msg, 90 }
 
 // Push shows s on top of the current scene.
 func (c *Context) Push(s Scene) {
@@ -93,6 +100,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 	ctx := &Context{
 		Font:   gfx.NewFont(face),
 		Input:  &input.State{},
+		Sound:  newSound(),
 		scenes: &manager{},
 	}
 	ctx.Lists, err = words.LoadFS(assets.Words, "words")
@@ -117,6 +125,21 @@ func New(first func(*Context) Scene) (*Game, error) {
 func (g *Game) Update() error {
 	g.ctx.Tick++
 	g.ctx.Input.Update()
+	g.ctx.Sound.update(g.ctx.Tick)
+	if g.ctx.noticeT > 0 {
+		g.ctx.noticeT--
+	}
+	if input.Pressed(ebiten.KeyF3) {
+		switch {
+		case !g.ctx.Sound.Available():
+			g.ctx.Notify("No sound device")
+		case g.ctx.Sound.Toggle():
+			g.ctx.Notify("Sound on")
+		default:
+			g.ctx.Notify("Sound off")
+		}
+		return g.ctx.scenes.update(g.ctx)
+	}
 	if input.Pressed(ebiten.KeyF11) ||
 		(input.Pressed(ebiten.KeyEnter) && ebiten.IsKeyPressed(ebiten.KeyAlt)) ||
 		(input.Pressed(ebiten.KeyF) && ebiten.IsKeyPressed(ebiten.KeyMeta) && ebiten.IsKeyPressed(ebiten.KeyControl)) {
@@ -130,6 +153,12 @@ func (g *Game) Update() error {
 // Draw implements ebiten.Game.
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.ctx.scenes.draw(screen, g.ctx)
+	if c := g.ctx; c.noticeT > 0 {
+		a := min(1, float64(c.noticeT)/20)
+		w := c.Font.Width(c.notice, 1) + 16
+		gfx.FillRect(screen, ScreenW-w-4, 4, w, 22, pal.Fade(pal.Black, 0.75*a))
+		c.Font.DrawShadow(screen, c.notice, ScreenW-w+4, 7, 1, pal.Fade(pal.Yellow, a))
+	}
 }
 
 // Layout implements ebiten.Game. The logical screen never changes size.

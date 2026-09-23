@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
@@ -19,15 +20,18 @@ import (
 func typeInto(ctx *game.Context, f *typing.Field) bool {
 	if input.Pressed(ebiten.KeyF2) && f.Lang.Script == words.ScriptGreek {
 		f.Greek = !f.Greek
+		ctx.Sound.Play(audio.Blip)
 	}
 	for _, r := range ctx.Input.Chars {
-		f.Type(r)
+		if f.Type(r) {
+			ctx.Sound.Play(audio.Key)
+		}
 	}
-	if input.Repeat(ebiten.KeyBackspace) {
-		f.Backspace()
+	if input.Repeat(ebiten.KeyBackspace) && f.Backspace() {
+		ctx.Sound.Play(audio.Erase)
 	}
-	if input.Pressed(ebiten.KeyTab) {
-		f.CycleAccent()
+	if input.Pressed(ebiten.KeyTab) && f.CycleAccent() {
+		ctx.Sound.Play(audio.Accent)
 	}
 	return input.Confirm() && f.Len() > 0
 }

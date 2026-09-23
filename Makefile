@@ -5,7 +5,7 @@ PKG     := ./cmd/halpwords
 DIST    := dist
 VERSION ?= 0.1.0
 
-.PHONY: help run test vet build build-mac build-mac-intel bundle-mac build-windows build-linux build-web clean
+.PHONY: help run test vet sounds build build-mac build-mac-intel bundle-mac build-windows build-linux build-web clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -19,6 +19,9 @@ test: ## Run unit tests
 vet: ## Run go vet and check formatting
 	go vet ./...
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "run gofmt -w ." && exit 1)
+
+sounds: ## Write every sound effect to dist/sounds as WAV files
+	go run ./tools/sfxdump -o $(DIST)/sounds
 
 build: ## Build for this computer
 	go build -o $(DIST)/$(APP) $(PKG)

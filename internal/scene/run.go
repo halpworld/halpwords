@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/proc"
@@ -72,6 +73,10 @@ type run struct {
 	depth int
 	log   []logLine
 	greek bool // Greek keys on, for Greek
+
+	// seenTraits are the monster traits the hero has been told about.
+	seenTraits dungeon.Trait
+	sound      *game.Sound
 }
 
 func newRun(ctx *game.Context, lang *words.Language) *run {
@@ -93,6 +98,7 @@ func newRun(ctx *game.Context, lang *words.Language) *run {
 		hero:  newHero(),
 		depth: 1,
 		greek: lang.Script == words.ScriptGreek,
+		sound: ctx.Sound,
 	}
 	r.saved = r.hero
 	return r

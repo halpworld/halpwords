@@ -40,8 +40,8 @@ adventurous tone. It runs offline, needs no accounts, and ships as a single
 file.
 
 > [!NOTE]
-> **Status: milestone 1 (dungeon crawl).** The game is playable from the first
-> floor down, but it is early. Expect rough edges and balance changes. See the
+> **Status: milestone 2 (words and combat).** The game is playable from the
+> first floor down, with sound, but it is early. Expect rough edges and balance changes. See the
 > [roadmap](#roadmap).
 
 ## Features
@@ -52,6 +52,10 @@ file.
 - **Typing battles.** Translate to attack: the faster and more accurate you
   are, the more damage you do, and a streak of good answers builds a combo.
   Translate before the monster's timer runs out to dodge.
+- **Monster traits.** Deeper down, monsters have tricks: **Armored** ones
+  only take damage from exact spelling, **Ghostly** ones make their words
+  fade away, **Mirrored** ones write them backwards, and **Swift** ones leave
+  less time to dodge.
 - **Word puzzles.** Spell a word to break a rune-sealed door. Fill in the
   missing letters to open a treasure chest (a wrong answer springs a trap).
 - **RPG progression.** XP, levels, gold, potions, and a checkpoint on each
@@ -67,8 +71,8 @@ file.
 - **Bring your own words.** Word lists are plain text files you can write in
   any editor.
 - **Spelling Practice mode.** Drill words without the dungeon.
-- **Nearly all generated in code.** Textures, monsters and effects are
-  procedural. The only art asset is a pixel font.
+- **Nearly all generated in code.** Textures, monsters, effects and sound
+  effects are procedural. The only art asset is a pixel font.
 - **Runs everywhere.** macOS (Apple Silicon and Intel), Windows, Linux and the
   web (WebAssembly).
 
@@ -173,6 +177,9 @@ Then open <http://localhost:8000>.
    - **Dodge:** when the monster strikes, translate the word before the timer
      runs out.
    - Press <kbd>F1</kbd> to drink a potion, or <kbd>Esc</kbd> to try to flee.
+   - From floor 2, some monsters have **traits**, shown next to their name.
+     The first time you meet one, the game explains it. From floor 4, any
+     monster can have an extra trait, such as a *Swift Grumpy Rat*.
 3. **Unlock.** Walk into a sealed door or a treasure chest to get a word
    puzzle. Chests hold gold and potions, but a wrong answer sets off a trap.
 4. **Go deeper.** Find the stairs down on each floor. Each new floor is a
@@ -210,6 +217,7 @@ Then open <http://localhost:8000>.
 | <kbd>Tab</kbd> | Cycle the accent on the last letter (e → é → è → ê → ë, a → ā, a → á) |
 | <kbd>←</kbd> / <kbd>→</kbd> | Change language (practice mode) |
 | <kbd>F2</kbd> | Greek letters on/off (Ancient Greek) |
+| <kbd>F3</kbd> | Sound on/off |
 | <kbd>F11</kbd>, <kbd>Alt</kbd>+<kbd>Enter</kbd>, or <kbd>Ctrl</kbd>+<kbd>Cmd</kbd>+<kbd>F</kbd> | Fullscreen |
 | <kbd>Esc</kbd> | Back |
 
@@ -225,6 +233,13 @@ Add marks after a vowel: `)` smooth breathing, `(` rough breathing, `/` acute,
 `\` grave, `=` circumflex, `|` iota subscript, `+` diaeresis. For example,
 `a)/nqrwpos` types **ἄνθρωπος**. By default, accents and breathings are
 optional.
+
+### Sound
+
+All the sound effects are made in code. If your computer has no sound
+device, the game runs silently. Set `HALPWORDS_SOUND=off` to start with sound
+off completely. Run `make sounds` to write every effect to `dist/sounds` as
+WAV files, which helps when tuning them.
 
 ### Replaying a dungeon
 
@@ -269,6 +284,7 @@ The built-in lists are in [`assets/words/`](assets/words).
 make run             # run the game
 make test            # unit tests
 make vet             # go vet and gofmt check
+make sounds          # write the sound effects to dist/sounds as WAV files
 make build           # build for this computer
 make build-mac       # Apple Silicon (from any OS)
 make build-mac-intel # Intel Macs (from any OS)
@@ -290,7 +306,8 @@ internal/dungeon/  floor generation, monsters, automap memory
 internal/raycast/  first-person 3D view
 internal/words/    word lists, languages, answer grading
 internal/typing/   text entry, Tab accents, Greek input mode
-internal/combat/   battle formulas
+internal/combat/   battle formulas and monster trait effects
+internal/audio/    sound effect synth (no Ebitengine dependency)
 internal/input/    keyboard helpers
 internal/proc/     procedural pixel art (no Ebitengine dependency)
 internal/gfx/      drawing: text, windows, torches
@@ -298,6 +315,7 @@ internal/pal/      the 32-colour palette
 internal/unifont/  bitmap font parser
 assets/            embedded font and starter word lists
 tools/fontsubset/  regenerates the font subset from GNU Unifont
+tools/sfxdump/     writes the sound effects as WAV files
 docs/media/        README screenshots and GIFs
 ```
 
@@ -311,8 +329,8 @@ The full design is in [PLAN.md](PLAN.md). In short:
       accents, Greek input, Spelling Practice.
 - [x] **M1: Dungeon crawl.** Raycast view, generator, automap, torches,
       stairs and floor save points, typing battles, sealed doors, chests.
-- [ ] **M2: Words and combat.** Mostly done early in M0 and M1; sound effects
-      are still to come.
+- [x] **M2: Words and combat.** Mostly done early in M0 and M1, plus sound
+      effects and monster traits (Armored, Ghostly, Mirrored, Swift).
 - [ ] **M3: Puzzles.** More puzzle types, a riddle bank, and the Mimic.
 - [ ] **M4: RPG layer.** Classes, items, a shop, campfires, bosses, Save
       Shrines.

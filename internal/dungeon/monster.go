@@ -28,20 +28,23 @@ type Kind struct {
 	MinDep int // first floor it appears on
 	Hue    int // which colour ramp the sprite uses
 	Size   float64
+	Traits Trait // powers every monster of this kind has
 }
 
-// Kinds lists every monster, roughly weakest first.
+// Kinds lists every monster, roughly weakest first. The first floor has no
+// monsters with traits, so new players can learn the basics.
 var Kinds = []Kind{
-	{"Green Slime", Slime, 10, 3, 4, 3, 1, 0, 0.55},
-	{"Cave Bat", Bat, 8, 3, 4, 2, 1, 1, 0.45},
-	{"Grumpy Rat", Rat, 11, 4, 5, 3, 1, 2, 0.5},
-	{"Bone Rattler", Skull, 14, 4, 7, 5, 2, 3, 0.6},
-	{"Wisp", Ghost, 12, 5, 7, 4, 2, 4, 0.6},
-	{"Gazer", Eye, 16, 5, 9, 6, 3, 5, 0.6},
-	{"Crypt Spider", Spider, 15, 6, 9, 6, 3, 6, 0.6},
-	{"Blue Slime", Slime, 20, 6, 10, 7, 4, 7, 0.6},
-	{"Moss Golem", Golem, 26, 7, 13, 9, 5, 8, 0.8},
-	{"Fire Imp", Imp, 22, 8, 13, 9, 5, 9, 0.6},
+	{"Green Slime", Slime, 10, 3, 4, 3, 1, 0, 0.55, 0},
+	{"Cave Bat", Bat, 8, 3, 4, 2, 1, 1, 0.45, 0},
+	{"Grumpy Rat", Rat, 11, 4, 5, 3, 1, 2, 0.5, 0},
+	{"Bone Rattler", Skull, 14, 4, 7, 5, 2, 3, 0.6, 0},
+	{"Wisp", Ghost, 12, 5, 7, 4, 2, 4, 0.6, Ghostly},
+	{"Gazer", Eye, 16, 5, 9, 6, 3, 5, 0.6, 0},
+	{"Crypt Spider", Spider, 15, 6, 9, 6, 3, 6, 0.6, Swift},
+	{"Mirror Imp", Imp, 18, 6, 11, 8, 4, 10, 0.55, Mirrored},
+	{"Blue Slime", Slime, 20, 6, 10, 7, 4, 7, 0.6, 0},
+	{"Moss Golem", Golem, 26, 7, 13, 9, 5, 8, 0.8, Armored},
+	{"Fire Imp", Imp, 22, 8, 13, 9, 5, 9, 0.6, 0},
 }
 
 // RandomKind picks a monster that can appear at depth.
@@ -67,6 +70,8 @@ type Monster struct {
 	MaxHP  int
 	ATK    int
 	Seed   uint64 // sprite seed
+	Traits Trait  // the kind's traits plus Extra
+	Extra  Trait  // a trait this one has that others of its kind do not
 	Awake  bool   // has noticed the hero
 	Stun   int    // turns left before it moves again
 	Facing Dir
@@ -76,11 +81,43 @@ type Monster struct {
 func NewMonster(k *Kind, depth int, at Point, seed uint64) *Monster {
 	grow := 1 + 0.15*float64(depth-1)
 	hp := int(float64(k.HP) * grow)
-	return &Monster{Kind: k, At: at, HP: hp, MaxHP: hp, ATK: int(float64(k.ATK) * grow), Seed: seed}
+	return &Monster{Kind: k, At: at, HP: hp, MaxHP: hp, ATK: int(float64(k.ATK) * grow), Seed: seed, Traits: k.Traits}
 }
 
-// Name returns the monster's display name.
-func (m *Monster) Name() string { return m.Kind.Name }
+// Name returns the monster's display name, such as "Swift Grumpy Rat".
+func (m *Monster) Name() string {
+	if m.Extra != 0 {
+		return m.Extra.String() + " " + m.Kind.Name
+	}
+	return m.Kind.Name
+}
+
+// Has reports whether the monster has trait t.
+func (m *Monster) Has(t Trait) bool { return m.Traits&t != 0 }
+
+// ExtraTraitChance is how likely a monster on floor depth is to have a trait
+// on top of its kind's. It starts on floor 4 and grows to 40%.
+func ExtraTraitChance(depth int) float64 {
+	return max(0, min(0.4, 0.1*float64(depth-3)))
+}
+
+// maybeAddTrait sometimes gives m an extra trait, more often on deeper
+// floors.
+func (m *Monster) maybeAddTrait(depth int, rng *rand.Rand) {
+	if rng.Float64() >= ExtraTraitChance(depth) {
+		return
+	}
+	var can []Trait
+	for _, t := range Traits {
+		if !m.Has(t) {
+			can = append(can, t)
+		}
+	}
+	if len(can) > 0 {
+		m.Extra = can[rng.IntN(len(can))]
+		m.Traits |= m.Extra
+	}
+}
 
 // XP and Gold are the rewards for defeating the monster.
 func (m *Monster) XP() int   { return m.Kind.XP + m.MaxHP/5 }
