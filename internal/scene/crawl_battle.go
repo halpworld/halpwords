@@ -11,6 +11,7 @@ import (
 	"github.com/halpworld/halpwords/internal/combat"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/raycast"
@@ -347,7 +348,10 @@ func (c *Crawl) drawBattlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 		const bw = 180
 		bx := x + w - bw - 14
 		if b.phase == phaseAttack {
-			speed := combat.Speed(runes(b.word.Answers[0]), t)
+			// The bar drains at a steady pace until the speed bonus is gone.
+			// Marks show where critical hits and then full damage run out.
+			n := runes(b.word.Answers[0])
+			speed := combat.Speed(n, t)
 			bc := pal.Lime
 			switch {
 			case speed < 1:
@@ -355,8 +359,13 @@ func (c *Crawl) drawBattlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 			case speed < 1.5:
 				bc = pal.Yellow
 			}
-			f.DrawShadow(dst, "speed", bx-44, y+10, 1, pal.Steel)
-			bar(dst, bx, y+13, bw, 10, (speed-0.5)/1.5, bc, pal.Night)
+			window := combat.SpeedWindow(n)
+			f.DrawShadow(dst, fmt.Sprintf("×%.1f", speed), bx-44, y+10, 1, pal.Steel)
+			bar(dst, bx, y+13, bw, 10, 1-t/window, bc, pal.Night)
+			for _, s := range []float64{1.5, 1} {
+				mx := bx + 1 + int(float64(bw-2)*(1-combat.TargetTime(n)/s/window))
+				gfx.FillRect(dst, mx, y+11, 1, 14, pal.White)
+			}
 		} else {
 			left := max(0, b.limit-t)
 			bc := pal.Lime
@@ -379,8 +388,14 @@ func (c *Crawl) battleHelp() string {
 	b := c.battle
 	switch b.phase {
 	case phaseAttack:
+		if c.muted {
+			return "Let go of the movement keys to start"
+		}
 		return "Enter strike · F1 potion · Esc flee"
 	case phaseDefend:
+		if c.muted {
+			return "Let go of the movement keys to start"
+		}
 		return "Type fast to dodge!"
 	case phaseResult:
 		if b.wait || b.next == phaseLost {

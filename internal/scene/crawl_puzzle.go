@@ -171,5 +171,8 @@ func (c *Crawl) puzzleHelp() string {
 		}
 		return "Enter try another word · Esc leave"
 	}
+	if c.muted {
+		return "Let go of the movement keys to start"
+	}
 	return "Enter check · Esc leave"
 }
