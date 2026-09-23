@@ -64,3 +64,15 @@ func TestBlock(t *testing.T) {
 		t.Error("a miss should take the full hit")
 	}
 }
+
+func TestSpeedWindow(t *testing.T) {
+	for n := 1; n <= 12; n++ {
+		w := SpeedWindow(n)
+		if s := Speed(n, w); s != 0.5 {
+			t.Errorf("Speed(%d, window) = %v, want 0.5", n, s)
+		}
+		if s := Speed(n, w*0.99); s <= 0.5 {
+			t.Errorf("Speed(%d, just inside window) = %v, want above 0.5", n, s)
+		}
+	}
+}

@@ -17,6 +17,10 @@ func Speed(n int, taken float64) float64 {
 	return clamp(TargetTime(n)/taken, 0.5, 2)
 }
 
+// SpeedWindow is how many seconds an answer of n characters can take before
+// its speed multiplier bottoms out.
+func SpeedWindow(n int) float64 { return TargetTime(n) / 0.5 }
+
 // Accuracy returns the damage multiplier for a grading tier.
 func Accuracy(t words.Tier) float64 {
 	switch t {
