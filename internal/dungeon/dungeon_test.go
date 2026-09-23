@@ -140,3 +140,56 @@ func TestDirs(t *testing.T) {
 		t.Fatal("south should increase y")
 	}
 }
+
+func TestMimics(t *testing.T) {
+	count := map[int]int{}
+	for seed := uint64(1); seed <= 200; seed++ {
+		for _, depth := range []int{1, 2, 6} {
+			for _, c := range Generate(seed, depth).Chests {
+				if c.Mimic {
+					count[depth]++
+				}
+			}
+		}
+	}
+	if count[1] != 0 {
+		t.Errorf("%d mimics on the first floor", count[1])
+	}
+	if count[2] == 0 || count[6] <= count[2] {
+		t.Errorf("mimics on floors 2 and 6: %d, %d; want some, more deeper", count[2], count[6])
+	}
+}
+
+func TestWakeMimic(t *testing.T) {
+	f := Generate(5, 3)
+	f.Monsters = nil
+	var at Point
+	for p := range f.Chests {
+		at = p
+		break
+	}
+	loot := f.Chests[at]
+	m := f.WakeMimic(at, 1)
+	if f.Chests[at] != nil || f.MonsterAt(at) != m || m.Loot != loot || !m.Awake {
+		t.Fatal("the chest did not become a mimic")
+	}
+	if m.Gold() != MimicKind.Gold+loot.Gold {
+		t.Errorf("mimic gold %d, want the chest's %d too", m.Gold(), loot.Gold)
+	}
+	// Mimics never move, but bite when the hero is next to them.
+	rng := rand.New(rand.NewPCG(1, 2))
+	far := f.Start // chests are never in the start room
+	for turn := 0; turn < 20; turn++ {
+		if f.MoveMonsters(far, rng) != nil || m.At != at {
+			t.Fatalf("the mimic moved to %v", m.At)
+		}
+	}
+	for d := North; d <= West; d++ {
+		if q := at.Step(d); f.At(q).Walkable() {
+			if f.MoveMonsters(q, rng) != m {
+				t.Error("the mimic did not attack")
+			}
+			return
+		}
+	}
+}

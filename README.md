@@ -40,7 +40,7 @@ adventurous tone. It runs offline, needs no accounts, and ships as a single
 file.
 
 > [!NOTE]
-> **Status: milestone 2 (words and combat).** The game is playable from the
+> **Status: milestone 3 (puzzles) in progress.** The game is playable from the
 > first floor down, with sound, but it is early. Expect rough edges and balance changes. See the
 > [roadmap](#roadmap).
 
@@ -56,8 +56,11 @@ file.
   only take damage from exact spelling, **Ghostly** ones make their words
   fade away, **Mirrored** ones write them backwards, and **Swift** ones leave
   less time to dodge.
-- **Word puzzles.** Spell a word to break a rune-sealed door. Fill in the
-  missing letters to open a treasure chest (a wrong answer springs a trap).
+- **Word puzzles.** Rune-sealed doors and locked chests hold five kinds of
+  puzzle: read a rune and give its meaning, pick the odd one out, unscramble
+  letter tiles, fill in missing letters, or spell a word from memory. A wrong
+  answer springs a trap, and from floor 2 some chests are **Mimics** that bite
+  back.
 - **RPG progression.** XP, levels, gold, potions, and a checkpoint on each
   floor.
 - **Four languages.** French, Latin, Ancient Greek (polytonic) and Irish, with
@@ -181,7 +184,9 @@ Then open <http://localhost:8000>.
      The first time you meet one, the game explains it. From floor 4, any
      monster can have an extra trait, such as a *Swift Grumpy Rat*.
 3. **Unlock.** Walk into a sealed door or a treasure chest to get a word
-   puzzle. Chests hold gold and potions, but a wrong answer sets off a trap.
+   puzzle. Doors ask for meanings, odd words out and anagrams; chests ask for
+   careful spelling and hold gold and potions. A wrong answer sets off a
+   trap, or wakes a Mimic: it keeps the loot until you defeat it.
 4. **Go deeper.** Find the stairs down on each floor. Each new floor is a
    checkpoint: if you are defeated, you wake up at the start of the floor with
    the stats you arrived with.
@@ -206,6 +211,7 @@ Then open <http://localhost:8000>.
 | Key | Action |
 |---|---|
 | Type + <kbd>Enter</kbd> | Attack, dodge, or solve |
+| <kbd>1</kbd>–<kbd>4</kbd>, or <kbd>←</kbd> / <kbd>→</kbd> + <kbd>Enter</kbd> | Pick a word (odd-one-out puzzles) |
 | <kbd>F1</kbd> | Drink a potion (in battle, instead of attacking) |
 | <kbd>Esc</kbd> | Try to flee, or leave a puzzle |
 
@@ -274,7 +280,8 @@ friend = l'ami | l'amie
   after `|`.
 - The language codes are `fr` (French), `la` (Latin), `grc` (Ancient Greek)
   and `ga` (Irish).
-- `## name` starts a group of related words.
+- `## name` starts a group of related words. Groups are used for odd-one-out
+  puzzles, so give each group at least three words.
 
 The built-in lists are in [`assets/words/`](assets/words).
 
@@ -331,7 +338,9 @@ The full design is in [PLAN.md](PLAN.md). In short:
       stairs and floor save points, typing battles, sealed doors, chests.
 - [x] **M2: Words and combat.** Mostly done early in M0 and M1, plus sound
       effects and monster traits (Armored, Ghostly, Mirrored, Swift).
-- [ ] **M3: Puzzles.** More puzzle types, a riddle bank, and the Mimic.
+- [ ] **M3: Puzzles.** *In progress:* the Mimic and five puzzle types
+      (reverse rune, odd one out, anagram, missing letters, spelling) are in.
+      Still to come: more puzzle types and a riddle bank.
 - [ ] **M4: RPG layer.** Classes, items, a shop, campfires, bosses, Save
       Shrines.
 - [ ] **M5: Learning and competition.** Spaced repetition, stats, Hardcore

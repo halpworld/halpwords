@@ -79,6 +79,8 @@ type Chest struct {
 	Open    bool
 	Gold    int
 	Potions int
+	// Mimic chests bite: failing their puzzle wakes a monster.
+	Mimic bool
 }
 
 // Level is one floor of the dungeon.
@@ -151,6 +153,17 @@ func (f *Level) Remove(m *Monster) {
 			return
 		}
 	}
+}
+
+// WakeMimic turns the mimic chest at p into a monster that guards the
+// chest's loot.
+func (f *Level) WakeMimic(p Point, seed uint64) *Monster {
+	c := f.Chests[p]
+	delete(f.Chests, p)
+	m := NewMonster(&MimicKind, f.Depth, p, seed)
+	m.Loot, m.Awake = c, true
+	f.Monsters = append(f.Monsters, m)
+	return m
 }
 
 // distances returns the walking distance from p to every cell (-1 when
