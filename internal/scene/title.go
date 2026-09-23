@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
@@ -12,7 +13,7 @@ import (
 )
 
 // Version is shown on the title screen.
-const Version = "v0.2 (milestone 1: dungeon crawl)"
+const Version = "v0.3 (milestone 2: words and combat)"
 
 // Title is the title screen and main menu.
 type Title struct {
@@ -38,10 +39,13 @@ func (t *Title) Update(ctx *game.Context) error {
 	}
 	switch {
 	case input.Up():
+		ctx.Sound.Play(audio.Blip)
 		t.sel = (t.sel + len(t.items) - 1) % len(t.items)
 	case input.Down():
+		ctx.Sound.Play(audio.Blip)
 		t.sel = (t.sel + 1) % len(t.items)
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
+		ctx.Sound.Play(audio.Select)
 		switch t.sel {
 		case 0:
 			ctx.Replace(NewAdventure(ctx))

@@ -306,6 +306,8 @@ func (f *Level) placeMonsters(rng *rand.Rand) {
 		if f.MonsterAt(p) != nil {
 			continue
 		}
-		f.Monsters = append(f.Monsters, NewMonster(RandomKind(f.Depth, rng), f.Depth, p, rng.Uint64()))
+		m := NewMonster(RandomKind(f.Depth, rng), f.Depth, p, rng.Uint64())
+		m.maybeAddTrait(f.Depth, rng)
+		f.Monsters = append(f.Monsters, m)
 	}
 }

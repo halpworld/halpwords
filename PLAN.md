@@ -290,6 +290,13 @@ damage      = ATK × accuracy × speed × combo × (CRIT 1.5 if Perfect and spee
 | Mimic | Hides in a chest (see §7). |
 | Boss | Several phases, longer words, then short phrases in the final phase. |
 
+*Now (M2):* Armored (Moss Golem), Ghostly (Wisp), Mirrored (Mirror Imp) and
+Swift (Crypt Spider, 70% of the usual dodge time). No monster on floor 1 has
+a trait. From floor 4, any monster can get one extra trait (10% per floor
+past 3, up to 40%), which goes in front of its name ("Swift Grumpy Rat").
+The first time the hero meets a trait, the battle opens with a card that
+explains it.
+
 ---
 
 ## 7. Puzzles: doors and treasure chests
@@ -435,6 +442,11 @@ embedding exception.
 **Audio (no files):**
 - An sfxr-style synth (square, triangle, saw and noise with ADSR and pitch
   slides) for keystrokes, hits, crits, dodges, typos, doors and chests.
+  *Now (M2):* `internal/audio` renders 32 effects from tone tables, and
+  `game.Sound` plays them through `oto`. It uses `oto` directly because
+  Ebitengine's audio package stops the game with an error when there is no
+  sound device, and sound must never be required. `F3` mutes, and
+  `HALPWORDS_SOUND=off` skips the audio device entirely.
 - A procedural music sequencer: per-floor key and scale, generated melody and
   bass patterns, and a battle tempo.
 
@@ -544,7 +556,7 @@ boss portraits, NPC portraits.
 |---|---|---|
 | **M0** ✅ | Skeleton | Go module, Ebitengine window on Arm Mac, pixel-perfect scaling, scene stack, font rendering, Unicode text input, Makefile, CI. *Done: also includes the grading engine, Tab accents, Greek input mode, and a spelling practice screen.* |
 | **M1** ✅ | Dungeon crawl | First-person grid movement with a raycast view, room-and-corridor generator, procedural wall/floor/ceiling textures per floor theme, wall torches, automap and full map, compass, stairs and floor save points. *Done: also pulls forward the battle loop from M2 (attack/dodge in the 3D view, procedural monster sprites, XP and levels, potions, fleeing) and the first two puzzles from M3 (sealed doors, missing-letter chests).* |
-| **M2** | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** |
+| **M2** ✅ | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** *Done: also includes the monster traits Armored, Ghostly, Mirrored and Swift (§6). Trickster, Mimic and Boss come later.* |
 | **M3** | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. |
 | **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. |
 | **M5** | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. |

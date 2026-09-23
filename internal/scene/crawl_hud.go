@@ -36,7 +36,14 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 		b := c.battle
 		m := b.m
 		gfx.FillRect(view, viewX, viewY, vw, 34, pal.Fade(pal.Black, 0.55))
-		f.DrawCentered(view, m.Name(), cx, viewY+2, 1, pal.White)
+		// The kind's traits follow the name; an extra trait is already in it.
+		name, tags := m.Name(), (m.Traits &^ m.Extra).String()
+		if tags != "" {
+			tags = " · " + tags
+		}
+		nx := cx - (f.Width(name, 1)+f.Width(tags, 1))/2
+		f.Draw(view, name, nx, viewY+2, 1, pal.White)
+		f.Draw(view, tags, nx+f.Width(name, 1), viewY+2, 1, pal.Cyan)
 		bar(view, cx-80, viewY+21, 160, 8, float64(max(0, m.HP))/float64(m.MaxHP), pal.Rose, pal.Plum)
 		c.drawHint(view, ctx, c.battleHelp())
 	case modePuzzle:

@@ -6,6 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/input"
@@ -103,6 +104,7 @@ func (c *Crawl) solvePuzzle() {
 	p.lines = answerLines(p.word, res, typed)
 	p.showing = true
 	if res.Tier < words.AccentSlip {
+		c.play(audio.Zap)
 		h.HP -= 2
 		c.hurt, c.shake = 12, 6
 		c.float("-2", pal.Rose)
@@ -121,11 +123,13 @@ func (c *Crawl) solvePuzzle() {
 	p.solved = true
 	p.title, p.titleCol = res.Tier.String()+"!", tierColor[res.Tier]
 	if p.kind == puzzleDoor {
+		c.play(audio.Unseal)
 		c.level.Set(p.at, dungeon.OpenDoor)
 		p.lines = append(p.lines, logLine{"The runes fade and the door swings open.", pal.Lime})
 		c.run.say("The seal breaks and the door opens.", pal.Lime)
 		return
 	}
+	c.play(audio.Chest)
 	ch := c.level.Chests[p.at]
 	ch.Open = true
 	h.Gold += ch.Gold

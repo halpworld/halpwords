@@ -40,6 +40,7 @@ var monsterLooks = []monsterLook{
 	{[]color.RGBA{pal.Navy, pal.Blue, pal.Sky, pal.Cyan}, [2]color.RGBA{pal.Indigo, pal.Navy}, pal.Yellow},        // 7 blue slime
 	{[]color.RGBA{pal.Slate, pal.Granite, pal.Stone, pal.Ash}, [2]color.RGBA{pal.Forest, pal.Green}, pal.Yellow},  // 8 moss golem
 	{[]color.RGBA{pal.Mahogany, pal.Red, pal.Orange, pal.Yellow}, [2]color.RGBA{pal.Night, pal.Plum}, pal.Yellow}, // 9 fire imp
+	{[]color.RGBA{pal.Indigo, pal.Purple, pal.Steel, pal.Ice}, [2]color.RGBA{pal.Navy, pal.Cyan}, pal.Cyan},       // 10 mirror imp
 }
 
 // canvas is a grid of parts.

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/combat"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
@@ -43,6 +45,7 @@ type battle struct {
 	wordID int
 	start  uint64  // tick the word appeared
 	limit  float64 // seconds to defend
+	warned bool    // the dodge timer has sounded its warning
 
 	title    string
 	titleCol color.RGBA
@@ -64,13 +67,40 @@ func (c *Crawl) startBattle(ctx *game.Context, m *dungeon.Monster, ambush bool) 
 	f := typing.NewField(c.run.lang)
 	f.Greek = c.run.greek
 	c.battle = &battle{m: m, field: f}
+	c.play(audio.Alert)
+	first := phaseAttack
 	if ambush {
 		c.run.say(fmt.Sprintf("A %s attacks!", m.Name()), pal.Orange)
-		c.beginDefend(ctx)
+		first = phaseDefend
 	} else {
 		c.run.say(fmt.Sprintf("You fight the %s!", m.Name()), pal.Yellow)
+	}
+	// The first time the hero meets a trait, explain it before the fight.
+	if fresh := m.Traits &^ c.run.seenTraits; fresh != 0 {
+		c.run.seenTraits |= m.Traits
+		var lines []logLine
+		for _, t := range dungeon.Traits {
+			if fresh&t != 0 {
+				lines = append(lines, logLine{t.String() + ": " + t.Hint(), pal.Ice})
+			}
+		}
+		c.showResult(ctx, fmt.Sprintf("The %s is %s!", m.Kind.Name, traitWords(fresh)), pal.Cyan, lines, true, first)
+		return
+	}
+	if first == phaseDefend {
+		c.beginDefend(ctx)
+	} else {
 		c.beginAttack(ctx)
 	}
+}
+
+// traitWords describes traits in a sentence, such as "armored and swift".
+func traitWords(t dungeon.Trait) string {
+	s := strings.ToLower(t.String())
+	if i := strings.LastIndex(s, ", "); i >= 0 {
+		s = s[:i] + " and " + s[i+2:]
+	}
+	return s
 }
 
 // deal puts a new word in front of the hero.
@@ -80,6 +110,7 @@ func (c *Crawl) deal(ctx *game.Context, p phase) {
 	b.field.Reset()
 	b.phase, b.start = p, ctx.Tick
 	b.title, b.lines = "", nil
+	b.warned = false
 }
 
 func (c *Crawl) beginAttack(ctx *game.Context) { c.deal(ctx, phaseAttack) }
@@ -88,6 +119,9 @@ func (c *Crawl) beginDefend(ctx *game.Context) {
 	c.deal(ctx, phaseDefend)
 	b := c.battle
 	b.limit = combat.DefendTime(runes(b.word.Answers[0]))
+	if b.m.Has(dungeon.Swift) {
+		b.limit *= combat.SwiftTime
+	}
 }
 
 func (c *Crawl) updateBattle(ctx *game.Context) {
@@ -124,7 +158,12 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 		if c.muted {
 			return
 		}
-		if secs(ctx.Tick-b.start) >= b.limit {
+		left := b.limit - secs(ctx.Tick-b.start)
+		if !b.warned && left < b.limit/3 {
+			b.warned = true
+			c.play(audio.Warn)
+		}
+		if left <= 0 {
 			c.dodge(ctx, words.Result{Tier: words.Miss, Expected: b.word.Answers[0]}, "", true)
 			return
 		}
@@ -205,18 +244,32 @@ func (c *Crawl) strike(ctx *game.Context) {
 	lines := answerLines(b.word, res, typed)
 
 	title, col := res.Tier.String()+"!", tierColor[res.Tier]
-	if res.Tier == words.Miss || dmg == 0 {
+	switch {
+	case res.Tier > words.Miss && m.Has(dungeon.Armored) && combat.ArmorBlocks(res.Tier):
+		title, col = "CLANG!", pal.Steel
+		b.flash = 4
+		c.play(audio.Clang)
+		lines = append(lines, logLine{"Its armor turns the blow. Only exact spelling gets through!", pal.Steel})
+		c.run.say(fmt.Sprintf("Your blow glances off the %s's armor.", m.Name()), pal.Steel)
+	case res.Tier == words.Miss || dmg == 0:
 		title = "MISS!"
+		c.play(audio.Fumble)
 		h.HP--
 		c.hurt = 12
 		c.float("-1", pal.Rose)
 		lines = append(lines, logLine{"You fumble and nick yourself: 1 damage.", pal.Rose})
 		c.run.say(fmt.Sprintf("You miss the %s.", m.Name()), pal.Rose)
-	} else {
+	default:
 		m.HP -= dmg
 		b.flash = 10
-		if crit {
+		switch {
+		case crit:
 			title, col = "CRITICAL!", pal.Yellow
+			c.play(audio.Crit)
+		case res.Tier >= words.Correct:
+			c.play(audio.Hit)
+		default:
+			c.play(audio.Weak)
 		}
 		c.float(fmt.Sprint(dmg), col)
 		info := fmt.Sprintf("%d damage   speed ×%.1f", dmg, speed)
@@ -251,6 +304,7 @@ func (c *Crawl) dodge(ctx *game.Context, res words.Result, typed string, timeout
 	switch {
 	case dmg == 0:
 		title, col = "DODGED!", pal.Lime
+		c.play(audio.Dodge)
 		lines = append(lines, logLine{fmt.Sprintf("You dodge the %s.", m.Name()), pal.Lime})
 	case timeout:
 		title, col = "TOO SLOW!", pal.Rose
@@ -259,6 +313,7 @@ func (c *Crawl) dodge(ctx *game.Context, res words.Result, typed string, timeout
 	}
 	if dmg > 0 {
 		h.HP -= dmg
+		c.play(audio.Hurt)
 		c.shake, c.hurt = 12, 12
 		c.float(fmt.Sprint(-dmg), pal.Rose)
 		msg := fmt.Sprintf("The %s hits you: %d damage.", m.Name(), dmg)
@@ -280,12 +335,14 @@ func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []log
 	b, h, m := c.battle, &c.run.hero, c.battle.m
 	xp, gold := m.XP(), m.Gold()
 	h.Gold += gold
+	c.run.sound.PlayLater(audio.Defeat, 12)
 	lines = append(lines, logLine{fmt.Sprintf("The %s is defeated! +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow})
 	c.run.say(fmt.Sprintf("You defeat the %s. +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow)
 	if n := h.GainXP(xp); n > 0 {
 		lines = append(lines, logLine{fmt.Sprintf("LEVEL UP! You are level %d.", h.Level), pal.Lime})
 		c.run.say(fmt.Sprintf("Level up! You are now level %d. HP %d, ATK %d.", h.Level, h.MaxHP, h.ATK), pal.Lime)
 		c.showBanner("LEVEL UP!", fmt.Sprintf("Level %d", h.Level))
+		c.run.sound.PlayLater(audio.LevelUp, 45)
 	}
 	b.title, b.titleCol, b.lines = title, col, lines
 	b.phase, b.shown, b.dying = phaseWon, ctx.Tick, 1
@@ -297,6 +354,7 @@ func (c *Crawl) flee(ctx *game.Context) {
 	m := c.battle.m
 	if c.run.rng.IntN(2) == 0 {
 		m.Stun = 4
+		c.play(audio.Flee)
 		c.run.say(fmt.Sprintf("You slip away from the %s!", m.Name()), pal.Ice)
 		c.battle = nil
 		c.mode = modeExplore
@@ -304,6 +362,7 @@ func (c *Crawl) flee(ctx *game.Context) {
 		return
 	}
 	c.run.say("You can't get away!", pal.Orange)
+	c.play(audio.Bump)
 	c.beginDefend(ctx)
 	c.battle.title, c.battle.titleCol = "Can't escape!", pal.Orange
 }
@@ -375,8 +434,19 @@ func (c *Crawl) drawBattlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 			f.DrawShadow(dst, fmt.Sprintf("%.1fs", left), bx-44, y+10, 1, pal.Steel)
 			bar(dst, bx, y+13, bw, 10, left/b.limit, bc, pal.Night)
 		}
-		sc := f.FitScale(b.word.Prompt, w-40, 2)
-		f.DrawCentered(dst, b.word.Prompt, cx, y+28, sc, pal.White)
+		prompt, pcol := b.word.Prompt, pal.White
+		if b.m.Has(dungeon.Mirrored) {
+			prompt = combat.Mirror(prompt)
+		}
+		if b.m.Has(dungeon.Ghostly) {
+			if v := combat.Visibility(t); v > 0 {
+				pcol = pal.Fade(pal.Ice, v)
+			} else {
+				prompt, pcol = "· · ·", pal.Ash
+			}
+		}
+		sc := f.FitScale(prompt, w-40, 2)
+		f.DrawCentered(dst, prompt, cx, y+28, sc, pcol)
 		drawTyped(dst, ctx, b.field.Text(), cx, y+60, min(560, w-40), 2, !c.muted)
 	default:
 		drawResult(dst, ctx, b.title, b.titleCol, b.lines, cx, y)

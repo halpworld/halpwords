@@ -9,6 +9,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/combat"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
@@ -80,40 +81,34 @@ func (p *Practice) next(ctx *game.Context) {
 // Update implements game.Scene.
 func (p *Practice) Update(ctx *game.Context) error {
 	if input.Back() {
+		ctx.Sound.Play(audio.Back)
 		ctx.Replace(NewTitle(ctx))
 		return nil
 	}
 	if p.showing {
 		if input.Confirm() {
+			ctx.Sound.Play(audio.Blip)
 			p.next(ctx)
 		}
 		return nil
 	}
 	switch {
 	case input.Pressed(ebiten.KeyArrowLeft):
+		ctx.Sound.Play(audio.Blip)
 		p.setLanguage(ctx, p.li-1)
 		return nil
 	case input.Pressed(ebiten.KeyArrowRight):
+		ctx.Sound.Play(audio.Blip)
 		p.setLanguage(ctx, p.li+1)
 		return nil
-	case input.Pressed(ebiten.KeyF2) && p.lang().Script == words.ScriptGreek:
-		p.field.Greek = !p.field.Greek
 	}
-	for _, r := range ctx.Input.Chars {
-		p.field.Type(r)
-	}
-	if input.Repeat(ebiten.KeyBackspace) {
-		p.field.Backspace()
-	}
-	if input.Pressed(ebiten.KeyTab) {
-		p.field.CycleAccent()
-	}
-	if input.Confirm() && p.field.Len() > 0 {
+	if typeInto(ctx, p.field) {
 		e := p.entries[p.cur]
 		p.typed = p.field.Text()
 		p.taken = float64(ctx.Tick-p.started) / float64(ebiten.TPS())
 		p.result = words.Grade(p.typed, e, p.lang(), p.lang().Defaults, p.field.UsedBackspace)
 		p.showing = true
+		ctx.Sound.Play(tierSound[p.result.Tier])
 		if p.result.Tier >= words.Correct {
 			p.streak++
 			p.best = max(p.best, p.streak)
@@ -122,6 +117,15 @@ func (p *Practice) Update(ctx *game.Context) error {
 		}
 	}
 	return nil
+}
+
+// tierSound is the jingle for each grade.
+var tierSound = map[words.Tier]audio.ID{
+	words.Perfect:    audio.Perfect,
+	words.Correct:    audio.Correct,
+	words.AccentSlip: audio.Slip,
+	words.Graze:      audio.Graze,
+	words.Miss:       audio.Wrong,
 }
 
 var tierColor = map[words.Tier]color.RGBA{

@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
@@ -40,13 +41,17 @@ func NewAdventure(ctx *game.Context) game.Scene {
 func (a *Adventure) Update(ctx *game.Context) error {
 	switch {
 	case input.Back():
+		ctx.Sound.Play(audio.Back)
 		ctx.Replace(NewTitle(ctx))
 	case len(a.langs) == 0:
 	case input.Up():
+		ctx.Sound.Play(audio.Blip)
 		a.sel = (a.sel + len(a.langs) - 1) % len(a.langs)
 	case input.Down():
+		ctx.Sound.Play(audio.Blip)
 		a.sel = (a.sel + 1) % len(a.langs)
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
+		ctx.Sound.Play(audio.Select)
 		ctx.Replace(newCrawl(newRun(ctx, a.langs[a.sel])))
 	}
 	return nil
