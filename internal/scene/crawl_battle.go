@@ -126,6 +126,10 @@ func (c *Crawl) beginDefend(ctx *game.Context) {
 
 func (c *Crawl) updateBattle(ctx *game.Context) {
 	b := c.battle
+	if input.Back() {
+		c.pause(ctx)
+		return
+	}
 	if b.flash > 0 {
 		b.flash--
 	}
@@ -137,11 +141,7 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 	}
 	switch b.phase {
 	case phaseAttack:
-		switch {
-		case input.Back():
-			c.flee(ctx)
-			return
-		case input.Pressed(ebiten.KeyF1):
+		if input.Pressed(ebiten.KeyF1) {
 			if c.drinkPotion() {
 				c.beginDefend(ctx) // drinking takes a turn
 			}
@@ -470,12 +470,12 @@ func (c *Crawl) battleHelp() string {
 		if c.muted {
 			return "Let go of the movement keys to start"
 		}
-		return "Enter strike · F1 potion · Esc flee"
+		return "Enter strike · F1 potion · Esc pause or flee"
 	case phaseDefend:
 		if c.muted {
 			return "Let go of the movement keys to start"
 		}
-		return "Type fast to dodge!"
+		return "Type fast to dodge! · Esc pause"
 	case phaseResult:
 		if b.wait || b.next == phaseLost {
 			return "Enter continue"

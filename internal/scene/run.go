@@ -64,6 +64,7 @@ type run struct {
 	lang *words.Language
 	deck *words.Deck
 	rng  *rand.Rand
+	src  *rand.PCG // rng's generator, kept so saves can store its state
 	seed uint64
 
 	hero hero
@@ -85,15 +86,22 @@ func newRun(ctx *game.Context, lang *words.Language) *run {
 	if v, err := strconv.ParseUint(os.Getenv("HALPWORDS_SEED"), 10, 64); err == nil {
 		seed = v
 	}
+	return startRun(ctx, lang, seed)
+}
+
+// startRun begins a run in lang through the dungeon made from seed.
+func startRun(ctx *game.Context, lang *words.Language, seed uint64) *run {
 	var entries []words.Entry
 	for _, l := range ctx.ListsFor(lang.Code) {
 		entries = append(entries, l.Entries...)
 	}
-	rng := proc.NewRand(seed)
+	src := proc.NewPCG(seed)
+	rng := rand.New(src)
 	r := &run{
 		lang:  lang,
 		deck:  words.NewDeck(entries, rng),
 		rng:   rng,
+		src:   src,
 		seed:  seed,
 		hero:  newHero(),
 		depth: 1,

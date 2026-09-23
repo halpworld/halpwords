@@ -20,16 +20,34 @@ type Title struct {
 	bg      *ebiten.Image
 	torches []*gfx.Torch
 	sel     int
-	items   []string
+	items   []titleItem
+	saved   string // describes the saved adventure, if there is one
 }
+
+// titleItem is an entry in the main menu.
+type titleItem int
+
+const (
+	titleContinue titleItem = iota
+	titleNew
+	titlePractice
+	titleQuit
+)
+
+var titleLabels = [...]string{"Continue", "New Adventure", "Spelling Practice", "Quit"}
 
 // NewTitle creates the title screen.
 func NewTitle(*game.Context) game.Scene {
-	return &Title{
+	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []string{"New Adventure", "Spelling Practice", "Quit"},
+		items:   []titleItem{titleNew, titlePractice, titleQuit},
 	}
+	if s, ok := saveSummary(); ok {
+		t.saved = s
+		t.items = append([]titleItem{titleContinue}, t.items...)
+	}
+	return t
 }
 
 // Update implements game.Scene.
@@ -45,13 +63,23 @@ func (t *Title) Update(ctx *game.Context) error {
 		ctx.Sound.Play(audio.Blip)
 		t.sel = (t.sel + 1) % len(t.items)
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
-		ctx.Sound.Play(audio.Select)
-		switch t.sel {
-		case 0:
+		switch t.items[t.sel] {
+		case titleContinue:
+			c, err := loadCrawl(ctx)
+			if err != nil {
+				ctx.Sound.Play(audio.Wrong)
+				ctx.Notify("Can't continue: " + err.Error())
+				return nil
+			}
+			ctx.Sound.Play(audio.Select)
+			ctx.Replace(c)
+		case titleNew:
+			ctx.Sound.Play(audio.Select)
 			ctx.Replace(NewAdventure(ctx))
-		case 1:
+		case titlePractice:
+			ctx.Sound.Play(audio.Select)
 			ctx.Replace(NewPractice(ctx))
-		case 2:
+		case titleQuit:
 			return ebiten.Termination
 		}
 	}
@@ -79,14 +107,21 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 	f.DrawCentered(dst, "~ A Dungeon of Words ~", game.ScreenW/2, 150, 2, pal.Tan)
 
-	// Menu.
+	// Menu. The saved adventure is described next to Continue.
 	mw := 0
 	for _, it := range t.items {
-		mw = max(mw, f.Width(it, 2))
+		w := f.Width(titleLabels[it], 2)
+		if it == titleContinue {
+			w += f.Width(t.saved, 1) + 24
+		}
+		mw = max(mw, w)
 	}
 	mw += 88
 	mh := 28*len(t.items) + 28
 	mx, my := game.ScreenW/2-mw/2, 205
+	if len(t.items) > 3 {
+		my = 192
+	}
 	gfx.Window(dst, mx, my, mw, mh)
 	for i, it := range t.items {
 		y := my + 18 + i*28
@@ -97,7 +132,10 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 				f.Draw(dst, "►", mx+18, y, 2, pal.Yellow)
 			}
 		}
-		f.DrawShadow(dst, it, mx+44, y, 2, c)
+		f.DrawShadow(dst, titleLabels[it], mx+44, y, 2, c)
+		if it == titleContinue {
+			f.DrawShadow(dst, t.saved, mx+mw-20-f.Width(t.saved, 1), y+8, 1, pal.Ash)
+		}
 	}
 
 	f.DrawShadow(dst, "↑/↓ choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)

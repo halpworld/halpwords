@@ -61,6 +61,9 @@ file.
   letter tiles, fill in missing letters, or spell a word from memory. A wrong
   answer springs a trap, and from floor 2 some chests are **Mimics** that bite
   back.
+- **Pause and save.** <kbd>Esc</kbd> pauses the game, battle clock
+  included. Save from the pause menu and pick up where you left off with
+  **Continue**.
 - **RPG progression.** XP, levels, gold, potions, and a checkpoint on each
   floor.
 - **Four languages.** French, Latin, Ancient Greek (polytonic) and Irish, with
@@ -179,7 +182,9 @@ Then open <http://localhost:8000>.
      <kbd>Enter</kbd>. Speed, accuracy and your combo all add to the damage.
    - **Dodge:** when the monster strikes, translate the word before the timer
      runs out.
-   - Press <kbd>F1</kbd> to drink a potion, or <kbd>Esc</kbd> to try to flee.
+   - Press <kbd>F1</kbd> to drink a potion. <kbd>Esc</kbd> pauses the battle
+     and stops its clock; choose **Flee** in the pause menu to try to run
+     away.
    - From floor 2, some monsters have **traits**, shown next to their name.
      The first time you meet one, the game explains it. From floor 4, any
      monster can have an extra trait, such as a *Swift Grumpy Rat*.
@@ -190,6 +195,13 @@ Then open <http://localhost:8000>.
 4. **Go deeper.** Find the stairs down on each floor. Each new floor is a
    checkpoint: if you are defeated, you wake up at the start of the floor with
    the stats you arrived with.
+5. **Take a break.** Press <kbd>Esc</kbd> to pause. From the pause menu you
+   can save and quit to the title. Choose **Continue** on the title screen to
+   carry on exactly where you were. You can't save in the middle of a battle.
+   There is one save slot, and each save replaces the last one. On the
+   desktop the save is `adventure.json`, next to the
+   [`words` folder](#your-own-word-lists); on the web it is kept in the
+   browser's local storage.
 
 ## Controls
 
@@ -204,7 +216,7 @@ Then open <http://localhost:8000>.
 | <kbd>Space</kbd> / <kbd>Enter</kbd> | Use what's in front (or wait a turn); go down the stairs |
 | <kbd>P</kbd> | Drink a potion |
 | <kbd>M</kbd> | Full map |
-| <kbd>Esc</kbd> | Menu (leave the dungeon) |
+| <kbd>Esc</kbd> | Pause menu: save, or quit to the title |
 
 **In battles and puzzles**
 
@@ -213,7 +225,7 @@ Then open <http://localhost:8000>.
 | Type + <kbd>Enter</kbd> | Attack, dodge, or solve |
 | <kbd>1</kbd>–<kbd>4</kbd>, or <kbd>←</kbd> / <kbd>→</kbd> + <kbd>Enter</kbd> | Pick a word (odd-one-out puzzles) |
 | <kbd>F1</kbd> | Drink a potion (in battle, instead of attacking) |
-| <kbd>Esc</kbd> | Try to flee, or leave a puzzle |
+| <kbd>Esc</kbd> | Pause (flee from the pause menu), or leave a puzzle |
 
 **Everywhere**
 
@@ -310,6 +322,7 @@ cmd/halpwords/     entry point
 internal/game/     main loop, scene stack, pixel-perfect scaling
 internal/scene/    screens (title, practice, the dungeon crawl, ...)
 internal/dungeon/  floor generation, monsters, automap memory
+internal/save/     save files (local storage on the web)
 internal/raycast/  first-person 3D view
 internal/words/    word lists, languages, answer grading
 internal/typing/   text entry, Tab accents, Greek input mode

@@ -2,6 +2,7 @@ package words
 
 import (
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -100,5 +101,29 @@ func TestBlankShare(t *testing.T) {
 		if n := strings.Count(b, "_"); n != c.want {
 			t.Errorf("share %v hid %d letters (%q), want %d", c.share, n, b, c.want)
 		}
+	}
+}
+
+func TestDeckState(t *testing.T) {
+	d := NewDeck(testEntries(10), rand.New(rand.NewPCG(1, 2)))
+	for n := 0; n < 8; n++ {
+		_, i := d.Next()
+		d.Mark(i, n%3 != 0)
+	}
+	s := d.State()
+	if len(s.Recent) == 0 || len(s.Review) == 0 {
+		t.Fatalf("state %+v is missing words", s)
+	}
+	e := NewDeck(testEntries(10), rand.New(rand.NewPCG(1, 2)))
+	e.SetState(s)
+	if e.Review() != d.Review() || !slices.Equal(e.recent, d.recent) {
+		t.Fatalf("got %+v, want %+v", e.State(), s)
+	}
+
+	// A shorter word list drops the words that are gone.
+	short := NewDeck(testEntries(2), rand.New(rand.NewPCG(1, 2)))
+	short.SetState(DeckState{Recent: []int{0, 5, 1}, Review: []int{9, 1, -1}})
+	if got := short.State(); !slices.Equal(got.Recent, []int{0, 1}) || !slices.Equal(got.Review, []int{1}) {
+		t.Fatalf("got %+v", got)
 	}
 }
