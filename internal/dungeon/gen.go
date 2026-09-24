@@ -3,6 +3,8 @@ package dungeon
 import (
 	"math/rand/v2"
 	"sort"
+
+	"github.com/halpworld/halpwords/internal/rpg"
 )
 
 // Size returns the map width and height for a floor depth. Deeper floors are
@@ -16,10 +18,11 @@ func Generate(seed uint64, depth int) *Level {
 	n := Size(depth)
 	f := &Level{
 		W: n, H: n, Depth: depth, Seed: seed,
-		tiles:   make([]Tile, n*n),
-		Seen:    make([]bool, n*n),
-		Torches: make([]bool, n*n),
-		Chests:  map[Point]*Chest{},
+		tiles:    make([]Tile, n*n),
+		Seen:     make([]bool, n*n),
+		Torches:  make([]bool, n*n),
+		Chests:   map[Point]*Chest{},
+		Features: map[Point]*Feature{},
 	}
 	f.placeRooms(rng)
 	f.connectRooms(rng)
@@ -27,6 +30,8 @@ func Generate(seed uint64, depth int) *Level {
 	f.placeStartAndExit(rng)
 	f.placeTorches(rng)
 	f.placeChests(rng)
+	f.placeFeatures(rng)
+	f.placeBoss(rng)
 	f.placeMonsters(rng)
 	return f
 }
@@ -277,11 +282,25 @@ func (f *Level) placeChests(rng *rand.Rand) {
 		if rng.IntN(2) == 0 {
 			c.Potions = 1
 		}
+		if rng.IntN(3) == 0 {
+			c.Items = append(c.Items, chestItems[rng.IntN(len(chestItems))])
+		}
+		if rng.Float64() < GearChance(f.Depth) {
+			g := rpg.RandomGear(f.Depth, rng)
+			c.Gear = &g
+		}
 		c.Mimic = rng.Float64() < MimicChance(f.Depth)
 		f.Chests[p] = c
 		want--
 	}
 }
+
+// chestItems are the items other than potions that chests can hold.
+var chestItems = []rpg.Item{rpg.Ether, rpg.HintScroll, rpg.HintScroll, rpg.Hourglass, rpg.Clarity}
+
+// GearChance is how likely a chest on floor depth is to hold a piece of
+// gear: 20% on the first floor, growing to 40%.
+func GearChance(depth int) float64 { return min(0.4, 0.2+0.03*float64(depth-1)) }
 
 func (f *Level) placeMonsters(rng *rand.Rand) {
 	want := 3 + f.Depth
@@ -293,7 +312,7 @@ func (f *Level) placeMonsters(rng *rand.Rand) {
 		for y := r.Y; y < r.Y+r.H; y++ {
 			for x := r.X; x < r.X+r.W; x++ {
 				p := Point{x, y}
-				if f.At(p) == Floor && f.Chests[p] == nil && p.Manhattan(f.Start) > 6 {
+				if f.At(p) == Floor && !f.Blocked(p) && p.Manhattan(f.Start) > 6 {
 					cells = append(cells, p)
 				}
 			}

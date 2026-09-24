@@ -35,3 +35,30 @@ func TestValueNoiseRange(t *testing.T) {
 		}
 	}
 }
+
+func TestFeatureSprites(t *testing.T) {
+	opaque := func(m *Indexed) int {
+		n := 0
+		for _, p := range m.Pix {
+			if p != Transparent {
+				n++
+			}
+		}
+		return n
+	}
+	for name, m := range map[string]*Indexed{
+		"shrine":   ShrineSprite(0),
+		"campfire": CampfireSprite(1, false),
+		"embers":   CampfireSprite(1, true),
+		"merchant": MerchantSprite(1),
+	} {
+		if opaque(m) < 60 {
+			t.Errorf("%s: only %d pixels drawn", name, opaque(m))
+		}
+	}
+	boss := MonsterSprite(0, 12, 1, 0)
+	crowned := Crown(boss)
+	if crowned.H <= boss.H || opaque(crowned) <= opaque(boss) {
+		t.Fatal("the crown added nothing")
+	}
+}

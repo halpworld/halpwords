@@ -33,6 +33,16 @@ func (d *Deck) Entries() []Entry { return d.entries }
 // Review returns how many words are waiting to be practised again.
 func (d *Deck) Review() int { return len(d.review) }
 
+// Missed returns the words waiting to be practised again, most recently
+// missed first. Each is an id as Next returns.
+func (d *Deck) Missed() []int {
+	out := make([]int, 0, len(d.review))
+	for i := len(d.review) - 1; i >= 0; i-- {
+		out = append(out, d.review[i])
+	}
+	return out
+}
+
 // Next deals a word. The result identifies it for Mark.
 func (d *Deck) Next() (Entry, int) {
 	e, i, _ := d.NextWhere(nil)

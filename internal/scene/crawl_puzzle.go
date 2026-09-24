@@ -14,6 +14,7 @@ import (
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/puzzle"
+	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
 	"github.com/halpworld/halpwords/internal/words"
 )
@@ -31,6 +32,7 @@ type lockPuzzle struct {
 	choice []int           // the option on each slot, for Match and Dial
 	fields []*typing.Field // one per word, for Grid
 
+	hints    int  // letters shown by hints
 	showing  bool // showing the result
 	solved   bool
 	mimic    bool // the chest was a Mimic; the fight starts next
@@ -56,7 +58,7 @@ func (c *Crawl) startPuzzle(at dungeon.Point, lock puzzle.Lock) {
 func (c *Crawl) dealPuzzle() {
 	lp := c.puzzle
 	lp.p = puzzle.New(lp.lock, c.run.depth, c.run.deck, c.run.lang, c.run.rng)
-	lp.pick, lp.showing = 0, false
+	lp.pick, lp.showing, lp.hints = 0, false, 0
 	lp.field, lp.choice, lp.fields = nil, nil, nil
 	switch lp.p.Answer() {
 	case puzzle.Foreign:
@@ -115,6 +117,13 @@ func (c *Crawl) updatePuzzle(ctx *game.Context) {
 	}
 	if c.muted {
 		return
+	}
+	if input.Pressed(ebiten.KeyF4) {
+		if a := lp.p.Answer(); a == puzzle.Foreign || a == puzzle.Native {
+			c.hint(&lp.hints, puzzleAnswer(lp.p))
+		} else {
+			c.run.info("Hints only work on puzzles you type.")
+		}
 	}
 	switch lp.p.Answer() {
 	case puzzle.Pick:
@@ -285,7 +294,7 @@ func (c *Crawl) solvePuzzle() {
 		shown = dialed(lp)
 	}
 	res := lp.p.Check(a)
-	c.scoreAnswer(lp.p.Word(), res.Tier)
+	c.scoreAnswer(lp.p.Word(), res.Tier, lp.hints > 0)
 	lp.lines = lp.lines[:0]
 	for _, s := range res.Solution {
 		lp.lines = append(lp.lines, logLine{s, pal.White})
@@ -311,26 +320,93 @@ func (c *Crawl) solvePuzzle() {
 	}
 	lp.solved = true
 	lp.title, lp.titleCol = res.Tier.String()+"!", tierColor[res.Tier]
+	xp := puzzleXP(lp.lock, c.run.depth)
 	if lp.lock == puzzle.Door {
 		c.play(audio.Unseal)
 		c.level.Set(lp.at, dungeon.OpenDoor)
-		lp.lines = append(lp.lines, logLine{"The runes fade and the door swings open.", pal.Lime})
-		c.run.say("The seal breaks and the door opens.", pal.Lime)
+		lp.lines = append(lp.lines, logLine{fmt.Sprintf("The runes fade and the door swings open. +%d XP", xp), pal.Lime})
+		c.run.say(fmt.Sprintf("The seal breaks and the door opens. +%d XP", xp), pal.Lime)
+		lp.lines = append(lp.lines, c.gainXP(xp)...)
 		return
 	}
 	c.play(audio.Chest)
 	ch := c.level.Chests[lp.at]
 	ch.Open = true
-	h.Gold += ch.Gold
-	h.Potions += ch.Potions
-	loot := fmt.Sprintf("The chest opens: %d gold", ch.Gold)
-	if ch.Potions > 0 {
-		loot += " and " + potions(ch.Potions)
-	}
-	loot += "!"
+	gold := h.GoldFind(ch.Gold, true)
+	h.Gold += gold
+	loot := fmt.Sprintf("The chest opens: %d gold! +%d XP", gold, xp)
 	lp.lines = append(lp.lines, logLine{loot, pal.Yellow})
 	c.run.say(loot, pal.Yellow)
-	c.float(fmt.Sprintf("+%d gold", ch.Gold), pal.Yellow)
+	c.float(fmt.Sprintf("+%d gold", gold), pal.Yellow)
+	lp.lines = append(lp.lines, c.takeLoot(ch, "Inside: ")...)
+	lp.lines = append(lp.lines, c.gainXP(xp)...)
+}
+
+// puzzleXP is the XP for solving a puzzle on a lock at depth.
+func puzzleXP(lock puzzle.Lock, depth int) int {
+	if lock == puzzle.Chest {
+		return 3 + depth/2
+	}
+	return 2 + depth/2
+}
+
+// puzzleAnswer is the answer a typed puzzle wants, for hints.
+func puzzleAnswer(p puzzle.Puzzle) string {
+	return p.Check(puzzle.Attempt{}).Expected
+}
+
+// takeLoot gives the hero what ch holds besides gold, and describes it.
+// Gear that does not fit in the bag stays in the chest.
+func (c *Crawl) takeLoot(ch *dungeon.Chest, prefix string) []logLine {
+	h := &c.run.hero
+	var got []string
+	if ch.Potions > 0 {
+		h.Items[rpg.Potion] += ch.Potions
+		got = append(got, rpg.Potion.Count(ch.Potions))
+		ch.Potions = 0
+	}
+	for _, it := range ch.Items {
+		h.Items[it]++
+		got = append(got, aName(it.String()))
+	}
+	ch.Items = nil
+	var lines []logLine
+	say := func(msg string) {
+		lines = append(lines, logLine{msg, pal.Yellow})
+		c.run.say(msg, pal.Yellow)
+	}
+	if len(got) > 0 {
+		say(prefix + andList(got) + "!")
+	}
+	if g := ch.Gear; g != nil {
+		switch {
+		case !h.Take(*g):
+			say("There is " + aName(g.Name()) + " too, but your bag is full.")
+			return lines
+		case h.Gear[g.Slot] != nil && *h.Gear[g.Slot] == *g:
+			say("You find " + aName(g.Name()) + " and put it on! " + g.About())
+		default:
+			say("You find " + aName(g.Name()) + ". It goes in your bag (I).")
+		}
+		ch.Gear = nil
+	}
+	return lines
+}
+
+// aName puts "a" or "an" before a name.
+func aName(s string) string {
+	if s != "" && strings.ContainsRune("AEIOUaeiou", rune(s[0])) {
+		return "an " + s
+	}
+	return "a " + s
+}
+
+// andList joins items as "a, b and c".
+func andList(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 // dialed returns the word the tumbler's wheels show.
@@ -370,14 +446,6 @@ func (c *Crawl) failPuzzle() {
 	if h.HP <= 0 {
 		c.die()
 	}
-}
-
-// potions says how many potions there are, such as "1 potion".
-func potions(n int) string {
-	if n == 1 {
-		return "1 potion"
-	}
-	return fmt.Sprintf("%d potions", n)
 }
 
 func (c *Crawl) drawPuzzlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
@@ -617,6 +685,8 @@ func (c *Crawl) puzzleHelp() string {
 		return "Enter try another puzzle · Esc leave"
 	case c.muted:
 		return "Let go of the movement keys to start"
+	case lp.p.Answer() == puzzle.Foreign || lp.p.Answer() == puzzle.Native:
+		return "Enter check · F4 hint · Esc leave"
 	}
 	switch lp.p.Answer() {
 	case puzzle.Pick:

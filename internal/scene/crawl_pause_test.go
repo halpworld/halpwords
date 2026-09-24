@@ -5,13 +5,14 @@ import (
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/words"
 )
 
 func testCrawl(t *testing.T, ctx *game.Context) *Crawl {
 	t.Helper()
 	lang, _ := words.Lookup("fr")
-	r := startRun(ctx, lang, 5)
+	r := startRun(ctx, lang, rpg.Knight, 5)
 	r.sound = &game.Sound{Muted: true}
 	l := dungeon.Generate(r.floorSeed(1), 1)
 	return &Crawl{run: r, level: l, pos: l.Start, facing: l.StartDir}
@@ -29,7 +30,7 @@ func TestPauseStopsTheBattleClock(t *testing.T) {
 	if c.mode != modePause {
 		t.Fatalf("mode %d, want paused", c.mode)
 	}
-	if c.canChoose(pauseFlee) || c.canChoose(pauseSave) || c.canChoose(pauseSaveQuit) {
+	if c.canChoose(pauseFlee) || c.canChoose(pauseItems) || c.canChoose(pauseSuspend) {
 		t.Fatal("can flee or save while dodging")
 	}
 	ctx.Tick += 600
@@ -43,8 +44,8 @@ func TestPauseStopsTheBattleClock(t *testing.T) {
 
 	c.battle.phase = phaseAttack
 	c.pause(ctx)
-	if !c.canChoose(pauseFlee) || c.canChoose(pauseSave) {
-		t.Fatal("on the hero's turn they should be able to flee but not save")
+	if !c.canChoose(pauseFlee) || !c.canChoose(pauseItems) || c.canChoose(pauseSuspend) {
+		t.Fatal("on the hero's turn they should be able to flee and use items, but not suspend")
 	}
 }
 
@@ -54,9 +55,9 @@ func TestUnsavedProgress(t *testing.T) {
 	if !c.hasUnsaved() {
 		t.Fatal("a new adventure counts as saved")
 	}
-	c.lastSave, _ = encodeSave(c.run, c.level, c.pos, c.facing)
+	c.lastSave, _ = encodeSave(c.run, c.level, c.pos, c.facing, true)
 	c.pause(ctx)
-	if c.unsaved || !c.canChoose(pauseSave) {
+	if c.unsaved || !c.canChoose(pauseSuspend) {
 		t.Fatalf("unsaved %v right after saving", c.unsaved)
 	}
 	c.unpause(ctx)

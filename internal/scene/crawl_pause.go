@@ -10,7 +10,6 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/save"
 )
 
 // pauseItem is an entry in the pause menu.
@@ -19,12 +18,12 @@ type pauseItem int
 const (
 	pauseResume pauseItem = iota
 	pauseFlee
-	pauseSave
-	pauseSaveQuit
+	pauseItems
+	pauseSuspend
 	pauseQuit
 )
 
-var pauseLabels = [...]string{"Resume", "Flee", "Save game", "Save and quit", "Quit to title"}
+var pauseLabels = [...]string{"Resume", "Flee", "Items", "Suspend and quit", "Quit to title"}
 
 // pause stops the game and opens the pause menu. Everything stands still,
 // including the battle clock.
@@ -50,18 +49,21 @@ func (c *Crawl) unpause(ctx *game.Context) {
 // pauseItems lists the pause menu. Fleeing is only for battles.
 func (c *Crawl) pauseItems() []pauseItem {
 	if c.resume == modeBattle {
-		return []pauseItem{pauseResume, pauseFlee, pauseSave, pauseSaveQuit, pauseQuit}
+		return []pauseItem{pauseResume, pauseFlee, pauseItems, pauseSuspend, pauseQuit}
 	}
-	return []pauseItem{pauseResume, pauseSave, pauseSaveQuit, pauseQuit}
+	return []pauseItem{pauseResume, pauseItems, pauseSuspend, pauseQuit}
 }
 
 // canChoose reports whether a pause menu item can be used now. The hero can
-// only flee on their own turn, and can't save in the middle of a battle.
+// only flee or use items on their own turn, and can't suspend the game in
+// the middle of a battle.
 func (c *Crawl) canChoose(it pauseItem) bool {
 	switch it {
 	case pauseFlee:
 		return c.battle != nil && c.battle.phase == phaseAttack
-	case pauseSave, pauseSaveQuit:
+	case pauseItems:
+		return c.resume == modeExplore || (c.battle != nil && c.battle.phase == phaseAttack)
+	case pauseSuspend:
 		return c.resume == modeExplore
 	}
 	return true
@@ -99,13 +101,16 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 	case pauseFlee:
 		c.unpause(ctx)
 		c.flee(ctx)
-	case pauseSave:
-		if c.saveGame(ctx) {
-			c.menuSel = 0
-		}
-	case pauseSaveQuit:
-		if c.saveGame(ctx) {
+	case pauseItems:
+		c.play(audio.Select)
+		c.openItems(ctx)
+	case pauseSuspend:
+		if c.writeSave(ctx, true) {
+			c.play(audio.Select)
+			ctx.Notify("Game suspended")
 			ctx.Replace(NewTitle(ctx))
+		} else {
+			c.play(audio.Wrong)
 		}
 	case pauseQuit:
 		if c.unsaved {
@@ -128,31 +133,13 @@ func (c *Crawl) updateQuit(ctx *game.Context) {
 	}
 }
 
-// saveGame writes the adventure to the save slot, replacing any older save.
-func (c *Crawl) saveGame(ctx *game.Context) bool {
-	data, err := encodeSave(c.run, c.level, c.pos, c.facing)
-	if err == nil {
-		err = save.Write(saveName, data)
-	}
-	if err != nil {
-		c.play(audio.Wrong)
-		ctx.Notify("Could not save")
-		c.run.say("Could not save the game: "+err.Error(), pal.Rose)
-		return false
-	}
-	c.play(audio.Select)
-	ctx.Notify("Game saved")
-	c.lastSave, c.unsaved = data, false
-	return true
-}
-
 // hasUnsaved reports whether anything has happened since the game was last
 // saved or loaded.
 func (c *Crawl) hasUnsaved() bool {
 	if c.lastSave == nil {
 		return true
 	}
-	data, err := encodeSave(c.run, c.level, c.pos, c.facing)
+	data, err := encodeSave(c.run, c.level, c.pos, c.facing, true)
 	return err != nil || !bytes.Equal(data, c.lastSave)
 }
 
@@ -185,11 +172,9 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	note, ncol := "Your progress is saved.", pal.Lime
 	switch {
 	case c.resume != modeExplore:
-		note, ncol = "Win or flee the battle to save.", pal.Tan
-	case c.lastSave == nil:
-		note, ncol = "This adventure is not saved yet.", pal.Tan
-	case c.unsaved:
-		note, ncol = "You have unsaved progress.", pal.Tan
+		note, ncol = "Win or flee the battle to suspend.", pal.Tan
+	case c.lastSave == nil || c.unsaved:
+		note, ncol = "Pray at a Save Shrine, or suspend.", pal.Tan
 	}
 	f.DrawCentered(view, note, x+w/2, y+h-26, 1, ncol)
 	c.drawHint(view, ctx, "↑/↓ choose · Enter select · Esc resume")

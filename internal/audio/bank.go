@@ -48,6 +48,11 @@ const (
 	Zap    // a trap or rune stings the hero
 	Stairs // going down the stairs
 	Chomp  // a mimic chest wakes up
+	Pray   // praying at a Save Shrine
+	Coin   // buying or selling
+	Rest   // resting at a campfire
+	Hint   // a hint shows a letter
+	Rage   // a boss grows stronger
 
 	Count // the number of sounds
 )
@@ -60,6 +65,7 @@ var names = [Count]string{
 	"alert", "hit", "crit", "weak", "fumble", "clang", "hurt", "dodge",
 	"defeat", "levelup", "potion", "flee", "fall",
 	"step", "bump", "door", "unseal", "chest", "zap", "stairs", "chomp",
+	"pray", "coin", "rest", "hint", "rage",
 }
 
 func (id ID) String() string {
@@ -195,5 +201,25 @@ var Sounds = [Count]Sound{
 		{Wave: Noise, Freq: 1800, Slide: -2, Delay: 0.16, Attack: 0.002, Hold: 0.03, Release: 0.06, Volume: 0.6},
 		{Wave: Square, Freq: 140, Slide: -1.5, Duty: 0.5, Delay: 0.16, Attack: 0.002, Hold: 0.05, Release: 0.06, Volume: 0.45},
 		{Wave: Saw, Freq: 70, Vibrato: 2, VibratoHz: 9, Delay: 0.05, Attack: 0.05, Hold: 0.3, Release: 0.2, Volume: 0.35},
+	},
+	// A soft rising chord with a shimmer on top.
+	Pray: append(arpeggio(Triangle, 0.12, 0.3, 0.35, nC5, nE5, nG5, nC6),
+		Tone{Wave: Sine, Freq: note(nE6), Vibrato: 2, VibratoHz: 6, Delay: 0.5, Attack: 0.1, Hold: 0.3, Release: 0.4, Volume: 0.25}),
+	Coin: {beep(nA5+2, 0, 0.03, 0.4), beep(nE6, 0.06, 0.12, 0.4)},
+	// The crackle of a fire, then a calm two-note sigh.
+	Rest: {
+		{Wave: Noise, Freq: 2500, Attack: 0.001, Hold: 0.01, Release: 0.03, Volume: 0.3},
+		{Wave: Noise, Freq: 2000, Delay: 0.09, Attack: 0.001, Hold: 0.01, Release: 0.03, Volume: 0.25},
+		{Wave: Noise, Freq: 3000, Delay: 0.15, Attack: 0.001, Hold: 0.01, Release: 0.03, Volume: 0.25},
+		{Wave: Triangle, Freq: note(nG4), Delay: 0.25, Attack: 0.05, Hold: 0.2, Release: 0.2, Volume: 0.4},
+		{Wave: Triangle, Freq: note(nC5), Delay: 0.5, Attack: 0.05, Hold: 0.35, Release: 0.3, Volume: 0.4},
+	},
+	Hint: {
+		{Wave: Sine, Freq: note(nA5), Slide: 1, Attack: 0.005, Hold: 0.05, Release: 0.1, Volume: 0.4},
+		beep(nE6, 0.08, 0.05, 0.3),
+	},
+	Rage: {
+		{Wave: Saw, Freq: 90, Slide: -0.5, Vibrato: 3, VibratoHz: 12, Attack: 0.05, Hold: 0.5, Release: 0.3, Volume: 0.45},
+		{Wave: Noise, Freq: 600, Slide: -1, Attack: 0.1, Hold: 0.4, Release: 0.3, Volume: 0.35},
 	},
 }

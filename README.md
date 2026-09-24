@@ -40,7 +40,7 @@ adventurous tone. It runs offline, needs no accounts, and ships as a single
 file.
 
 > [!NOTE]
-> **Status: milestone 3 (puzzles) done; milestone 4 (RPG layer) is next.** The game is playable from the
+> **Status: milestone 4 (RPG layer) done; milestone 5 (learning and competition) is next.** The game is playable from the
 > first floor down, with sound, but it is early. Expect rough edges and balance changes. See the
 > [roadmap](#roadmap).
 
@@ -62,11 +62,19 @@ file.
   letters, turn the letter wheels of a tumbler lock, fill in a mini
   crossword, or spell a word from memory. A wrong answer springs a trap, and
   from floor 2 some chests are **Mimics** that bite back.
-- **Pause and save.** <kbd>Esc</kbd> pauses the game, battle clock
-  included. Save from the pause menu and pick up where you left off with
-  **Continue**.
-- **RPG progression.** XP, levels, gold, potions, and a checkpoint on each
-  floor.
+- **Heroes and gear.** Play a sturdy **Knight**, a word-wise **Scribe** or
+  a lucky **Rogue**. Level up, find and buy weapons, armour and trinkets
+  with generated names ("Iron Ring of Swiftness"), and carry potions,
+  ethers, Hint Scrolls, Hourglasses and Runes of Clarity.
+- **Shrines, campfires, merchants and bosses.** Pray at **Save Shrines** to
+  save your adventure, rest at **campfires** to heal and see the words you
+  keep missing, trade with the **merchant**, and beat the crowned **boss**
+  that guards the stairs every third floor.
+- **Hints.** Stuck on a word? <kbd>F4</kbd> shows the next letter for a
+  little MP.
+- **Pause and suspend.** <kbd>Esc</kbd> pauses the game, battle clock
+  included. Suspend and quit from the pause menu, and pick up where you
+  left off with **Continue**.
 - **Four languages.** French, Latin, Ancient Greek (polytonic) and Irish, with
   built-in starter word lists.
 - **Forgiving grading.** Answers are graded as Perfect, Correct, Accent slip,
@@ -111,6 +119,22 @@ file.
     <td align="center"><b>Tumbler locks:</b> turn the wheels to spell the word.</td>
     <td align="center"><b>Mini crosswords:</b> words that share a letter.</td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/class-picker.png" alt="Choosing a hero: the Knight, the Scribe and the Rogue, with their stats"></td>
+    <td width="50%"><img src="docs/media/boss.png" alt="A battle with the Slime King, a crowned boss, with a hint showing the first letters of the answer"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Three heroes:</b> Knight, Scribe or Rogue.</td>
+    <td align="center"><b>Bosses</b> guard the stairs. <kbd>F4</kbd> buys a hint.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/shop.png" alt="The merchant's shop: potions, ethers, scrolls and three pieces of gear for sale"></td>
+    <td width="50%"><img src="docs/media/campfire.png" alt="Resting at a campfire, which restores HP and MP and shows four words the player missed"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>The merchant</b> buys and sells.</td>
+    <td align="center"><b>Campfires</b> heal and show the words you missed.</td>
+  </tr>
 </table>
 
 ## Quick start
@@ -124,7 +148,8 @@ cd halpwords
 make run            # or: go run ./cmd/halpwords
 ```
 
-Then choose **New Adventure**, pick a language, and find the stairs down.
+Then choose **New Adventure**, pick a language and a hero, and find the
+stairs down.
 
 <details>
 <summary><b>macOS</b></summary>
@@ -192,27 +217,50 @@ Then open <http://localhost:8000>.
      <kbd>Enter</kbd>. Speed, accuracy and your combo all add to the damage.
    - **Dodge:** when the monster strikes, translate the word before the timer
      runs out.
-   - Press <kbd>F1</kbd> to drink a potion. <kbd>Esc</kbd> pauses the battle
-     and stops its clock; choose **Flee** in the pause menu to try to run
-     away.
+   - Press <kbd>F1</kbd> to drink a potion, or <kbd>F4</kbd> for a hint:
+     it shows the next letter for 2 MP (1 for a Scribe), or uses up a Hint
+     Scroll. A word you needed a hint for comes back for practice later.
+   - <kbd>Esc</kbd> pauses the battle and stops its clock. From the pause
+     menu you can use **Items** or **Flee**. Using an item takes your turn.
+   - A perfect answer restores 1 MP, and the first time you spell a word
+     perfectly you earn 2 XP.
    - From floor 2, some monsters have **traits**, shown next to their name.
      The first time you meet one, the game explains it. From floor 4, any
      monster can have an extra trait, such as a *Swift Grumpy Rat*.
 3. **Unlock.** Walk into a sealed door or a treasure chest to get a word
    puzzle. Doors ask for meanings, odd words out, matching pairs, riddles
    and anagrams; chests ask for careful spelling (missing letters, tumbler
-   locks and, from floor 3, crosswords) and hold gold and potions. A wrong answer sets off a
-   trap, or wakes a Mimic: it keeps the loot until you defeat it.
-4. **Go deeper.** Find the stairs down on each floor. Each new floor is a
-   checkpoint: if you are defeated, you wake up at the start of the floor with
-   the stats you arrived with.
-5. **Take a break.** Press <kbd>Esc</kbd> to pause. From the pause menu you
-   can save and quit to the title. Choose **Continue** on the title screen to
-   carry on exactly where you were. You can't save in the middle of a battle.
-   There is one save slot, and each save replaces the last one. On the
-   desktop the save is `adventure.json`, next to the
-   [`words` folder](#your-own-word-lists); on the web it is kept in the
-   browser's local storage.
+   locks and, from floor 3, crosswords) and hold gold, items and sometimes
+   gear. Solving a puzzle earns XP; <kbd>F4</kbd> gives hints on puzzles you
+   type. A wrong answer sets off a trap, or wakes a Mimic: it keeps the loot
+   until you defeat it.
+4. **Grow stronger.** Each class grows differently as it levels up. Press
+   <kbd>I</kbd> for your items and gear: wear better gear, drop what you
+   don't need, and drink potions or ethers. An **Hourglass** gives you half
+   as much time again to type in your next battle, and a **Rune of
+   Clarity** turns your typing red as soon as it goes wrong.
+5. **Use what you find.**
+   - **Save Shrines** (a floating blue crystal) stand in the first room of
+     floors 2, 3, 5, 6, 8, 9 and so on. Pray at one to save your adventure.
+   - **Campfires** heal you and restore your MP once, and show the words you
+     have been missing.
+   - The **merchant** sells items and three pieces of gear, and buys gear
+     from your bag for half its price.
+6. **Beat the bosses.** Every third floor, a crowned boss guards the stairs,
+   and the stairs won't open until it is defeated. Bosses grow swift and
+   then write their words backwards as they weaken, ask for longer words,
+   and always drop gear.
+7. **Falling.** If you are defeated, you wake up at the last shrine you
+   prayed at (or the dungeon's entrance) as you were when you prayed, with a
+   fifth of your gold gone. The floor there is new. The words you have
+   practised are never lost.
+8. **Take a break.** Press <kbd>Esc</kbd> to pause. **Suspend and quit**
+   keeps the game exactly as it is, and **Continue** on the title screen
+   picks it up. A suspended game can only be continued once; after that,
+   Continue takes you back to your last shrine. You can't suspend in the
+   middle of a battle. There is one save slot. On the desktop it is
+   `adventure.json`, next to the [`words` folder](#your-own-word-lists); on
+   the web it is kept in the browser's local storage.
 
 ## Controls
 
@@ -226,8 +274,9 @@ Then open <http://localhost:8000>.
 | <kbd>Q</kbd> / <kbd>E</kbd> | Strafe left or right |
 | <kbd>Space</kbd> / <kbd>Enter</kbd> | Use what's in front (or wait a turn); go down the stairs |
 | <kbd>P</kbd> | Drink a potion |
+| <kbd>I</kbd> | Items and gear (<kbd>Enter</kbd> use or wear, <kbd>D</kbd> drop) |
 | <kbd>M</kbd> | Full map |
-| <kbd>Esc</kbd> | Pause menu: save, or quit to the title |
+| <kbd>Esc</kbd> | Pause menu: items, suspend, or quit to the title |
 
 **In battles and puzzles**
 
@@ -239,7 +288,8 @@ Then open <http://localhost:8000>.
 | <kbd>←</kbd> / <kbd>→</kbd> to choose a wheel, <kbd>↑</kbd> / <kbd>↓</kbd> to turn it | Tumbler locks |
 | <kbd>↑</kbd> / <kbd>↓</kbd> to choose a word, <kbd>Enter</kbd> for the next one | Crosswords (<kbd>Enter</kbd> checks when every word is filled in) |
 | <kbd>F1</kbd> | Drink a potion (in battle, instead of attacking) |
-| <kbd>Esc</kbd> | Pause (flee from the pause menu), or leave a puzzle |
+| <kbd>F4</kbd> | Hint: show the next letter, for MP or a Hint Scroll |
+| <kbd>Esc</kbd> | Pause (items and flee are in the pause menu), or leave a puzzle |
 
 **Everywhere**
 
@@ -362,7 +412,8 @@ make help            # list all targets
 cmd/halpwords/     entry point
 internal/game/     main loop, scene stack, pixel-perfect scaling
 internal/scene/    screens (title, practice, the dungeon crawl, ...)
-internal/dungeon/  floor generation, monsters, automap memory
+internal/dungeon/  floor generation, monsters, bosses, shrines and shops
+internal/rpg/      classes, stats, levels, items and gear (no Ebitengine dependency)
 internal/save/     save files (local storage on the web)
 internal/raycast/  first-person 3D view
 internal/words/    word lists, languages, answer grading
@@ -396,8 +447,8 @@ The full design is in [PLAN.md](PLAN.md). In short:
 - [x] **M3: Puzzles.** Nine puzzle types (reverse rune, odd one out, pair
       matching, riddle, anagram, missing letters, tumbler lock, mini
       crossword, spelling), a riddle bank, and the Mimic.
-- [ ] **M4: RPG layer.** Classes, items, a shop, campfires, bosses, Save
-      Shrines.
+- [x] **M4: RPG layer.** Three classes, six stats, items, generated gear,
+      a merchant, campfires, bosses, Save Shrines, suspend saves, hints.
 - [ ] **M5: Learning and competition.** Spaced repetition, stats, Hardcore
       mode, Daily Dungeon, share codes, Hall of Fame.
 - [ ] **M6: LLM (optional).** A "Dungeon Director" that reacts to how you are

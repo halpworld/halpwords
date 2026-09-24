@@ -13,7 +13,7 @@ import (
 )
 
 // Version is shown on the title screen.
-const Version = "v0.4 (milestone 3 started: puzzles)"
+const Version = "v0.5 (milestone 4: the RPG layer)"
 
 // Title is the title screen and main menu.
 type Title struct {

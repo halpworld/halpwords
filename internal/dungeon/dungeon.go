@@ -2,6 +2,8 @@
 // on them. It has no Ebitengine dependency.
 package dungeon
 
+import "github.com/halpworld/halpwords/internal/rpg"
+
 // Tile is one grid cell. Walls are whole cells, as in Eye of the Beholder
 // or Dungeon Master.
 type Tile uint8
@@ -79,6 +81,8 @@ type Chest struct {
 	Open    bool
 	Gold    int
 	Potions int
+	Items   []rpg.Item `json:",omitempty"` // other things inside
+	Gear    *rpg.Gear  `json:",omitempty"`
 	// Mimic chests bite: failing their puzzle wakes a monster.
 	Mimic bool
 }
@@ -100,6 +104,7 @@ type Level struct {
 	StartDir Dir
 	Exit     Point // the stairs
 	Chests   map[Point]*Chest
+	Features map[Point]*Feature
 	Monsters []*Monster
 }
 
@@ -139,7 +144,7 @@ func (f *Level) Blocked(p Point) bool {
 	if !f.At(p).Walkable() {
 		return true
 	}
-	if c := f.Chests[p]; c != nil {
+	if f.Chests[p] != nil || f.Features[p] != nil {
 		return true
 	}
 	return f.MonsterAt(p) != nil

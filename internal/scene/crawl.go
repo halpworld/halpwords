@@ -18,6 +18,7 @@ import (
 	"github.com/halpworld/halpwords/internal/proc"
 	"github.com/halpworld/halpwords/internal/puzzle"
 	"github.com/halpworld/halpwords/internal/raycast"
+	"github.com/halpworld/halpwords/internal/rpg"
 )
 
 // Layout of the crawl screen, in screen pixels unless noted.
@@ -36,8 +37,12 @@ const (
 	modeBattle
 	modePuzzle
 	modeMap
-	modePause // the pause menu
-	modeQuit  // asking whether to quit without saving
+	modePause    // the pause menu
+	modeQuit     // asking whether to quit without saving
+	modeShrine   // asking whether to pray at a Save Shrine
+	modeCampfire // resting at a campfire
+	modeShop     // buying and selling with the merchant
+	modeItems    // the hero's items and gear
 	modeDead
 )
 
@@ -139,6 +144,7 @@ type Crawl struct {
 	img   *ebiten.Image
 	chest [2]*proc.Indexed
 	looks map[*dungeon.Monster][2]*proc.Indexed
+	props props // shrine, campfire and merchant sprites
 
 	pos    dungeon.Point
 	facing dungeon.Dir
@@ -159,6 +165,10 @@ type Crawl struct {
 	menuSel  int    // the highlighted pause menu item
 	lastSave []byte // the game as last saved or loaded
 	unsaved  bool   // something has happened since lastSave
+
+	menu    *menu            // the shop or items screen
+	feature *dungeon.Feature // the shrine, campfire or merchant in use
+	weakest []logLine        // the words shown at a campfire
 
 	shake, hurt int // ticks of screen shake and red flash left
 	banner      string
@@ -187,6 +197,7 @@ func crawlOn(r *run, l *dungeon.Level) *Crawl {
 		img:    ebiten.NewImage(viewW, viewH),
 		chest:  [2]*proc.Indexed{proc.ChestSprite(false), proc.ChestSprite(true)},
 		looks:  map[*dungeon.Monster][2]*proc.Indexed{},
+		props:  newProps(),
 		pos:    l.Start,
 		facing: l.StartDir,
 		angle:  raycast.Angle(l.StartDir),
@@ -225,6 +236,17 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		return nil
 	case c.mode == modeQuit:
 		c.updateQuit(ctx)
+		return nil
+	case c.mode == modeShrine:
+		c.updateShrine(ctx)
+		return nil
+	case c.mode == modeCampfire:
+		if input.Confirm() || input.Back() || input.Pressed(ebiten.KeySpace) {
+			c.mode = modeExplore
+		}
+		return nil
+	case c.mode == modeShop || c.mode == modeItems:
+		c.updateMenu(ctx)
 		return nil
 	case c.mode == modeBattle && !ebiten.IsFocused():
 		// Don't let the battle clock run while the player is in another
@@ -284,8 +306,9 @@ func (c *Crawl) Update(ctx *game.Context) error {
 	case modeDead:
 		switch {
 		case input.Confirm():
-			c.rise(ctx)
+			c.wake(ctx)
 		case input.Back():
+			c.woken(ctx) // the fall still counts in the save
 			ctx.Replace(NewTitle(ctx))
 		}
 	}
@@ -316,6 +339,9 @@ func (c *Crawl) explore(ctx *game.Context) {
 		return
 	case input.Pressed(ebiten.KeyP):
 		c.drinkPotion()
+		return
+	case input.Pressed(ebiten.KeyI):
+		c.openItems(ctx)
 		return
 	case input.Pressed(ebiten.KeySpace) || input.Confirm():
 		c.interact(ctx)
@@ -401,9 +427,17 @@ func (c *Crawl) step(ctx *game.Context, d dungeon.Dir, forward bool) {
 		case forward && !ch.Open:
 			c.startPuzzle(to, puzzle.Chest)
 		case forward:
-			c.run.info("The chest is empty.")
+			c.emptyChest(ch)
 			c.bump(d)
 		default:
+			c.bump(d)
+		}
+		return
+	}
+	if ft := l.FeatureAt(to); ft != nil {
+		if forward {
+			c.useFeature(ctx, ft)
+		} else {
 			c.bump(d)
 		}
 		return
@@ -430,6 +464,16 @@ func (c *Crawl) step(ctx *game.Context, d dungeon.Dir, forward bool) {
 	c.play(audio.Step)
 }
 
+// emptyChest looks in an opened chest, where gear may have been left
+// behind when the hero's bag was full.
+func (c *Crawl) emptyChest(ch *dungeon.Chest) {
+	if ch.Gear == nil {
+		c.run.info("The chest is empty.")
+		return
+	}
+	c.takeLoot(ch, "")
+}
+
 func (c *Crawl) openDoor(p dungeon.Point) {
 	c.level.Set(p, dungeon.OpenDoor)
 	c.play(audio.Door)
@@ -454,7 +498,11 @@ func (c *Crawl) arrived() {
 	a := c.anim
 	c.prev = nil
 	if !a.bump && (a.x0 != a.x1 || a.y0 != a.y1) && c.level.At(c.pos) == dungeon.Stairs {
-		c.run.say("Stairs lead down! Press Enter to descend.", pal.Lime)
+		if b := c.level.Boss(); b != nil {
+			c.run.say(fmt.Sprintf("The %s's dark power holds the stairs shut!", b.Name()), pal.Orange)
+		} else {
+			c.run.say("Stairs lead down! Press Enter to descend.", pal.Lime)
+		}
 	}
 }
 
@@ -472,10 +520,14 @@ func (c *Crawl) interact(ctx *game.Context) {
 	}
 	if ch := l.Chests[ahead]; ch != nil {
 		if ch.Open {
-			c.run.info("The chest is empty.")
+			c.emptyChest(ch)
 		} else {
 			c.startPuzzle(ahead, puzzle.Chest)
 		}
+		return
+	}
+	if ft := l.FeatureAt(ahead); ft != nil {
+		c.useFeature(ctx, ft)
 		return
 	}
 	switch l.At(ahead) {
@@ -492,27 +544,30 @@ func (c *Crawl) interact(ctx *game.Context) {
 func (c *Crawl) drinkPotion() bool {
 	h := &c.run.hero
 	switch {
-	case h.Potions == 0:
+	case h.Items[rpg.Potion] == 0:
 		c.run.info("You have no potions.")
 		return false
-	case h.HP == h.MaxHP:
+	case h.HP >= h.MaxHP():
 		c.run.info("You are already at full health.")
 		return false
 	}
-	n := min(h.PotionHeal(), h.MaxHP-h.HP)
-	h.Heal(n)
-	h.Potions--
+	n := h.Heal(h.PotionHeal())
+	h.Items[rpg.Potion]--
 	c.play(audio.Potion)
 	c.run.say(fmt.Sprintf("You drink a potion and recover %d HP.", n), pal.Lime)
 	c.float(fmt.Sprintf("+%d", n), pal.Lime)
 	return true
 }
 
-// descend goes down the stairs. Each new floor is a save point.
+// descend goes down the stairs, unless a boss still holds them.
 func (c *Crawl) descend(ctx *game.Context) {
+	if b := c.level.Boss(); b != nil {
+		c.play(audio.Bump)
+		c.run.say(fmt.Sprintf("The stairs will not open while the %s lives!", b.Name()), pal.Orange)
+		return
+	}
 	r := c.run
 	r.depth++
-	r.saved = r.hero
 	c.play(audio.Stairs)
 	ctx.Replace(newCrawl(r))
 }
@@ -525,13 +580,38 @@ func (c *Crawl) die() {
 	c.run.say("You have fallen!", pal.Rose)
 }
 
-// rise restarts the floor with the hero as they were when they arrived.
-func (c *Crawl) rise(ctx *game.Context) {
+// goldLost is the share of their gold a fallen hero loses.
+const goldLost = 0.2
+
+// wake takes a fallen hero back to their last shrine, with some gold lost.
+// The floor there is made anew. Word practice is never lost.
+func (c *Crawl) wake(ctx *game.Context) { ctx.Replace(c.woken(ctx)) }
+
+// woken is the crawl a fallen hero wakes up in.
+func (c *Crawl) woken(ctx *game.Context) *Crawl {
 	r := c.run
-	r.hero = r.saved
+	r.regen++
+	r.depth = r.shrine.Depth
+	r.hero = r.shrine.Hero.Clone()
+	lost := int(float64(r.hero.Gold)*goldLost + 0.5)
+	r.hero.Gold -= lost
+	r.hero.HP, r.hero.MP = r.hero.MaxHP(), r.hero.MaxMP()
 	r.hero.Streak = 0
-	r.say(fmt.Sprintf("You wake up at the start of floor %d.", r.depth), pal.Yellow)
-	ctx.Replace(newCrawl(r))
+	r.shrine = checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone()}
+	next := newCrawl(r)
+	msg := fmt.Sprintf("You wake at the shrine on floor %d.", r.depth)
+	if r.depth == 1 && !dungeon.ShrineFloor(1) {
+		msg = "You wake at the dungeon's entrance."
+	}
+	if lost > 0 {
+		msg += fmt.Sprintf(" You dropped %d gold.", lost)
+	}
+	r.say(msg, pal.Yellow)
+	if r.onDisk {
+		// Keep the save in step, so quitting now can't undo the fall.
+		next.writeSave(ctx, false)
+	}
+	return next
 }
 
 // camera returns the viewpoint, part way through any animation. The hero
@@ -557,6 +637,9 @@ func (c *Crawl) look(m *dungeon.Monster) [2]*proc.Indexed {
 	if !ok {
 		for f := range l {
 			l[f] = proc.MonsterSprite(m.Kind.Family, m.Kind.Hue, m.Seed, f)
+			if m.Kind.Boss() {
+				l[f] = proc.Crown(l[f])
+			}
 		}
 		c.looks[m] = l
 	}
@@ -575,6 +658,13 @@ func (c *Crawl) sprites(tick uint64) []raycast.Sprite {
 			img = c.chest[1]
 		}
 		out = append(out, raycast.Sprite{X: x, Y: y, Img: img, Size: 0.3})
+	}
+	for p, ft := range c.level.Features {
+		if p.Manhattan(c.pos) > 12 {
+			continue
+		}
+		x, y := center(p)
+		out = append(out, c.props.sprite(ft, x, y, tick))
 	}
 	moving := c.anim.active()
 	f := c.anim.frac()
@@ -623,4 +713,7 @@ func (c *Crawl) Draw(dst *ebiten.Image, ctx *game.Context) {
 	c.drawViewOverlay(view, ctx)
 	c.drawSide(dst, ctx)
 	c.drawPanel(dst, ctx)
+	if c.menu != nil {
+		c.drawMenu(dst, ctx)
+	}
 }

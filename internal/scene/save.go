@@ -2,6 +2,7 @@ package scene
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/color"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/raycast"
+	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/words"
 )
@@ -17,26 +19,25 @@ import (
 const saveName = "adventure.json"
 
 // saveVersion changes when older saves can no longer be loaded.
-const saveVersion = 1
+const saveVersion = 2
 
-// saveFile is a saved adventure: the run, and the floor the hero is on.
-// The floor itself comes back from the run's seed, so only what has changed
-// on it is kept.
+// saveFile is a saved adventure. Continue goes to Suspend if there is one,
+// and it is then deleted, so a suspended game can only be picked up once.
+// Otherwise it goes back to the last Save Shrine. Floors come back from the
+// run's seed, so only what has changed on them is kept.
 type saveFile struct {
 	Version    int
 	Language   string // a words.Language code
+	Class      rpg.Class
 	Seed       uint64
 	RNG        []byte // the run's random generator
-	Depth      int
-	Hero       hero
-	Checkpoint hero // the hero as they arrived on the floor
 	Greek      bool
 	SeenTraits dungeon.Trait
 	Deck       words.DeckState
+	Perfect    []int `json:",omitempty"` // words spelled perfectly
 	Log        []savedLine
-	At         dungeon.Point
-	Facing     dungeon.Dir
-	Floor      dungeon.State
+	Shrine     checkpoint
+	Suspend    *checkpoint `json:",omitempty"`
 }
 
 type savedLine struct {
@@ -44,8 +45,9 @@ type savedLine struct {
 	Col  color.RGBA
 }
 
-// encodeSave saves the run with the hero at at, facing facing, on floor l.
-func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir) ([]byte, error) {
+// encodeSave saves the run. With suspend, it also keeps the game as it is
+// now, with the hero at at facing facing on floor l.
+func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir, suspend bool) ([]byte, error) {
 	rng, err := r.src.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -53,17 +55,22 @@ func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir) 
 	s := saveFile{
 		Version:    saveVersion,
 		Language:   r.lang.Code,
+		Class:      r.hero.Class,
 		Seed:       r.seed,
 		RNG:        rng,
-		Depth:      r.depth,
-		Hero:       r.hero,
-		Checkpoint: r.saved,
 		Greek:      r.greek,
 		SeenTraits: r.seenTraits,
 		Deck:       r.deck.State(),
-		At:         at,
-		Facing:     facing,
-		Floor:      l.State(),
+		Shrine:     r.shrine,
+	}
+	for id := range r.deck.Entries() {
+		if r.perfect[id] {
+			s.Perfect = append(s.Perfect, id)
+		}
+	}
+	if suspend {
+		cp := r.here(l, at, facing)
+		s.Suspend = &cp
 	}
 	for _, line := range r.log {
 		s.Log = append(s.Log, savedLine{line.text, line.col})
@@ -73,17 +80,20 @@ func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir) 
 
 // loaded is a run and floor rebuilt from a save.
 type loaded struct {
-	run    *run
-	level  *dungeon.Level
-	at     dungeon.Point
-	facing dungeon.Dir
+	run       *run
+	level     *dungeon.Level
+	at        dungeon.Point
+	facing    dungeon.Dir
+	suspended bool // from a suspended game, not a shrine
 }
+
+var errDamaged = errors.New("the save file is damaged")
 
 // decodeSave rebuilds a saved run and the floor it was on.
 func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 	var s saveFile
 	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("the save file is damaged")
+		return nil, errDamaged
 	}
 	if s.Version != saveVersion {
 		return nil, fmt.Errorf("the save is from another version of the game")
@@ -92,34 +102,38 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 	if !ok || len(ctx.ListsFor(lang.Code)) == 0 {
 		return nil, fmt.Errorf("no word lists for %s", s.Language)
 	}
-	if s.Depth < 1 {
-		return nil, fmt.Errorf("the save file is damaged")
-	}
-	r := startRun(ctx, lang, s.Seed)
+	r := startRun(ctx, lang, s.Class, s.Seed)
 	if err := r.src.UnmarshalBinary(s.RNG); err != nil {
-		return nil, fmt.Errorf("the save file is damaged")
+		return nil, errDamaged
 	}
-	r.depth = s.Depth
-	r.hero, r.saved = s.Hero, s.Checkpoint
 	r.greek = s.Greek
 	r.seenTraits = s.SeenTraits
 	r.deck.SetState(s.Deck)
+	for _, id := range s.Perfect {
+		r.perfect[id] = true
+	}
 	for _, line := range s.Log {
 		r.log = append(r.log, logLine{line.Text, line.Col})
 	}
+	r.shrine = s.Shrine
+	r.onDisk = true
 
-	l := dungeon.Generate(r.floorSeed(r.depth), r.depth)
-	if err := l.Restore(s.Floor); err != nil {
-		return nil, fmt.Errorf("the save file is damaged: %w", err)
+	cp := s.Shrine
+	if s.Suspend != nil {
+		cp = *s.Suspend
 	}
-	if !l.At(s.At).Walkable() {
-		return nil, fmt.Errorf("the save file is damaged")
+	l, at, facing, err := r.enter(cp)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errDamaged, err)
 	}
-	return &loaded{run: r, level: l, at: s.At, facing: s.Facing & 3}, nil
+	if r.shrine.Depth < 1 {
+		return nil, errDamaged
+	}
+	return &loaded{run: r, level: l, at: at, facing: facing, suspended: s.Suspend != nil}, nil
 }
 
 // saveSummary describes the saved adventure for the title screen, such as
-// "French · Floor 3". ok is false when there is no save.
+// "French · Knight · Floor 3". ok is false when there is no save.
 func saveSummary() (summary string, ok bool) {
 	data, err := save.Read(saveName)
 	if err != nil {
@@ -127,7 +141,9 @@ func saveSummary() (summary string, ok bool) {
 	}
 	var s struct {
 		Language string
-		Depth    int
+		Class    rpg.Class
+		Shrine   struct{ Depth int }
+		Suspend  *struct{ Depth int }
 	}
 	if json.Unmarshal(data, &s) != nil {
 		return "", true // Continue will explain the problem
@@ -136,10 +152,15 @@ func saveSummary() (summary string, ok bool) {
 	if l, ok := words.Lookup(s.Language); ok {
 		name = l.Name
 	}
-	return fmt.Sprintf("%s · Floor %d", name, s.Depth), true
+	depth := s.Shrine.Depth
+	if s.Suspend != nil {
+		depth = s.Suspend.Depth
+	}
+	return fmt.Sprintf("%s · %s · Floor %d", name, s.Class, depth), true
 }
 
-// loadCrawl resumes the saved adventure where it was saved.
+// loadCrawl resumes the saved adventure. A suspended game is deleted from
+// the save as it is loaded.
 func loadCrawl(ctx *game.Context) (*Crawl, error) {
 	data, err := save.Read(saveName)
 	if err != nil {
@@ -151,8 +172,35 @@ func loadCrawl(ctx *game.Context) (*Crawl, error) {
 	}
 	c := crawlOn(s.run, s.level)
 	c.pos, c.facing, c.angle = s.at, s.facing, raycast.Angle(s.facing)
-	c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.theme.Name))
-	s.run.say("Welcome back! Your adventure continues.", pal.Yellow)
-	c.lastSave, _ = encodeSave(c.run, c.level, c.pos, c.facing)
+	if s.suspended {
+		if !c.writeSave(ctx, false) {
+			return nil, fmt.Errorf("could not update the save")
+		}
+		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.theme.Name))
+		s.run.say("Welcome back! Your adventure continues.", pal.Yellow)
+	} else {
+		c.showBanner("Welcome back!", "You wake at the shrine")
+		s.run.say(fmt.Sprintf("Welcome back! You wake at the shrine on floor %d.", s.run.depth), pal.Yellow)
+	}
+	c.lastSave, _ = encodeSave(c.run, c.level, c.pos, c.facing, true)
+	c.unsaved = false
 	return c, nil
+}
+
+// writeSave writes the adventure to the save slot, replacing any older
+// save. With suspend, the game as it is now is kept too.
+func (c *Crawl) writeSave(ctx *game.Context, suspend bool) bool {
+	data, err := encodeSave(c.run, c.level, c.pos, c.facing, suspend)
+	if err == nil {
+		err = save.Write(saveName, data)
+	}
+	if err != nil {
+		ctx.Notify("Could not save")
+		c.run.say("Could not save the game: "+err.Error(), pal.Rose)
+		return false
+	}
+	c.run.onDisk = true
+	c.lastSave, _ = encodeSave(c.run, c.level, c.pos, c.facing, true)
+	c.unsaved = false
+	return true
 }

@@ -9,7 +9,14 @@ type State struct {
 	Tiles    []Tile
 	Seen     []byte // 1 for each cell on the automap
 	Chests   []ChestState
+	Features []FeatureState `json:",omitempty"`
 	Monsters []MonsterState
+}
+
+// FeatureState is a shrine, campfire or merchant and where it stands.
+type FeatureState struct {
+	At Point
+	Feature
 }
 
 // ChestState is a chest and where it stands.
@@ -29,6 +36,7 @@ type MonsterState struct {
 	Stun           int
 	Facing         Dir
 	Loot           *Chest `json:",omitempty"`
+	Phase          int    `json:",omitempty"`
 }
 
 // State returns the floor's changeable state.
@@ -48,13 +56,16 @@ func (f *Level) State() State {
 			if c := f.Chests[p]; c != nil {
 				s.Chests = append(s.Chests, ChestState{At: p, Chest: *c})
 			}
+			if ft := f.Features[p]; ft != nil {
+				s.Features = append(s.Features, FeatureState{At: p, Feature: *ft})
+			}
 		}
 	}
 	for _, m := range f.Monsters {
 		s.Monsters = append(s.Monsters, MonsterState{
 			Kind: m.Kind.Name, At: m.At, HP: m.HP, MaxHP: m.MaxHP, ATK: m.ATK,
 			Seed: m.Seed, Traits: m.Traits, Extra: m.Extra, Awake: m.Awake,
-			Stun: m.Stun, Facing: m.Facing, Loot: m.Loot,
+			Stun: m.Stun, Facing: m.Facing, Loot: m.Loot, Phase: m.Phase,
 		})
 	}
 	return s
@@ -73,6 +84,13 @@ func (f *Level) Restore(s State) error {
 		}
 		chests[c.At] = &c.Chest
 	}
+	features := map[Point]*Feature{}
+	for _, ft := range s.Features {
+		if !f.In(ft.At) {
+			return fmt.Errorf("%s at %v is off the map", ft.Kind, ft.At)
+		}
+		features[ft.At] = &ft.Feature
+	}
 	var monsters []*Monster
 	for _, ms := range s.Monsters {
 		k := KindNamed(ms.Kind)
@@ -85,14 +103,14 @@ func (f *Level) Restore(s State) error {
 		monsters = append(monsters, &Monster{
 			Kind: k, At: ms.At, HP: ms.HP, MaxHP: ms.MaxHP, ATK: ms.ATK,
 			Seed: ms.Seed, Traits: ms.Traits, Extra: ms.Extra, Awake: ms.Awake,
-			Stun: ms.Stun, Facing: ms.Facing, Loot: ms.Loot,
+			Stun: ms.Stun, Facing: ms.Facing, Loot: ms.Loot, Phase: ms.Phase,
 		})
 	}
 	copy(f.tiles, s.Tiles)
 	for i, v := range s.Seen {
 		f.Seen[i] = v != 0
 	}
-	f.Chests, f.Monsters = chests, monsters
+	f.Chests, f.Features, f.Monsters = chests, features, monsters
 	return nil
 }
 
@@ -100,6 +118,11 @@ func (f *Level) Restore(s State) error {
 func KindNamed(name string) *Kind {
 	if name == MimicKind.Name {
 		return &MimicKind
+	}
+	for i := range BossKinds {
+		if BossKinds[i].Name == name {
+			return &BossKinds[i]
+		}
 	}
 	for i := range Kinds {
 		if Kinds[i].Name == name {

@@ -3,6 +3,7 @@ package scene
 import (
 	"fmt"
 	"image"
+	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -11,10 +12,11 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
 )
 
-const exploreHelp = "↑↓ walk  ←→ turn  Q/E strafe  Space use  P potion  M map  Esc menu"
+const exploreHelp = "↑↓ walk ←→ turn Q/E strafe Space use P potion I items M map Esc menu"
 
 // drawViewOverlay draws text and gauges over the 3D view.
 func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
@@ -45,10 +47,17 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 		f.Draw(view, name, nx, viewY+2, 1, pal.White)
 		f.Draw(view, tags, nx+f.Width(name, 1), viewY+2, 1, pal.Cyan)
 		bar(view, cx-80, viewY+21, 160, 8, float64(max(0, m.HP))/float64(m.MaxHP), pal.Rose, pal.Plum)
+		if b.hints > 0 && (b.phase == phaseAttack || b.phase == phaseDefend) {
+			c.drawLetterHint(view, ctx, hintText(b.word.Answers[0], b.hints))
+		}
+		c.drawBuffs(view, ctx)
 		c.drawHint(view, ctx, c.battleHelp())
 	case modePuzzle:
 		if c.puzzle.fields != nil {
 			c.drawCrossword(view, ctx)
+		}
+		if lp := c.puzzle; lp.hints > 0 && !lp.showing {
+			c.drawLetterHint(view, ctx, hintText(puzzleAnswer(lp.p), lp.hints))
 		}
 		c.drawHint(view, ctx, c.puzzleHelp())
 	case modeMap:
@@ -59,17 +68,21 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 	case modePause:
 		c.drawPause(view, ctx)
 	case modeQuit:
-		text := "Unsaved progress will be lost."
+		text := "You will go back to your last shrine."
 		if c.lastSave == nil {
 			text = "This adventure has not been saved."
 		}
 		c.drawDialog(view, ctx, "Quit without saving?", text, "Y quit · N go back")
+	case modeShrine:
+		c.drawDialog(view, ctx, "SAVE SHRINE", "Pray here to save your adventure?", "Y pray · N leave")
+	case modeCampfire:
+		c.drawCampfire(view, ctx)
 	case modeDead:
 		gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Red, 0.35))
-		c.drawDialog(view, ctx, "YOU HAVE FALLEN", fmt.Sprintf("Wake at the start of floor %d?", c.run.depth), "Enter try again · Esc give up")
+		c.drawDialog(view, ctx, "YOU HAVE FALLEN", c.wakeText(), "Enter try again · Esc give up")
 	}
 
-	if c.bannerT > 0 && c.mode != modePause && c.mode != modeQuit {
+	if c.bannerT > 0 && c.mode != modePause && c.mode != modeQuit && c.mode != modeCampfire && c.mode != modeShrine {
 		a := min(1, float64(c.bannerT)/30)
 		y := viewY + 70
 		if c.mode == modeBattle {
@@ -78,6 +91,30 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 		f.DrawOutline(view, c.banner, cx-f.Width(c.banner, 3)/2, y, 3, pal.Fade(pal.Yellow, a), pal.Fade(pal.Black, a))
 		if c.sub != "" {
 			f.DrawOutline(view, c.sub, cx-f.Width(c.sub, 2)/2, y+52, 2, pal.Fade(pal.Tan, a), pal.Fade(pal.Black, a))
+		}
+	}
+}
+
+// drawLetterHint shows the letters hints have given, above the key help.
+func (c *Crawl) drawLetterHint(view *ebiten.Image, ctx *game.Context, text string) {
+	f := ctx.Font
+	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
+	text = "Hint: " + text
+	sc := f.FitScale(text, vw-16, 2)
+	f.DrawOutline(view, text, viewX+vw/2-f.Width(text, sc)/2, viewY+vh-26-16*sc, sc, pal.Yellow, pal.Black)
+}
+
+// drawBuffs marks an Hourglass or Rune of Clarity working in a battle.
+func (c *Crawl) drawBuffs(view *ebiten.Image, ctx *game.Context) {
+	b := c.battle
+	y := viewY + 38
+	for _, buff := range []struct {
+		on   bool
+		text string
+	}{{b.slow, "Hourglass"}, {b.clarity, "Clarity"}} {
+		if buff.on {
+			ctx.Font.DrawOutline(view, buff.text, viewX+6, y, 1, pal.Cyan, pal.Black)
+			y += 16
 		}
 	}
 }
@@ -111,32 +148,36 @@ func (c *Crawl) drawSide(dst *ebiten.Image, ctx *game.Context) {
 	gfx.Window(dst, x, y, w, 116)
 	x += 12
 	w -= 24
-	f.DrawShadow(dst, fmt.Sprintf("Level %d", h.Level), x, y+9, 1, pal.Yellow)
+	f.DrawShadow(dst, fmt.Sprintf("Lv %d %s", h.Level, h.Class), x, y+7, 1, pal.Yellow)
 	lang := c.run.lang.Name
-	f.DrawShadow(dst, lang, x+w-f.Width(lang, 1), y+9, 1, pal.Tan)
+	f.DrawShadow(dst, lang, x+w-f.Width(lang, 1), y+7, 1, pal.Tan)
 
+	maxHP := h.MaxHP()
 	hpCol := pal.Lime
 	switch {
-	case h.HP*4 <= h.MaxHP:
+	case h.HP*4 <= maxHP:
 		hpCol = pal.Rose
-	case h.HP*2 <= h.MaxHP:
+	case h.HP*2 <= maxHP:
 		hpCol = pal.Yellow
 	}
-	f.DrawShadow(dst, "HP", x, y+29, 1, pal.Steel)
-	bar(dst, x+24, y+32, 110, 10, float64(max(0, h.HP))/float64(h.MaxHP), hpCol, pal.Plum)
-	f.DrawShadow(dst, fmt.Sprintf("%d/%d", max(0, h.HP), h.MaxHP), x+142, y+29, 1, pal.Ice)
-	f.DrawShadow(dst, "XP", x, y+47, 1, pal.Steel)
-	bar(dst, x+24, y+50, 110, 10, float64(h.XP)/float64(h.NextXP()), pal.Sky, pal.Navy)
-	f.DrawShadow(dst, fmt.Sprintf("%d/%d", h.XP, h.NextXP()), x+142, y+47, 1, pal.Ice)
+	gauge := func(label string, gy, v, most int, fg, bg color.RGBA) {
+		f.DrawShadow(dst, label, x, gy, 1, pal.Steel)
+		bar(dst, x+24, gy+3, 110, 10, float64(max(0, v))/float64(max(1, most)), fg, bg)
+		f.DrawShadow(dst, fmt.Sprintf("%d/%d", max(0, v), most), x+142, gy, 1, pal.Ice)
+	}
+	gauge("HP", y+24, h.HP, maxHP, hpCol, pal.Plum)
+	gauge("MP", y+40, h.MP, h.MaxMP(), pal.Cyan, pal.Indigo)
+	gauge("XP", y+56, h.XP, h.NextXP(), pal.Sky, pal.Navy)
 
-	f.DrawShadow(dst, fmt.Sprintf("ATK %d", h.ATK), x, y+67, 1, pal.Ice)
-	f.DrawShadow(dst, fmt.Sprintf("Gold %d", h.Gold), x+96, y+67, 1, pal.Yellow)
-	f.DrawShadow(dst, fmt.Sprintf("Potions %d", h.Potions), x, y+85, 1, pal.Pink)
+	f.DrawShadow(dst, fmt.Sprintf("ATK %d  DEF %d", h.ATK(), h.DEF()), x, y+74, 1, pal.Ice)
+	gold := fmt.Sprintf("Gold %d", h.Gold)
+	f.DrawShadow(dst, gold, x+w-f.Width(gold, 1), y+74, 1, pal.Yellow)
+	f.DrawShadow(dst, fmt.Sprintf("Potions %d", h.Items[rpg.Potion]), x, y+92, 1, pal.Pink)
 	combo, col := "Combo -", pal.Ash
 	if h.Streak > 0 {
 		combo, col = fmt.Sprintf("Combo ×%.1f", combat.Combo(h.Streak)), pal.Lime
 	}
-	f.DrawShadow(dst, combo, x+96, y+85, 1, col)
+	f.DrawShadow(dst, combo, x+w-f.Width(combo, 1), y+92, 1, col)
 
 	y = 124
 	x, w = sideX, sideW
@@ -214,6 +255,13 @@ func (c *Crawl) drawAutomap(dst *ebiten.Image, x, y, w, h, cell int, full bool) 
 			case dungeon.Stairs:
 				gfx.FillRect(clip, px, py, cell, cell, pal.Lime)
 			}
+			if ft := l.Features[p]; ft != nil {
+				col := [...]color.RGBA{pal.Cyan, pal.Orange, pal.Pink}[ft.Kind]
+				if ft.Kind == dungeon.Campfire && ft.Used {
+					col = pal.Mahogany
+				}
+				gfx.FillRect(clip, px+1, py+1, cell-2, cell-2, col)
+			}
 			if ch := l.Chests[p]; ch != nil {
 				col := pal.Yellow
 				if ch.Open {
@@ -224,7 +272,7 @@ func (c *Crawl) drawAutomap(dst *ebiten.Image, x, y, w, h, cell int, full bool) 
 		}
 	}
 	for _, m := range l.Monsters {
-		if m.HP <= 0 || !l.Seen[l.Index(m.At)] || m.At.Manhattan(c.pos) > 6 {
+		if m.HP <= 0 || !l.Seen[l.Index(m.At)] || (m.At.Manhattan(c.pos) > 6 && !m.Kind.Boss()) {
 			continue
 		}
 		px, py := ox+m.At.X*cell, oy+m.At.Y*cell

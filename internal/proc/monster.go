@@ -42,6 +42,8 @@ var monsterLooks = []monsterLook{
 	{[]color.RGBA{pal.Mahogany, pal.Red, pal.Orange, pal.Yellow}, [2]color.RGBA{pal.Night, pal.Plum}, pal.Yellow}, // 9 fire imp
 	{[]color.RGBA{pal.Indigo, pal.Purple, pal.Steel, pal.Ice}, [2]color.RGBA{pal.Navy, pal.Cyan}, pal.Cyan},       // 10 mirror imp
 	{[]color.RGBA{pal.Plum, pal.Mahogany, pal.Brown, pal.Tan}, [2]color.RGBA{pal.Rose, pal.Pink}, pal.Yellow},     // 11 mimic
+	{[]color.RGBA{pal.Night, pal.Plum, pal.Purple, pal.Pink}, [2]color.RGBA{pal.Bronze, pal.Yellow}, pal.Yellow},  // 12 royal boss
+	{[]color.RGBA{pal.Night, pal.Mahogany, pal.Red, pal.Rose}, [2]color.RGBA{pal.Plum, pal.Orange}, pal.Yellow},   // 13 crimson boss
 }
 
 // canvas is a grid of parts.
