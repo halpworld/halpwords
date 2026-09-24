@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -17,6 +18,7 @@ import (
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/raycast"
+	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
 	"github.com/halpworld/halpwords/internal/words"
 )
@@ -54,6 +56,22 @@ type battle struct {
 	wait     bool   // the result waits for Enter, so a mistake can be studied
 
 	flash, lunge, dying int // monster animation ticks
+
+	slow    bool // an Hourglass gives half as much time again
+	clarity bool // a Rune of Clarity shows typos as they are typed
+	hints   int  // letters shown by hints for this word
+}
+
+// hourglassTime is how much longer an Hourglass gives to type.
+const hourglassTime = 1.5
+
+// timeScale is how much longer than usual the hero has to type an attack.
+func (c *Crawl) timeScale() float64 {
+	k := c.run.hero.TimeBonus()
+	if c.battle != nil && c.battle.slow {
+		k *= hourglassTime
+	}
+	return k
 }
 
 func runes(s string) int { return utf8.RuneCountInString(s) }
@@ -66,9 +84,21 @@ func (c *Crawl) startBattle(ctx *game.Context, m *dungeon.Monster, ambush bool) 
 	c.queued = actNone
 	f := typing.NewField(c.run.lang)
 	f.Greek = c.run.greek
-	c.battle = &battle{m: m, field: f}
+	h := &c.run.hero
+	c.battle = &battle{m: m, field: f, slow: h.Hourglass, clarity: h.Clarity}
+	if h.Hourglass {
+		c.run.say("Your hourglass turns. Time slows around you.", pal.Cyan)
+	}
+	if h.Clarity {
+		c.run.say("Your Rune of Clarity glows.", pal.Cyan)
+	}
+	h.Hourglass, h.Clarity = false, false
 	c.play(audio.Alert)
 	first := phaseAttack
+	if m.Kind.Boss() {
+		c.play(audio.Rage)
+		c.showBanner(m.Name(), "guards the stairs!")
+	}
 	if ambush {
 		c.run.say(fmt.Sprintf("A %s attacks!", m.Name()), pal.Orange)
 		first = phaseDefend
@@ -106,7 +136,15 @@ func traitWords(t dungeon.Trait) string {
 // deal puts a new word in front of the hero.
 func (c *Crawl) deal(ctx *game.Context, p phase) {
 	b := c.battle
-	b.word, b.wordID = c.run.deck.Next()
+	ok := false
+	if b.m.Phase > 0 {
+		// An angry boss asks for longer words.
+		b.word, b.wordID, ok = c.run.deck.NextWhere(func(e words.Entry) bool { return runes(e.Answers[0]) >= 6 })
+	}
+	if !ok {
+		b.word, b.wordID = c.run.deck.Next()
+	}
+	b.hints = 0
 	b.field.Reset()
 	b.phase, b.start = p, ctx.Tick
 	b.title, b.lines = "", nil
@@ -118,7 +156,10 @@ func (c *Crawl) beginAttack(ctx *game.Context) { c.deal(ctx, phaseAttack) }
 func (c *Crawl) beginDefend(ctx *game.Context) {
 	c.deal(ctx, phaseDefend)
 	b := c.battle
-	b.limit = combat.DefendTime(runes(b.word.Answers[0]))
+	b.limit = combat.DefendTime(runes(b.word.Answers[0])) * c.run.hero.DodgeBonus()
+	if b.slow {
+		b.limit *= hourglassTime
+	}
 	if b.m.Has(dungeon.Swift) {
 		b.limit *= combat.SwiftTime
 	}
@@ -138,6 +179,9 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 	}
 	if b.dying > 0 && b.dying < dyingTicks {
 		b.dying++
+	}
+	if (b.phase == phaseAttack || b.phase == phaseDefend) && !c.muted && input.Pressed(ebiten.KeyF4) {
+		c.hint(&b.hints, b.word.Answers[0])
 	}
 	switch b.phase {
 	case phaseAttack:
@@ -200,18 +244,97 @@ func (c *Crawl) grade(typed string) words.Result {
 
 // scoreAnswer records an answer for spaced practice and the combo streak.
 // An accent slip neither builds nor breaks the streak. An id below 0 is an
-// answer that was not about one word, such as an odd-one-out pick.
-func (c *Crawl) scoreAnswer(id int, t words.Tier) {
+// answer that was not about one word, such as an odd-one-out pick. A word
+// answered with a hint comes back for practice, however it was spelled.
+// The first perfect spelling of each word is worth XP.
+func (c *Crawl) scoreAnswer(id int, t words.Tier, hinted bool) {
+	r, h := c.run, &c.run.hero
 	if id >= 0 {
-		c.run.deck.Mark(id, t >= words.Correct)
+		r.deck.Mark(id, t >= words.Correct && !hinted)
 	}
-	h := &c.run.hero
 	switch {
 	case t >= words.Correct:
 		h.Streak++
 	case t < words.AccentSlip:
 		h.Streak = 0
 	}
+	if t == words.Perfect && id >= 0 && !hinted && !r.perfect[id] {
+		r.perfect[id] = true
+		e := r.deck.Entries()[id]
+		r.say(fmt.Sprintf("First perfect %s! +%d XP", e.Answers[0], perfectXP), pal.Lime)
+		c.gainXP(perfectXP)
+	}
+}
+
+// perfectXP is the XP for the first perfect spelling of a word.
+const perfectXP = 2
+
+// gainXP gives the hero XP and celebrates any level gained. It returns
+// lines describing the level ups.
+func (c *Crawl) gainXP(xp int) []logLine {
+	h := &c.run.hero
+	var lines []logLine
+	for _, up := range h.GainXP(xp) {
+		lines = append(lines, logLine{fmt.Sprintf("LEVEL UP! Level %d: %s", up.Level, up), pal.Lime})
+		c.run.say(fmt.Sprintf("Level up! You are now level %d. %s.", up.Level, up), pal.Lime)
+		c.showBanner("LEVEL UP!", fmt.Sprintf("Level %d", up.Level))
+		c.run.sound.PlayLater(audio.LevelUp, 45)
+	}
+	return lines
+}
+
+// hint shows one more letter of answer, for MP or a Hint Scroll. shown
+// counts the letters shown so far.
+func (c *Crawl) hint(shown *int, answer string) {
+	h := &c.run.hero
+	if *shown >= letters(answer) {
+		c.run.info("The whole word is showing!")
+		return
+	}
+	switch cost := h.HintCost(); {
+	case h.MP >= cost:
+		h.MP -= cost
+		c.run.info(fmt.Sprintf("A hint shows a letter. -%d MP", cost))
+	case h.Items[rpg.HintScroll] > 0:
+		h.Items[rpg.HintScroll]--
+		c.run.info("You read a Hint Scroll. It shows a letter.")
+	default:
+		c.play(audio.Bump)
+		c.run.info(fmt.Sprintf("A hint needs %d MP or a Hint Scroll.", cost))
+		return
+	}
+	*shown++
+	c.play(audio.Hint)
+}
+
+// letters counts the letters in s.
+func letters(s string) int {
+	n := 0
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			n++
+		}
+	}
+	return n
+}
+
+// hintText shows the first n letters of answer, with the rest as blanks.
+// Spaces and punctuation always show.
+func hintText(answer string, n int) string {
+	var b strings.Builder
+	for _, r := range answer {
+		switch {
+		case !unicode.IsLetter(r):
+			b.WriteRune(r)
+		case n > 0:
+			b.WriteRune(r)
+			n--
+		default:
+			b.WriteRune('_')
+		}
+		b.WriteRune(' ')
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // answerLines explains an answer: the right spelling, and what was typed if
@@ -240,11 +363,24 @@ func (c *Crawl) strike(ctx *game.Context) {
 	b, h, m := c.battle, &c.run.hero, c.battle.m
 	typed := b.field.Text()
 	res := c.grade(typed)
-	speed := combat.Speed(runes(res.Expected), secs(ctx.Tick-b.start))
-	dmg, crit := combat.Damage(h.ATK, res.Tier, speed, h.Streak)
+	speed := combat.Speed(runes(res.Expected), secs(ctx.Tick-b.start)/c.timeScale())
+	hinted := b.hints > 0
+	dmg, crit := combat.Damage(h.ATK(), res.Tier, h.SpeedDamage(speed), h.Streak)
+	lucky := false
+	if !crit && !hinted && res.Tier >= words.Correct && c.run.rng.Float64() < h.LuckyCrit() {
+		crit, lucky = true, true
+		dmg = int(float64(dmg)*1.5 + 0.5)
+	}
+	if crit && hinted {
+		crit = false
+		dmg = int(float64(dmg)/1.5 + 0.5)
+	}
 	combo := combat.Combo(h.Streak)
-	c.scoreAnswer(b.wordID, res.Tier)
+	c.scoreAnswer(b.wordID, res.Tier, hinted)
 	lines := answerLines(b.word, res, typed)
+	if res.Tier == words.Perfect && !hinted && h.Restore(1) > 0 {
+		lines = append(lines, logLine{"Perfect spelling restores 1 MP.", pal.Sky})
+	}
 
 	title, col := res.Tier.String()+"!", tierColor[res.Tier]
 	switch {
@@ -268,6 +404,9 @@ func (c *Crawl) strike(ctx *game.Context) {
 		switch {
 		case crit:
 			title, col = "CRITICAL!", pal.Yellow
+			if lucky {
+				title = "LUCKY HIT!"
+			}
 			c.play(audio.Crit)
 		case res.Tier >= words.Correct:
 			c.play(audio.Hit)
@@ -281,6 +420,7 @@ func (c *Crawl) strike(ctx *game.Context) {
 		}
 		lines = append(lines, logLine{info, pal.Ice})
 		c.run.say(fmt.Sprintf("You hit the %s for %d.", m.Name(), dmg), pal.Ice)
+		lines = append(lines, c.enrage(m)...)
 	}
 
 	switch {
@@ -296,9 +436,9 @@ func (c *Crawl) strike(ctx *game.Context) {
 // dodge grades a defence. A good answer dodges; a graze halves the blow.
 func (c *Crawl) dodge(ctx *game.Context, res words.Result, typed string, timeout bool) {
 	b, h, m := c.battle, &c.run.hero, c.battle.m
-	c.scoreAnswer(b.wordID, res.Tier)
+	c.scoreAnswer(b.wordID, res.Tier, b.hints > 0)
 	lines := answerLines(b.word, res, typed)
-	hit := max(1, m.ATK+c.run.rng.IntN(3)-1)
+	hit := h.Hit(max(1, m.ATK+c.run.rng.IntN(3)-1))
 	dmg := int(math.Round(float64(hit) * combat.Block(res.Tier)))
 	b.lunge = 16
 
@@ -336,25 +476,58 @@ func (c *Crawl) dodge(ctx *game.Context, res words.Result, typed string, timeout
 // win hands out the rewards for defeating the monster.
 func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []logLine) {
 	b, h, m := c.battle, &c.run.hero, c.battle.m
-	xp, gold := m.XP(), m.Gold()
+	xp, gold := m.XP(), h.GoldFind(m.Gold(), false)
 	h.Gold += gold
 	c.run.sound.PlayLater(audio.Defeat, 12)
 	lines = append(lines, logLine{fmt.Sprintf("The %s is defeated! +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow})
 	c.run.say(fmt.Sprintf("You defeat the %s. +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow)
-	if m.Loot != nil && m.Loot.Potions > 0 {
-		h.Potions += m.Loot.Potions
-		loot := "It was guarding " + potions(m.Loot.Potions) + "!"
-		lines = append(lines, logLine{loot, pal.Yellow})
-		c.run.say(loot, pal.Yellow)
+	loot := m.Loot
+	if m.Kind.Boss() {
+		// Bosses always drop gear, a tier better than the floor's.
+		g := rpg.RandomGear(c.run.depth+2, c.run.rng)
+		loot = &dungeon.Chest{Gear: &g, Potions: 1}
+		c.showBanner("VICTORY!", "The stairs are free")
+		c.run.say("The way down is open!", pal.Lime)
 	}
-	if n := h.GainXP(xp); n > 0 {
-		lines = append(lines, logLine{fmt.Sprintf("LEVEL UP! You are level %d.", h.Level), pal.Lime})
-		c.run.say(fmt.Sprintf("Level up! You are now level %d. HP %d, ATK %d.", h.Level, h.MaxHP, h.ATK), pal.Lime)
-		c.showBanner("LEVEL UP!", fmt.Sprintf("Level %d", h.Level))
-		c.run.sound.PlayLater(audio.LevelUp, 45)
+	if loot != nil {
+		lines = append(lines, c.takeLoot(loot, "It was guarding ")...)
 	}
+	lines = append(lines, c.gainXP(xp)...)
 	b.title, b.titleCol, b.lines = title, col, lines
 	b.phase, b.shown, b.dying = phaseWon, ctx.Tick, 1
+}
+
+// enrage moves a boss into its next phase as it weakens: at two thirds of
+// its HP it turns swift, and at one third its words turn backwards too.
+func (c *Crawl) enrage(m *dungeon.Monster) []logLine {
+	if !m.Kind.Boss() || m.HP <= 0 {
+		return nil
+	}
+	phase := 0
+	switch {
+	case m.HP*3 <= m.MaxHP:
+		phase = 2
+	case m.HP*3 <= m.MaxHP*2:
+		phase = 1
+	}
+	var lines []logLine
+	for m.Phase < phase {
+		m.Phase++
+		t := dungeon.Swift
+		if m.Phase == 2 {
+			t = dungeon.Mirrored
+			if m.Has(t) {
+				t = dungeon.Ghostly
+			}
+		}
+		m.Traits |= t
+		msg := fmt.Sprintf("The %s is enraged! It turns %s.", m.Name(), strings.ToLower(t.String()))
+		lines = append(lines, logLine{msg, pal.Orange})
+		c.run.say(msg, pal.Orange)
+		c.play(audio.Rage)
+		c.shake = 16
+	}
+	return lines
 }
 
 // flee tries to escape. It works half the time, and the monster is left
@@ -418,6 +591,7 @@ func (c *Crawl) drawBattlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 		if b.phase == phaseAttack {
 			// The bar drains at a steady pace until the speed bonus is gone.
 			// Marks show where critical hits and then full damage run out.
+			t /= c.timeScale()
 			n := runes(b.word.Answers[0])
 			speed := combat.Speed(n, t)
 			bc := pal.Lime
@@ -456,7 +630,11 @@ func (c *Crawl) drawBattlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 		}
 		sc := f.FitScale(prompt, w-40, 2)
 		f.DrawCentered(dst, prompt, cx, y+28, sc, pcol)
-		drawTyped(dst, ctx, b.field.Text(), cx, y+60, min(560, w-40), 2, !c.muted)
+		good := -1
+		if b.clarity {
+			good = goodPrefix(b.field.Text(), b.word.Answers)
+		}
+		drawTypedMarked(dst, ctx, b.field.Text(), good, cx, y+60, min(560, w-40), 2, !c.muted)
 	default:
 		drawResult(dst, ctx, b.title, b.titleCol, b.lines, cx, y)
 	}
@@ -470,12 +648,12 @@ func (c *Crawl) battleHelp() string {
 		if c.muted {
 			return "Let go of the movement keys to start"
 		}
-		return "Enter strike · F1 potion · Esc pause or flee"
+		return "Enter strike · F1 potion · F4 hint · Esc menu"
 	case phaseDefend:
 		if c.muted {
 			return "Let go of the movement keys to start"
 		}
-		return "Type fast to dodge! · Esc pause"
+		return "Type fast to dodge! · F4 hint · Esc pause"
 	case phaseResult:
 		if b.wait || b.next == phaseLost {
 			return "Enter continue"

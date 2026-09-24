@@ -52,6 +52,35 @@ var Kinds = []Kind{
 // mimics only appear by waking up.
 var MimicKind = Kind{"Mimic", Mimic, 16, 6, 12, 0, 2, 11, 0.5, 0}
 
+// BossKinds are the monsters that guard the stairs on boss floors, one
+// after another. They are not in Kinds: each only appears as a boss.
+var BossKinds = []Kind{
+	{"Slime King", Slime, 34, 5, 30, 30, 3, 12, 0.95, 0},
+	{"Bone Lord", Skull, 40, 6, 40, 40, 6, 13, 0.95, 0},
+	{"Gazer Queen", Eye, 44, 7, 50, 50, 9, 12, 0.9, 0},
+	{"Golem Titan", Golem, 52, 7, 60, 60, 12, 13, 1, 0},
+	{"Imp Overlord", Imp, 48, 8, 70, 70, 15, 12, 0.95, 0},
+}
+
+// BossFor returns the boss for floor depth.
+func BossFor(depth int) *Kind {
+	return &BossKinds[max(0, depth/3-1)%len(BossKinds)]
+}
+
+// Boss reports whether k is a boss.
+func (k *Kind) Boss() bool {
+	for i := range BossKinds {
+		if k == &BossKinds[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// Still reports whether monsters of kind k stay where they are: mimics
+// and bosses wait for the hero to come to them.
+func (k *Kind) Still() bool { return k.Family == Mimic || k.Boss() }
+
 // MimicChance is how likely a chest on floor depth is to be a mimic. There
 // are none on the first floor; after that it grows to 35%.
 func MimicChance(depth int) float64 {
@@ -90,6 +119,7 @@ type Monster struct {
 	Stun   int    // turns left before it moves again
 	Facing Dir
 	Loot   *Chest // what a mimic was guarding, won by defeating it
+	Phase  int    // a boss's phase: 0, then 1 and 2 as it weakens
 }
 
 // NewMonster creates a monster of kind k, with stats scaled for depth.
@@ -172,7 +202,7 @@ func (f *Level) MoveMonsters(hero Point, rng *rand.Rand) *Monster {
 			}
 			continue
 		}
-		if m.Kind.Family == Mimic {
+		if m.Kind.Still() {
 			continue
 		}
 		if m.Awake && d > 0 {

@@ -52,7 +52,7 @@ func (a *Adventure) Update(ctx *game.Context) error {
 		a.sel = (a.sel + 1) % len(a.langs)
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		ctx.Sound.Play(audio.Select)
-		ctx.Replace(newCrawl(newRun(ctx, a.langs[a.sel])))
+		ctx.Replace(NewClassPick(a.langs[a.sel]))
 	}
 	return nil
 }
@@ -86,5 +86,5 @@ func (a *Adventure) Draw(dst *ebiten.Image, ctx *game.Context) {
 		n := fmt.Sprintf("%d words", a.count[i])
 		f.DrawShadow(dst, n, x+w-20-f.Width(n, 1), ly+8, 1, pal.Ash)
 	}
-	f.DrawShadow(dst, "↑/↓ choose   Enter descend   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+	f.DrawShadow(dst, "↑/↓ choose   Enter next   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
 }

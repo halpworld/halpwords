@@ -193,3 +193,99 @@ func TestWakeMimic(t *testing.T) {
 		}
 	}
 }
+
+// Shrines, campfires and merchants stand where they block nothing, one to a
+// room, and the right floors have them.
+func TestFeatures(t *testing.T) {
+	count := map[FeatureKind]int{}
+	for seed := uint64(1); seed <= 200; seed++ {
+		for _, depth := range []int{1, 2, 3, 4, 7} {
+			f := Generate(seed, depth)
+			shrines := 0
+			rooms := map[int]bool{}
+			for p, ft := range f.Features {
+				count[ft.Kind]++
+				r := f.roomAt(p)
+				if r < 0 || rooms[r] {
+					t.Fatalf("seed %d depth %d: %s at %v shares a room or is in a corridor", seed, depth, ft.Kind, p)
+				}
+				rooms[r] = true
+				for c := range f.Chests {
+					if f.roomAt(c) == r {
+						t.Fatalf("seed %d depth %d: %s shares a room with a chest", seed, depth, ft.Kind)
+					}
+				}
+				switch ft.Kind {
+				case Shrine:
+					shrines++
+					if r != 0 {
+						t.Fatalf("seed %d depth %d: shrine outside the start room", seed, depth)
+					}
+				case Merchant:
+					if len(ft.Stock) != StockSize {
+						t.Fatalf("merchant with %d things to sell", len(ft.Stock))
+					}
+				case Campfire:
+					if depth < 2 {
+						t.Fatal("campfire on the first floor")
+					}
+				}
+			}
+			if want := ShrineFloor(depth); want != (shrines == 1) {
+				t.Fatalf("seed %d depth %d: %d shrines", seed, depth, shrines)
+			}
+			// With every chest and feature as a wall, all other open cells
+			// must still be reachable.
+			for p := range f.Chests {
+				f.Set(p, Wall)
+			}
+			for p := range f.Features {
+				f.Set(p, Wall)
+			}
+			dist := f.distances(f.Start, true)
+			for i, d := range dist {
+				if f.tiles[i] != Wall && d < 0 {
+					t.Fatalf("seed %d depth %d: cell %d cut off", seed, depth, i)
+				}
+			}
+		}
+	}
+	if count[Merchant] == 0 || count[Campfire] == 0 {
+		t.Fatalf("features: %v", count)
+	}
+}
+
+func TestBoss(t *testing.T) {
+	for seed := uint64(1); seed <= 100; seed++ {
+		for depth := 1; depth <= 9; depth++ {
+			f := Generate(seed, depth)
+			b := f.Boss()
+			if BossFloor(depth) != (b != nil) {
+				t.Fatalf("seed %d depth %d: boss %v", seed, depth, b)
+			}
+			if b == nil {
+				continue
+			}
+			if b.Kind != BossFor(depth) || !b.Kind.Boss() || !b.Kind.Still() {
+				t.Fatalf("wrong boss %s", b.Kind.Name)
+			}
+			var room Room
+			for _, r := range f.Rooms {
+				if r.Contains(f.Exit) {
+					room = r
+				}
+			}
+			if !room.Contains(b.At) {
+				t.Fatalf("seed %d depth %d: boss at %v, not by the stairs %v", seed, depth, b.At, f.Exit)
+			}
+		}
+	}
+	for i := range BossKinds {
+		if KindNamed(BossKinds[i].Name) != &BossKinds[i] {
+			t.Fatalf("%s not found by name", BossKinds[i].Name)
+		}
+	}
+	if Kinds[0].Boss() || MimicKind.Boss() {
+		t.Fatal("an ordinary monster is a boss")
+	}
+}

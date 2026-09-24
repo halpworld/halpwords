@@ -239,8 +239,8 @@ quarter turn at a time.
   the full map over the 3D view. A compass shows the facing.
 - **HUD:** level, language, HP and XP bars, ATK, gold, potions and combo, plus
   a four-line message log.
-- **Save points:** arriving on a floor saves the hero. Dying restarts the floor
-  with the hero as they arrived.
+- **Save points:** Save Shrines (§8). Falling wakes the hero at the last
+  shrine they prayed at, on a new floor.
 - **Later:** sneaking up on a sleeping monster for a free first strike, and
   shadowcast fog for the full map.
 
@@ -358,7 +358,8 @@ door, so you can always walk out of it. From floor 2, some chests are
 **Mimics** (15%, plus 5% per floor, up to 35%). They look like any other
 chest; solve the puzzle and it opens as usual, fail it and the Mimic ambushes
 you. It never moves, and when defeated it drops the chest's gold and potions.
-Hints come with MP in M4.
+Hints came with MP in M4: <kbd>F4</kbd> shows the next letter of a typed
+puzzle's answer.
 
 **Finishing M3: work plan** (all done)
 
@@ -410,6 +411,56 @@ Hints come with MP in M4.
   (e.g. +10% dodge window).
 - **Shops and campfires:** a merchant on some floors; campfires restore HP and
   show your Grimoire and your weakest words.
+
+*Now (M4, done):* `internal/rpg` holds the hero with no Ebitengine
+dependency: classes, stats, levels, items and gear.
+
+- **Classes** are picked after the language. Knight: 36 HP, DEF 2, +8 HP
+  a level. Scribe: 10 MP, Focus 2, half as much damage again from speed
+  above ×1, hints for 1 MP instead of 2. Rogue: Luck 4, 25% more dodge
+  time, half as much gold again from chests. Each has a 16×16 string-art
+  portrait recoloured per class.
+- **Stats:** HP, MP, ATK, DEF (taken off every blow, never below 1), Focus
+  (5% more typing time each, for the attack speed bonus and dodging), Luck
+  (2% chance each, up to 30%, that a good hit is a lucky critical, and 5%
+  more gold), and Dodge % from gear. Levels grow HP, MP and ATK; DEF, Focus
+  and Luck grow on even levels. Level ups restore HP and MP and list what
+  grew.
+- **XP** comes from monsters, from solving puzzles (2 or 3 plus half the
+  depth), and 2 XP for the first perfect spelling of each word.
+- **MP** pays for hints: <kbd>F4</kbd> in a battle or a typed puzzle shows
+  the next letter. With no MP, a Hint Scroll is used. A hinted word goes
+  back for practice and can't crit. Perfect answers in battle restore 1 MP.
+- **Items:** Potion, Ether (MP), Hint Scroll, Hourglass (half as much time
+  again for one battle), Rune of Clarity (typed letters turn red from the
+  first mistake, for one battle). <kbd>I</kbd> opens the items screen; in a
+  battle, items are in the pause menu and take the turn.
+- **Gear:** weapon, armour and trinket, each a material tier (Rusty, Iron,
+  Steel, Silver, Runed, Starforged; about one tier per two floors), a base
+  and maybe an affix (of Swiftness, Focus, Fortune, Might, Warding, Vigor,
+  the Owl), so "Iron Ring of Swiftness". Gear is saved as four numbers.
+  Chests hold gear 20% of the time on floor 1, up to 40%, and other items a
+  third of the time. The bag holds 6; gear that doesn't fit stays in the
+  chest.
+- **Floors** get features, one per room so nothing blocks a path: a **Save
+  Shrine** in the start room of floors 2, 3, 5, 6, 8, 9…, a **campfire** on
+  half the floors from 2 (always on boss floors) that heals once and shows
+  the last five missed words, and a **merchant** on floor 2 and half the
+  floors after, selling items and three pieces of gear and buying gear for
+  half price.
+- **Bosses** guard the stairs on every third floor (Slime King, Bone Lord,
+  Gazer Queen, Golem Titan, Imp Overlord), wear a generated crown, never
+  move, and hold the stairs shut until defeated. At two thirds HP they turn
+  Swift, at one third Mirrored, and angry bosses ask for words of 6 letters
+  or more. They always drop gear a tier or so above the floor.
+- **Saving:** praying at a shrine saves the hero and the floor. Falling
+  wakes the hero at the last shrine (or the entrance) as they were when
+  they prayed, with 20% of their gold gone, on a remade floor; the save on
+  disk follows, so quitting can't undo a fall. **Suspend and quit** in the
+  pause menu keeps the exact game; Continue loads it once and deletes it.
+- **Title and menus:** New Adventure → language → class. Continue shows
+  the language, class and floor.
+
 ### Game modes
 Runs are roguelite: the dungeon is new every run, and dying ends the run. Word
 mastery (SRS data) is **always** kept, so every run makes you better.
@@ -621,7 +672,7 @@ boss portraits, NPC portraits.
 | **M1** ✅ | Dungeon crawl | First-person grid movement with a raycast view, room-and-corridor generator, procedural wall/floor/ceiling textures per floor theme, wall torches, automap and full map, compass, stairs and floor save points. *Done: also pulls forward the battle loop from M2 (attack/dodge in the 3D view, procedural monster sprites, XP and levels, potions, fleeing) and the first two puzzles from M3 (sealed doors, missing-letter chests).* |
 | **M2** ✅ | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** *Done: also includes the monster traits Armored, Ghostly, Mirrored and Swift (§6). Trickster, Mimic and Boss come later.* |
 | **M3** ✅ | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. *Done: the `Puzzle` interface, nine generators (reverse rune, odd one out, pair matching, riddle, anagram, missing letters, tumbler lock, mini crossword, spelling), an English riddle bank that works for every language, and the Mimic. Target-language cloze sentences wait for M6.* |
-| **M4** | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. *Started early: XP and levels, potions, a title screen, a pause menu with one save slot and Continue, and a Word Lists screen.* |
+| **M4** ✅ | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. *Done: three classes, six stats, five items, generated gear, a merchant, campfires, five bosses with phases, Save Shrines with a one-use suspend save, and MP hints (§8). The Grimoire screen waits for M5; campfires show the missed words for now.* |
 | **M5** | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. |
 | **M6** | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. |
 | **M7** | Polish and ship | Procedural music, CRT shader, juice pass, balance simulation, `.app` bundle, Windows/Linux/Web release builds. |
