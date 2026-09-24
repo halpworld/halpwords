@@ -1,0 +1,78 @@
+//go:build !js
+
+package profile
+
+import (
+	"testing"
+
+	"github.com/halpworld/halpwords/internal/compete"
+	"github.com/halpworld/halpwords/internal/save"
+	"github.com/halpworld/halpwords/internal/words"
+)
+
+func useTempDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("AppData", dir)
+}
+
+func TestProfileRoundTrip(t *testing.T) {
+	useTempDir(t)
+	fr, _ := words.Lookup("fr")
+	p, errs := Load()
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	if got := p.Settings.For(fr); got != Preset(fr) {
+		t.Fatalf("new settings %+v", got)
+	}
+	ls := Preset(fr)
+	ls.Rules.Accents, ls.Rules.ArticlesRequired, ls.Timer, ls.Highlight = words.Strict, true, Relaxed, true
+	p.Settings.Set(fr, ls)
+	e := words.Entry{Prompt: "dog", Answers: []string{"le chien"}}
+	p.MemoryFor("fr").Record(e, words.Answer{Tier: words.Perfect})
+	p.Name = "Ada"
+	p.Fame.Add(compete.TableKey(compete.Hardcore, "fr"), compete.Fame{Name: "Ada", Score: 1234})
+	for _, err := range []error{p.SaveSettings(), p.SaveMemory(), p.SaveFame()} {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	q, errs := Load()
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	if q.Settings.For(fr) != ls {
+		t.Fatalf("settings %+v, want %+v", q.Settings.For(fr), ls)
+	}
+	if q.MemoryFor("fr").Box(e) != 1 || q.Name != "Ada" || q.Fame.Best(compete.TableKey(compete.Hardcore, "fr")) != 1234 {
+		t.Fatal("the profile did not come back")
+	}
+}
+
+func TestDamagedFileIsKept(t *testing.T) {
+	useTempDir(t)
+	save.Write(memoryFile, []byte("{not json"))
+	p, errs := Load()
+	if len(errs) != 1 || p == nil {
+		t.Fatalf("errors %v", errs)
+	}
+	if data, err := save.Read(memoryFile + ".bad"); err != nil || string(data) != "{not json" {
+		t.Fatal("the damaged file was not kept")
+	}
+	p.MemoryFor("la") // still usable
+}
+
+func TestInMemoryProfileNeverWrites(t *testing.T) {
+	useTempDir(t)
+	p := New()
+	p.Name = "x"
+	if err := p.SaveFame(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := save.Read(fameFile); err == nil {
+		t.Fatal("an in-memory profile wrote a file")
+	}
+}

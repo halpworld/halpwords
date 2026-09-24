@@ -7,6 +7,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/audio"
+	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
@@ -229,6 +230,9 @@ func (c *Crawl) useItem(it rpg.Item) {
 		c.play(audio.Unseal)
 	case rpg.Clarity:
 		switch {
+		case c.run.settings.Highlight:
+			m.note = "Typos already show: live highlighting is on in Settings."
+			return
 		case c.battle != nil && c.battle.clarity, c.battle == nil && h.Clarity:
 			m.note = "The rune already glows."
 			return
@@ -253,6 +257,9 @@ func (c *Crawl) shopRows() []menuRow {
 	h, ft := &c.run.hero, c.feature
 	rows := []menuRow{{label: "For sale", head: true, bag: -1}}
 	for it := rpg.Item(0); it < rpg.NumItems; it++ {
+		if _, banned := dungeon.HardcoreItems[it]; banned && c.run.hardcore() {
+			continue
+		}
 		it := it
 		info := it.Info()
 		row := menuRow{label: info.Name, right: fmt.Sprintf("%d g", info.Price), about: fmt.Sprintf("%s You have %d.", info.About, h.Items[it]), bag: -1}

@@ -16,6 +16,7 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/internal/words"
@@ -43,6 +44,9 @@ type Context struct {
 	ListErrors []string
 	Tick       uint64
 	Sound      *Sound
+	// Profile is what lasts between adventures: settings, what the player
+	// knows of each word, and the Hall of Fame.
+	Profile *profile.Profile
 
 	scenes  *manager
 	notice  string // a short message in the corner, like "Sound off"
@@ -164,6 +168,11 @@ func New(first func(*Context) Scene) (*Game, error) {
 	}
 	if err := ctx.LoadLists(); err != nil {
 		return nil, err
+	}
+	prof, errs := profile.Load()
+	ctx.Profile = prof
+	if len(errs) > 0 {
+		ctx.Notify("Some saved progress was damaged")
 	}
 	ctx.scenes.stack = []Scene{first(ctx)}
 	return &Game{ctx: ctx}, nil

@@ -40,7 +40,7 @@ adventurous tone. It runs offline, needs no accounts, and ships as a single
 file.
 
 > [!NOTE]
-> **Status: milestone 4 (RPG layer) done; milestone 5 (learning and competition) is next.** The game is playable from the
+> **Status: milestone 5 (learning and competition) done; milestone 6 (optional LLM features) is next.** The game is playable from the
 > first floor down, with sound, but it is early. Expect rough edges and balance changes. See the
 > [roadmap](#roadmap).
 
@@ -67,9 +67,24 @@ file.
   with generated names ("Iron Ring of Swiftness"), and carry potions,
   ethers, Hint Scrolls, Hourglasses and Runes of Clarity.
 - **Shrines, campfires, merchants and bosses.** Pray at **Save Shrines** to
-  save your adventure, rest at **campfires** to heal and see the words you
-  keep missing, trade with the **merchant**, and beat the crowned **boss**
-  that guards the stairs every third floor.
+  save your adventure, rest at **campfires** to heal and see your weakest
+  words, trade with the **merchant**, and beat the crowned **boss** that
+  guards the stairs every third floor.
+- **Spaced repetition.** Every word has a Leitner box (1 to 5). Perfect
+  answers move it up, misses send it back to box 1, and monsters mostly ask
+  for the words that are due, plus a few new ones. What you have learned
+  carries over from one adventure to the next, and to Practice.
+- **The Grimoire.** See how well you know every word: its box, how often
+  you get it right, how fast you type it, and your most common kind of
+  slip (accents, double letters, swapped letters...).
+- **Hardcore mode.** One life, no shrines and a score. Play the **Daily
+  Dungeon** (the same dungeon for everyone with the same word lists), or
+  challenge a friend to your dungeon with its **seed code**. Every run ends
+  with a **share code** friends can check, and the best go in the **Hall
+  of Fame**.
+- **Settings for each language.** Make accents, fadas, macrons, breathings,
+  articles and capitals strict, reduced credit or ignored, turn on live typo
+  highlighting, and choose relaxed, normal or fast timers.
 - **Hints.** Stuck on a word? <kbd>F4</kbd> shows the next letter for a
   little MP.
 - **Pause and suspend.** <kbd>Esc</kbd> pauses the game, battle clock
@@ -86,7 +101,8 @@ file.
 - **Bring your own words.** Word lists are plain text files you can write in
   any editor. Import them by dropping them on the game, add to or delete
   lists, and save them from the **Word Lists** screen.
-- **Spelling Practice mode.** Drill words without the dungeon.
+- **Practice mode.** Drill words without the dungeon, dealt by spaced
+  repetition.
 - **Nearly all generated in code.** Textures, monsters, effects and sound
   effects are procedural. The only art asset is a pixel font.
 - **Runs everywhere.** macOS (Apple Silicon and Intel), Windows, Linux and the
@@ -133,7 +149,23 @@ file.
   </tr>
   <tr>
     <td align="center"><b>The merchant</b> buys and sells.</td>
-    <td align="center"><b>Campfires</b> heal and show the words you missed.</td>
+    <td align="center"><b>Campfires</b> heal and show your weakest words.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/grimoire.png" alt="The Grimoire for French: 4 of 18 words mastered, a bar of Leitner boxes, and each word's box, accuracy and typing time"></td>
+    <td width="50%"><img src="docs/media/game-over.png" alt="The end of a Hardcore run: the score added up part by part, a new personal best, a place in the Hall of Fame and a share code"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>The Grimoire</b> shows how well you know each word.</td>
+    <td align="center"><b>Hardcore</b> runs end with a score and a share code.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/new-game.png" alt="Choosing how to play: Adventure, Hardcore, Daily Dungeon or Seed Challenge"></td>
+    <td width="50%"><img src="docs/media/settings.png" alt="The Settings screen for French: accents, articles, capitals, live typo highlighting and timer speed"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Four ways to play</b>, including a Daily Dungeon.</td>
+    <td align="center"><b>Settings</b> for each language.</td>
   </tr>
 </table>
 
@@ -148,8 +180,8 @@ cd halpwords
 make run            # or: go run ./cmd/halpwords
 ```
 
-Then choose **New Adventure**, pick a language and a hero, and find the
-stairs down.
+Then choose **New Adventure**, pick how to play, a language and a hero, and
+find the stairs down.
 
 <details>
 <summary><b>macOS</b></summary>
@@ -242,8 +274,8 @@ Then open <http://localhost:8000>.
 5. **Use what you find.**
    - **Save Shrines** (a floating blue crystal) stand in the first room of
      floors 2, 3, 5, 6, 8, 9 and so on. Pray at one to save your adventure.
-   - **Campfires** heal you and restore your MP once, and show the words you
-     have been missing.
+   - **Campfires** heal you and restore your MP once, and show your weakest
+     words. Press <kbd>G</kbd> there to open the Grimoire.
    - The **merchant** sells items and three pieces of gear, and buys gear
      from your bag for half its price.
 6. **Beat the bosses.** Every third floor, a crowned boss guards the stairs,
@@ -262,6 +294,78 @@ Then open <http://localhost:8000>.
    `adventure.json`, next to the [`words` folder](#your-own-word-lists); on
    the web it is kept in the browser's local storage.
 
+### Learning your words
+
+Every word you answer, in the dungeon or in **Practice**, goes into your
+**Grimoire**. Each word sits in one of five boxes: a perfect answer moves it
+up a box, a correct answer fixed with backspace keeps it where it is, an
+accent slip, a graze or a hint moves it down one, and a miss sends it back
+to box 1. Words come back after a few other words in box 1 and after about
+120 in box 5, so monsters mostly ask for the words that are due, plus a few
+new ones. Deeper floors and bosses ask for longer, harder words.
+
+Open the Grimoire from the title screen, from the pause menu, or at a
+campfire. <kbd>Tab</kbd> sorts it by weakest first, list order or A to Z.
+When you get a word wrong, the game says what kind of slip it was: a missing
+accent, a double letter, two letters swapped, a letter missing, extra or
+wrong.
+
+### Adventure, Hardcore and the Daily Dungeon
+
+**New Adventure** asks how you want to play:
+
+- **Adventure:** Save Shrines, and falling wakes you at the last one. Your
+  own [settings](#settings) apply.
+- **Hardcore:** one life, no Save Shrines, and no Hourglasses or Runes of
+  Clarity. Every language uses its standard settings with normal timers,
+  so scores are fair. You can still suspend a run, but it can only be picked
+  up once. The score is:
+
+  | | Points |
+  |---|---|
+  | Each floor reached | 1,000 |
+  | Damage dealt | 1 per HP |
+  | Each perfect word (without a hint) | 50 |
+  | Best combo | 100 per answer in the streak |
+  | Each boss | 2,500 |
+  | Each chest opened | 150 |
+  | Each miss | −25 |
+
+- **Daily Dungeon:** a Hardcore run in today's dungeon. The dungeon comes
+  from the date and your word lists, so everyone with the same lists plays
+  the same one.
+- **Seed Challenge:** a Hardcore run in a friend's dungeon. Type the
+  6-character seed code shown in their pause menu or at the end of their
+  run (such as `7K3QZP`), or paste their whole share code.
+
+At the end of a Hardcore run you get a **share code** such as
+`HW-FR-0924-F12-18450-K7QX`: the language, the date (or seed), the floor,
+the score and a checksum. Send it to your friends: they can check it under
+**Hall of Fame** with <kbd>C</kbd>, which catches typos and edited scores.
+Good runs go in the **Hall of Fame**, which keeps the top 10 for each
+language, for Hardcore and for the Daily Dungeon. While you play, the map
+window shows your score and **★ BEST** once you pass your personal best.
+
+### Settings
+
+**Settings** on the title screen changes how answers are graded, for each
+language:
+
+| Setting | Choices | Standard |
+|---|---|---|
+| Accents / fadas / macrons | strict · reduced credit · ignore | French and Irish *reduced credit*; Latin and Greek *ignore* |
+| Breathings (Ancient Greek) | strict · reduced credit · ignore | *ignore* |
+| Articles (French) | required · optional | *optional* |
+| Capitals | strict · ignore | *ignore* |
+| Live typo highlighting | on · off | *off* |
+| Timer speed | relaxed · normal · fast | *normal* |
+
+*Strict* makes a wrong or missing mark a miss; *reduced credit* still
+counts it, for less. Live typo highlighting works like a Rune of Clarity
+that never runs out. Settings are saved in `settings.json`, what you know of
+each word in `progress.json`, and the Hall of Fame in `halloffame.json`,
+next to your save.
+
 ## Controls
 
 **In the dungeon**
@@ -276,7 +380,8 @@ Then open <http://localhost:8000>.
 | <kbd>P</kbd> | Drink a potion |
 | <kbd>I</kbd> | Items and gear (<kbd>Enter</kbd> use or wear, <kbd>D</kbd> drop) |
 | <kbd>M</kbd> | Full map |
-| <kbd>Esc</kbd> | Pause menu: items, suspend, or quit to the title |
+| <kbd>G</kbd> | Open the Grimoire (at a campfire) |
+| <kbd>Esc</kbd> | Pause menu: items, the Grimoire, suspend, or quit to the title (give up, in Hardcore) |
 
 **In battles and puzzles**
 
@@ -295,9 +400,11 @@ Then open <http://localhost:8000>.
 
 | Key | Action |
 |---|---|
-| <kbd>↑</kbd> / <kbd>↓</kbd>, <kbd>Enter</kbd> | Menus |
+| Arrow keys, <kbd>Enter</kbd> | Menus |
 | <kbd>Tab</kbd> | Cycle the accent on the last letter (e → é → è → ê → ë, a → ā, a → á) |
-| <kbd>←</kbd> / <kbd>→</kbd> | Change language (practice mode) |
+| <kbd>←</kbd> / <kbd>→</kbd> | Change language (Practice, Grimoire, Hall of Fame, Settings) |
+| <kbd>Tab</kbd> | Sort the Grimoire; switch Hall of Fame tables |
+| <kbd>C</kbd> | Check a friend's share code (Hall of Fame) |
 | <kbd>F2</kbd> | Greek letters on/off (Ancient Greek) |
 | <kbd>F3</kbd> | Sound on/off |
 | <kbd>F11</kbd>, <kbd>Alt</kbd>+<kbd>Enter</kbd>, or <kbd>Ctrl</kbd>+<kbd>Cmd</kbd>+<kbd>F</kbd> | Fullscreen |
@@ -325,8 +432,10 @@ WAV files, which helps when tuning them.
 
 ### Replaying a dungeon
 
-Set `HALPWORDS_SEED` to a number before you start the game to get the same
-dungeon every time. This is useful for bug reports.
+Every dungeon has a 6-character seed code, shown in the pause menu. Play it
+again with **New Adventure → Seed Challenge**. You can also set
+`HALPWORDS_SEED` to a number before you start the game to get the same
+dungeon in every new run. This is useful for bug reports.
 
 ```sh
 HALPWORDS_SEED=42 make run
@@ -414,9 +523,11 @@ internal/game/     main loop, scene stack, pixel-perfect scaling
 internal/scene/    screens (title, practice, the dungeon crawl, ...)
 internal/dungeon/  floor generation, monsters, bosses, shrines and shops
 internal/rpg/      classes, stats, levels, items and gear (no Ebitengine dependency)
+internal/compete/  Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
+internal/profile/  settings, word progress and the Hall of Fame, kept between runs
 internal/save/     save files (local storage on the web)
 internal/raycast/  first-person 3D view
-internal/words/    word lists, languages, answer grading
+internal/words/    word lists, languages, grading, spaced repetition, mistake kinds
 internal/typing/   text entry, Tab accents, Greek input mode
 internal/combat/   battle formulas and monster trait effects
 internal/puzzle/   door and chest word puzzles (no Ebitengine dependency)
@@ -449,8 +560,9 @@ The full design is in [PLAN.md](PLAN.md). In short:
       crossword, spelling), a riddle bank, and the Mimic.
 - [x] **M4: RPG layer.** Three classes, six stats, items, generated gear,
       a merchant, campfires, bosses, Save Shrines, suspend saves, hints.
-- [ ] **M5: Learning and competition.** Spaced repetition, stats, Hardcore
-      mode, Daily Dungeon, share codes, Hall of Fame.
+- [x] **M5: Learning and competition.** Spaced repetition, the Grimoire,
+      settings for each language, Hardcore mode with a score, the Daily
+      Dungeon, seed and share codes, and the Hall of Fame.
 - [ ] **M6: LLM (optional).** A "Dungeon Director" that reacts to how you are
       learning, generated puzzles and memory tips.
 - [ ] **M7: Polish and ship.** Procedural music, CRT shader, balancing, and

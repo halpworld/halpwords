@@ -77,6 +77,8 @@ halpwords/
 │   ├── combat/                  # damage/dodge formulas, monster traits, encounter builder
 │   ├── puzzle/                  # puzzle interface, generators, fixed puzzle bank
 │   ├── rpg/                     # stats, levelling, items, equipment, loot tables
+│   ├── compete/                 # Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
+│   ├── profile/                 # settings, word memory and Hall of Fame, kept between runs
 │   ├── llm/                     # provider interface, Anthropic + OpenAI-compatible,
 │   │                            # prompt templates, JSON validation, cache, budget
 │   └── save/                    # profiles, run saves, settings (JSON in user config dir)
@@ -89,7 +91,7 @@ halpwords/
 
 Rules:
 - **Game logic is pure Go with no Ebitengine imports** (`dungeon`, `words`,
-  `combat`, `puzzle`, `rpg`, `llm`). That makes it unit-testable, deterministic
+  `combat`, `puzzle`, `rpg`, `compete`, `profile`, `llm`). That makes it unit-testable, deterministic
   from a seed, and portable.
 - **Scenes are a stack** (explore → battle → back to explore; puzzle overlays).
 - **Seeded RNG everywhere**, so a dungeon seed can reproduce a run for debugging
@@ -158,7 +160,7 @@ bread = le pain
   | Greek breathings (ἀ vs ἁ) | strict · reduced credit · ignore | *ignore* |
   | Articles (French *le/la/l'/les*) | required · optional | *optional* |
   | Capitals | strict · ignore | *ignore* |
-  | Live typo highlighting | on · off | *on* |
+  | Live typo highlighting | on · off | *off* (the Rune of Clarity gives it for one battle) |
   | Timer speed | relaxed · normal · fast | *normal* |
 
 ### 4a. Language-specific details
@@ -203,6 +205,33 @@ bread = le pain
   by monster level (harder monsters get longer or harder words).
 - **Grimoire** screen: mastery per word, accuracy, average speed, and the words
   you struggle with most.
+
+*Now (M5, done):* `words.Memory` keeps a `Card` per word (keyed by its
+prompt and first answer, so extra alternatives don't reset it) in
+`progress.json`, per language, across every adventure and Practice.
+
+- **Boxes:** the first answer puts a word in box 1. Perfect moves it up,
+  Correct keeps it, an accent slip, graze or hint moves it down one, and a
+  miss sends it to box 1. A word is due again after 3, 8, 20, 50 or 120 more
+  answers in that language (box 1 to 5): the clock counts answers, not days,
+  so a week away doesn't flood the player with due words.
+- **Dealing:** the deck still retries words missed on this adventure two
+  times in five. Otherwise 60% of deals go to due words and 25% to new ones
+  when there are some. Monsters aim at a difficulty (length, plus 1.5 for
+  each marked letter) that grows with the floor and is higher for bosses:
+  the deck looks at four candidates and takes the nearest.
+- **Mistake kinds:** `words.Classify` names what went wrong: accents,
+  double letters, swapped letters, a missing, extra or wrong letter, or a
+  wrong word (an article left out doesn't count). Battles, puzzles and
+  Practice show a tip, and the Grimoire counts them.
+- **Grimoire:** from the title screen, the pause menu (not in a battle) or
+  a campfire (<kbd>G</kbd>): words mastered, right %, average typing time,
+  a bar of the boxes, the most common slip, and every word with its box,
+  right % and time. <kbd>Tab</kbd> sorts by weakest first, list order or A
+  to Z. Campfires show this adventure's missed words first, then the
+  Grimoire's weakest.
+- **Settings:** the table above, per language, in `settings.json`. They
+  apply to battles, puzzles and Practice in Adventure mode.
 
 ---
 
@@ -505,6 +534,39 @@ mastery (SRS data) is **always** kept, so every run makes you better.
 - An online leaderboard is a possible later addition (it needs a small server,
   which is out of scope for now).
 
+*Now (M5, done):* `internal/compete` (no Ebitengine dependency) holds the
+score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
+`halloffame.json`.
+
+- **New Adventure** asks for the mode first: Adventure, Hardcore, Daily
+  Dungeon or Seed Challenge, then the language and class.
+- **Hardcore** floors are made from the same seed as Adventure floors, then
+  lose their shrines, and chests swap Hourglasses for Ethers and Runes of
+  Clarity for Hint Scrolls; the merchant doesn't sell them. Hardcore uses
+  `profile.Preset` (the language's grading rules, normal timers, no
+  highlighting). Falling ends the run. **Give up the run** replaces Quit in
+  the pause menu and records the score. A suspended run is deleted from
+  disk as it is loaded, so it can't be replayed from a copy of the save.
+- **Score:** as above. Damage counts up to the monster's remaining HP, a
+  Mimic counts as a chest, and perfect words are perfect answers without a
+  hint. The map window shows the score, and ★ BEST once it passes the
+  table's best.
+- **Seeds:** new runs get a 30-bit seed, written as 6 characters of
+  Crockford's base 32 (no I, L, O or U; typed O, I and L read as 0, 1 and
+  1). The pause menu shows it. `HALPWORDS_SEED` still overrides it.
+- **Daily Dungeon:** the seed is an FNV hash of the date, the language and
+  the sorted word keys of every list in that language.
+- **Share codes:** `HW-FR-0924-F12-18450-K7QX` for a Daily Dungeon (month
+  and day) or `HW-FR-7K3QZP-F12-18450-K7QX` for a seed, with a 4-character
+  checksum. The Hall of Fame checks a friend's code (<kbd>C</kbd>) and
+  compares it with your best; Seed Challenge accepts a share code too.
+- **Hall of Fame:** top 10 per language for Hardcore (random and seed runs)
+  and for the Daily Dungeon, with name, class, floor, score and date. The
+  Game Over screen adds the score up part by part and asks for a name when
+  the run makes the table.
+- **Title:** Continue, New Adventure, Practice, Grimoire, Hall of Fame,
+  Word Lists, Settings, Quit, in two columns.
+
 **Saves:** JSON in `os.UserConfigDir()/halpwords/`: profiles (with SRS data),
 shrine save, suspend save, Hall of Fame, and settings. Word lists go in the
 `words/` folder next to them.
@@ -673,7 +735,7 @@ boss portraits, NPC portraits.
 | **M2** ✅ | Words and combat | Word list loader and starter lists (French, Latin, Greek, Irish), grading engine with per-language rules, Tab accent helper, Greek input mode, battle scene, attack/dodge loop, procedural monster sprites, SFX synth. **First playable.** *Done: also includes the monster traits Armored, Ghostly, Mirrored and Swift (§6). Trickster, Mimic and Boss come later.* |
 | **M3** ✅ | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. *Done: the `Puzzle` interface, nine generators (reverse rune, odd one out, pair matching, riddle, anagram, missing letters, tumbler lock, mini crossword, spelling), an English riddle bank that works for every language, and the Mimic. Target-language cloze sentences wait for M6.* |
 | **M4** ✅ | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. *Done: three classes, six stats, five items, generated gear, a merchant, campfires, five bosses with phases, Save Shrines with a one-use suspend save, and MP hints (§8). The Grimoire screen waits for M5; campfires show the missed words for now.* |
-| **M5** | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. |
+| **M5** ✅ | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. *Done: a five-box Leitner memory per word that lasts across runs and Practice, mistake kinds with tips, difficulty that grows with depth, the Grimoire, a Settings screen, Hardcore, Daily Dungeon and Seed Challenge modes, share codes that can be checked, and a Hall of Fame (§4, §8).* |
 | **M6** | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. |
 | **M7** | Polish and ship | Procedural music, CRT shader, juice pass, balance simulation, `.app` bundle, Windows/Linux/Web release builds. |
 

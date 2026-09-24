@@ -122,15 +122,31 @@ func (c *Crawl) rest(ft *dungeon.Feature) {
 	}
 	r.say(msg, pal.Lime)
 	c.weakest = c.weakest[:0]
-	entries := r.deck.Entries()
-	for _, id := range r.deck.Missed() {
-		if len(c.weakest) == maxWeakest {
-			break
-		}
-		e := entries[id]
+	for _, id := range c.weakestWords() {
+		e := r.deck.Entries()[id]
 		c.weakest = append(c.weakest, logLine{e.Prompt + " = " + e.Answers[0], pal.White})
 	}
 	c.mode = modeCampfire
+}
+
+// weakestWords are the words the hero most needs to practise: the ones
+// missed on this adventure first, then the weakest in the Grimoire.
+func (c *Crawl) weakestWords() []int {
+	r := c.run
+	ids := r.deck.Missed()
+	have := map[int]bool{}
+	for _, id := range ids {
+		have[id] = true
+	}
+	if mem := r.deck.Memory(); mem != nil {
+		for _, id := range mem.Weakest(r.deck.Entries(), maxWeakest*2) {
+			if !have[id] {
+				ids = append(ids, id)
+				have[id] = true
+			}
+		}
+	}
+	return ids[:min(len(ids), maxWeakest)]
 }
 
 // drawCampfire shows what resting did, and the words to practise.
@@ -143,12 +159,12 @@ func (c *Crawl) drawCampfire(view *ebiten.Image, ctx *game.Context) {
 	f.DrawCentered(view, "You rest by the fire", x+w/2, y+10, 1, pal.Yellow)
 	f.DrawCentered(view, "HP and MP restored.", x+w/2, y+28, 1, pal.Lime)
 	if len(c.weakest) == 0 {
-		f.DrawCentered(view, "No missed words to practise. Well done!", x+w/2, y+54, 1, pal.Ice)
+		f.DrawCentered(view, "No weak words to practise. Well done!", x+w/2, y+54, 1, pal.Ice)
 	} else {
-		f.DrawCentered(view, "The flames show words you missed:", x+w/2, y+50, 1, pal.Tan)
+		f.DrawCentered(view, "The flames show your weakest words:", x+w/2, y+50, 1, pal.Tan)
 		for i, l := range c.weakest {
 			f.DrawCentered(view, l.text, x+w/2, y+70+i*18, 1, l.col)
 		}
 	}
-	c.drawHint(view, ctx, "Enter continue")
+	c.drawHint(view, ctx, "Enter continue · G Grimoire")
 }

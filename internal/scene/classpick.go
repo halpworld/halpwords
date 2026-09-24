@@ -6,6 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/audio"
+	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
@@ -19,13 +20,14 @@ import (
 type ClassPick struct {
 	bg    *ebiten.Image
 	lang  *words.Language
+	setup runSetup
 	heros []*ebiten.Image
 	sel   int
 }
 
 // NewClassPick creates the class picker for an adventure in lang.
-func NewClassPick(lang *words.Language) game.Scene {
-	p := &ClassPick{bg: backdrop(4, 1.4), lang: lang}
+func NewClassPick(lang *words.Language, setup runSetup) game.Scene {
+	p := &ClassPick{bg: backdrop(4, 1.4), lang: lang, setup: setup}
 	for i := range rpg.Classes {
 		p.heros = append(p.heros, gfx.Upload(proc.HeroSprite(i).RGBA()))
 	}
@@ -38,7 +40,11 @@ func (p *ClassPick) Update(ctx *game.Context) error {
 	switch {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
-		ctx.Replace(NewAdventure(ctx))
+		setup := p.setup
+		if setup.mode == compete.Daily {
+			setup = runSetup{mode: compete.Daily} // the language decides the dungeon
+		}
+		ctx.Replace(NewAdventure(ctx, setup))
 	case input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyA) || input.Up():
 		ctx.Sound.Play(audio.Blip)
 		p.sel = (p.sel + n - 1) % n
@@ -47,7 +53,7 @@ func (p *ClassPick) Update(ctx *game.Context) error {
 		p.sel = (p.sel + 1) % n
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		ctx.Sound.Play(audio.Select)
-		ctx.Replace(newCrawl(newRun(ctx, p.lang, rpg.Classes[p.sel])))
+		ctx.Replace(newCrawl(newRun(ctx, p.lang, rpg.Classes[p.sel], p.setup)))
 	}
 	return nil
 }
@@ -58,7 +64,7 @@ func (p *ClassPick) Draw(dst *ebiten.Image, ctx *game.Context) {
 	cx := game.ScreenW / 2
 	gfx.DrawArt(dst, p.bg, 0, 0)
 	f.DrawCentered(dst, "Choose your hero", cx, 24, 3, pal.Yellow)
-	f.DrawCentered(dst, "Adventure in "+p.lang.Name, cx, 76, 1, pal.Tan)
+	f.DrawCentered(dst, setupText(p.setup)+" in "+p.lang.Name, cx, 76, 1, pal.Tan)
 
 	const w, h, gap = 196, 236, 10
 	x0 := cx - (3*w+2*gap)/2

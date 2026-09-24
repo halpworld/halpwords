@@ -8,10 +8,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/words"
 )
@@ -67,24 +69,72 @@ type run struct {
 	// seenTraits are the monster traits the hero has been told about.
 	seenTraits dungeon.Trait
 	sound      *game.Sound
+
+	// mode is Adventure, Hardcore or the Daily Dungeon.
+	mode compete.Mode
+	// day is the date of a Daily Dungeon, such as "2026-09-24".
+	day string
+	// tally counts what the hero has done, for a Hardcore score.
+	tally compete.Tally
+	// settings are the grading rules and timers. Hardcore runs always use
+	// the language's preset.
+	settings profile.LangSettings
+	prof     *profile.Profile
 }
 
-func newRun(ctx *game.Context, lang *words.Language, class rpg.Class) *run {
-	seed := uint64(time.Now().UnixNano())
-	// HALPWORDS_SEED replays a dungeon, for testing and bug reports.
-	if v, err := strconv.ParseUint(os.Getenv("HALPWORDS_SEED"), 10, 64); err == nil {
-		seed = v
-	}
-	return startRun(ctx, lang, class, seed)
+// runSetup is what the New Adventure screens choose before the class.
+type runSetup struct {
+	mode compete.Mode
+	// seed is the dungeon for a seed challenge or a Daily Dungeon; when
+	// seeded is false a new one is made.
+	seed   uint64
+	seeded bool
+	day    string // the Daily Dungeon's date
 }
 
-// startRun begins a run in lang as a hero of class through the dungeon made
-// from seed.
-func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64) *run {
+// dailySetup is today's Daily Dungeon in lang.
+func dailySetup(ctx *game.Context, lang *words.Language) runSetup {
+	now := time.Now()
+	return runSetup{mode: compete.Daily, seed: compete.DailySeed(now, lang.Code, entriesFor(ctx, lang)), seeded: true, day: now.Format(time.DateOnly)}
+}
+
+// entriesFor returns every word in the lists for lang.
+func entriesFor(ctx *game.Context, lang *words.Language) []words.Entry {
 	var entries []words.Entry
 	for _, l := range ctx.ListsFor(lang.Code) {
 		entries = append(entries, l.Entries...)
 	}
+	return entries
+}
+
+func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runSetup) *run {
+	seed := setup.seed
+	if !setup.seeded {
+		seed = compete.RandomSeed(proc.NewRand(uint64(time.Now().UnixNano())))
+		// HALPWORDS_SEED replays a dungeon, for testing and bug reports.
+		if v, err := strconv.ParseUint(os.Getenv("HALPWORDS_SEED"), 10, 64); err == nil {
+			seed = v
+		}
+	}
+	r := startRun(ctx, lang, class, seed)
+	r.setMode(ctx, setup.mode)
+	r.day = setup.day
+	return r
+}
+
+// setMode sets how the run is played, and the settings that go with it.
+func (r *run) setMode(ctx *game.Context, m compete.Mode) {
+	r.mode = m
+	r.settings = profile.Preset(r.lang)
+	if !m.Scored() && ctx.Profile != nil {
+		r.settings = ctx.Profile.Settings.For(r.lang)
+	}
+}
+
+// startRun begins an Adventure in lang as a hero of class through the
+// dungeon made from seed.
+func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64) *run {
+	entries := entriesFor(ctx, lang)
 	src := proc.NewPCG(seed)
 	rng := rand.New(src)
 	r := &run{
@@ -98,9 +148,42 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 		greek:   lang.Script == words.ScriptGreek,
 		sound:   ctx.Sound,
 		perfect: map[int]bool{},
+		prof:    ctx.Profile,
 	}
+	if r.prof != nil {
+		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))
+	}
+	r.setMode(ctx, compete.Adventure)
 	r.shrine = checkpoint{Depth: 1, Hero: r.hero.Clone()}
 	return r
+}
+
+// rules are how answers are graded on this run.
+func (r *run) rules() words.Rules { return r.settings.Rules }
+
+// hardcore reports whether the run has one life and a score.
+func (r *run) hardcore() bool { return r.mode.Scored() }
+
+// score is the run's score so far.
+func (r *run) score() int { return r.tally.Score(r.depth) }
+
+// seedCode is the code that replays the run's dungeon.
+func (r *run) seedCode() string { return compete.SeedCode(r.seed) }
+
+// floor makes the map for floor depth. Hardcore floors have no shrines.
+func (r *run) floor(depth int) *dungeon.Level {
+	l := dungeon.Generate(r.floorSeed(depth), depth)
+	if r.hardcore() {
+		l.Harden()
+	}
+	return l
+}
+
+// remember writes what the player has learned to disk, if it can.
+func (r *run) remember() {
+	if r.prof != nil {
+		r.prof.SaveMemory()
+	}
 }
 
 // floorSeed is the map seed for a depth. The same floor comes back when a
@@ -115,7 +198,7 @@ func (r *run) enter(cp checkpoint) (*dungeon.Level, dungeon.Point, dungeon.Dir, 
 		return nil, dungeon.Point{}, 0, fmt.Errorf("no floor %d", cp.Depth)
 	}
 	r.depth, r.regen, r.hero = cp.Depth, cp.Regen, cp.Hero.Clone()
-	l := dungeon.Generate(r.floorSeed(r.depth), r.depth)
+	l := r.floor(r.depth)
 	if cp.Floor == nil {
 		return l, l.Start, l.StartDir, nil
 	}

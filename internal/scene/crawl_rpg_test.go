@@ -65,7 +65,7 @@ func TestDefenceSoftensBlows(t *testing.T) {
 	m.ATK = 10
 	testBattle(c, m)
 	hp := c.run.hero.HP
-	c.dodge(ctx, words.Result{Tier: words.Miss, Expected: "x"}, "", true)
+	c.dodge(ctx, words.Result{Tier: words.Miss, Expected: "x"}, "", 3)
 	lost := hp - c.run.hero.HP
 	def := c.run.hero.DEF()
 	if lost < 9-def || lost > 11-def {
@@ -92,24 +92,25 @@ func TestHints(t *testing.T) {
 	}
 	// A hinted word is practised again even when spelled right.
 	_, id := c.run.deck.Next()
-	c.scoreAnswer(id, words.Perfect, true)
+	c.scoreAnswer(id, words.Result{Tier: words.Perfect}, "", true, 0)
 	if c.run.deck.Review() != 1 || c.run.perfect[id] {
 		t.Fatal("a hinted word counted as known")
 	}
-	c.scoreAnswer(id, words.Perfect, false)
+	c.scoreAnswer(id, words.Result{Tier: words.Perfect}, "", false, 0)
 	if c.run.deck.Review() != 0 || !c.run.perfect[id] || h.XP != perfectXP {
 		t.Fatalf("a perfect word: review %d, XP %d", c.run.deck.Review(), h.XP)
 	}
-	c.scoreAnswer(id, words.Perfect, false)
+	c.scoreAnswer(id, words.Result{Tier: words.Perfect}, "", false, 0)
 	if h.XP != perfectXP {
 		t.Fatal("a word's first perfect spelling paid twice")
 	}
 }
 
 func TestGoodPrefix(t *testing.T) {
-	answers := []string{"le chien", "chien"}
+	fr, _ := words.Lookup("fr")
+	answers := []string{"le chien"}
 	for typed, want := range map[string]int{"": 0, "Chi": 3, "chix": 3, "le c": 4, "x": 0, "chiens": 5} {
-		if got := goodPrefix(typed, answers); got != want {
+		if got := goodPrefix(typed, answers, fr); got != want {
 			t.Errorf("%q: %d letters good, want %d", typed, got, want)
 		}
 	}

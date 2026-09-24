@@ -156,3 +156,25 @@ func dirBetween(a, b Point) (Dir, bool) {
 	}
 	return 0, false
 }
+
+// HardcoreItems are the items Hardcore runs do without, so scores stay
+// comparable, and what chests hold instead.
+var HardcoreItems = map[rpg.Item]rpg.Item{rpg.Hourglass: rpg.Ether, rpg.Clarity: rpg.HintScroll}
+
+// Harden makes the floor ready for a Hardcore run: there are no Save
+// Shrines, and chests hold no Hourglasses or Runes of Clarity. Everything
+// else stays as generated, so a seed gives the same floor in every mode.
+func (f *Level) Harden() {
+	for p, ft := range f.Features {
+		if ft.Kind == Shrine {
+			delete(f.Features, p)
+		}
+	}
+	for _, c := range f.Chests {
+		for i, it := range c.Items {
+			if sub, ok := HardcoreItems[it]; ok {
+				c.Items[i] = sub
+			}
+		}
+	}
+}

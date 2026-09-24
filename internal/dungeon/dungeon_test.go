@@ -289,3 +289,22 @@ func TestBoss(t *testing.T) {
 		t.Fatal("an ordinary monster is a boss")
 	}
 }
+
+func TestHarden(t *testing.T) {
+	for depth := 2; depth <= 12; depth++ {
+		l := Generate(uint64(depth)*77, depth)
+		l.Harden()
+		for _, ft := range l.Features {
+			if ft.Kind == Shrine {
+				t.Fatalf("floor %d: a shrine in a Hardcore run", depth)
+			}
+		}
+		for _, c := range l.Chests {
+			for _, it := range c.Items {
+				if _, banned := HardcoreItems[it]; banned {
+					t.Fatalf("floor %d: a chest holds %v", depth, it)
+				}
+			}
+		}
+	}
+}

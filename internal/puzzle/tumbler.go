@@ -19,6 +19,7 @@ type tumbler struct {
 	id    int
 	word  string
 	lang  *words.Language
+	rules words.Rules
 	slots [][]string // a fixed plate has one option
 	want  []string   // the right option of each slot
 	start []int
@@ -72,7 +73,7 @@ func newTumbler(deck *words.Deck, depth int, lang *words.Language, rng *rand.Ran
 		return nil
 	}
 
-	t := &tumbler{entry: e, id: id, word: word, lang: lang}
+	t := &tumbler{entry: e, id: id, word: word, lang: lang, rules: lang.Defaults}
 	plate := func(s string) {
 		t.slots = append(t.slots, []string{s})
 		t.want = append(t.want, s)
@@ -187,6 +188,6 @@ func (t *tumbler) Spelled(choice []int) string {
 }
 
 func (t *tumbler) Check(a Attempt) Result {
-	res := words.Grade(t.Spelled(a.Choice), only(t.entry, t.word), t.lang, t.lang.Defaults, false)
+	res := words.Grade(t.Spelled(a.Choice), only(t.entry, t.word), t.lang, t.rules, false)
 	return Result{Result: res, Solution: []string{t.entry.Prompt + " = " + t.word}}
 }

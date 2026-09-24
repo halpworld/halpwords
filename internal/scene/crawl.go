@@ -19,6 +19,7 @@ import (
 	"github.com/halpworld/halpwords/internal/puzzle"
 	"github.com/halpworld/halpwords/internal/raycast"
 	"github.com/halpworld/halpwords/internal/rpg"
+	"github.com/halpworld/halpwords/internal/save"
 )
 
 // Layout of the crawl screen, in screen pixels unless noted.
@@ -179,7 +180,7 @@ type Crawl struct {
 
 // newCrawl starts the floor r.depth.
 func newCrawl(r *run) *Crawl {
-	c := crawlOn(r, dungeon.Generate(r.floorSeed(r.depth), r.depth))
+	c := crawlOn(r, r.floor(r.depth))
 	c.showBanner(fmt.Sprintf("Floor %d", r.depth), c.theme.Name)
 	r.say(fmt.Sprintf("Floor %d: %s. Find the stairs down!", r.depth, c.theme.Name), pal.Yellow)
 	return c
@@ -241,7 +242,11 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		c.updateShrine(ctx)
 		return nil
 	case c.mode == modeCampfire:
-		if input.Confirm() || input.Back() || input.Pressed(ebiten.KeySpace) {
+		switch {
+		case input.Pressed(ebiten.KeyG):
+			c.play(audio.Select)
+			ctx.Push(NewGrimoire(ctx, c.run.lang))
+		case input.Confirm() || input.Back() || input.Pressed(ebiten.KeySpace):
 			c.mode = modeExplore
 		}
 		return nil
@@ -305,6 +310,8 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		}
 	case modeDead:
 		switch {
+		case c.run.hardcore() && (input.Confirm() || input.Back()):
+			ctx.Replace(newGameOver(ctx, c.run, false))
 		case input.Confirm():
 			c.wake(ctx)
 		case input.Back():
@@ -568,6 +575,7 @@ func (c *Crawl) descend(ctx *game.Context) {
 	}
 	r := c.run
 	r.depth++
+	r.remember()
 	c.play(audio.Stairs)
 	ctx.Replace(newCrawl(r))
 }
@@ -578,6 +586,10 @@ func (c *Crawl) die() {
 	c.run.hero.HP = 0
 	c.play(audio.Fall)
 	c.run.say("You have fallen!", pal.Rose)
+	if c.run.hardcore() && c.run.onDisk {
+		save.Remove(saveName) // one life
+		c.run.onDisk = false
+	}
 }
 
 // goldLost is the share of their gold a fallen hero loses.

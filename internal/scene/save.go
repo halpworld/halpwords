@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 
+	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/pal"
@@ -38,6 +39,10 @@ type saveFile struct {
 	Log        []savedLine
 	Shrine     checkpoint
 	Suspend    *checkpoint `json:",omitempty"`
+	// Mode is Adventure when left out, as in saves from before Hardcore.
+	Mode  compete.Mode  `json:",omitempty"`
+	Day   string        `json:",omitempty"` // a Daily Dungeon's date
+	Tally compete.Tally // what a Hardcore score counts
 }
 
 type savedLine struct {
@@ -62,6 +67,9 @@ func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir, 
 		SeenTraits: r.seenTraits,
 		Deck:       r.deck.State(),
 		Shrine:     r.shrine,
+		Mode:       r.mode,
+		Day:        r.day,
+		Tally:      r.tally,
 	}
 	for id := range r.deck.Entries() {
 		if r.perfect[id] {
@@ -102,10 +110,17 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 	if !ok || len(ctx.ListsFor(lang.Code)) == 0 {
 		return nil, fmt.Errorf("no word lists for %s", s.Language)
 	}
+	if s.Mode.Scored() && s.Suspend == nil {
+		// Hardcore runs are only saved when suspended, and the save is
+		// deleted as it is loaded.
+		return nil, errors.New("that Hardcore run is over")
+	}
 	r := startRun(ctx, lang, s.Class, s.Seed)
 	if err := r.src.UnmarshalBinary(s.RNG); err != nil {
 		return nil, errDamaged
 	}
+	r.setMode(ctx, s.Mode)
+	r.day, r.tally = s.Day, s.Tally
 	r.greek = s.Greek
 	r.seenTraits = s.SeenTraits
 	r.deck.SetState(s.Deck)
@@ -144,6 +159,7 @@ func saveSummary() (summary string, ok bool) {
 		Class    rpg.Class
 		Shrine   struct{ Depth int }
 		Suspend  *struct{ Depth int }
+		Mode     compete.Mode
 	}
 	if json.Unmarshal(data, &s) != nil {
 		return "", true // Continue will explain the problem
@@ -156,7 +172,11 @@ func saveSummary() (summary string, ok bool) {
 	if s.Suspend != nil {
 		depth = s.Suspend.Depth
 	}
-	return fmt.Sprintf("%s · %s · Floor %d", name, s.Class, depth), true
+	summary = fmt.Sprintf("%s · %s · Floor %d", name, s.Class, depth)
+	if s.Mode != compete.Adventure {
+		summary += " · " + s.Mode.String()
+	}
+	return summary, true
 }
 
 // loadCrawl resumes the saved adventure. A suspended game is deleted from
@@ -172,13 +192,24 @@ func loadCrawl(ctx *game.Context) (*Crawl, error) {
 	}
 	c := crawlOn(s.run, s.level)
 	c.pos, c.facing, c.angle = s.at, s.facing, raycast.Angle(s.facing)
-	if s.suspended {
+	switch {
+	case s.run.hardcore():
+		// A Hardcore run can be picked up once: until it is suspended
+		// again, it is only in memory.
+		if err := save.Remove(saveName); err != nil {
+			return nil, fmt.Errorf("could not update the save")
+		}
+		s.run.onDisk = false
+		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.theme.Name))
+		s.run.say("Welcome back! Your Hardcore run continues.", pal.Yellow)
+		return c, nil
+	case s.suspended:
 		if !c.writeSave(ctx, false) {
 			return nil, fmt.Errorf("could not update the save")
 		}
 		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.theme.Name))
 		s.run.say("Welcome back! Your adventure continues.", pal.Yellow)
-	} else {
+	default:
 		c.showBanner("Welcome back!", "You wake at the shrine")
 		s.run.say(fmt.Sprintf("Welcome back! You wake at the shrine on floor %d.", s.run.depth), pal.Yellow)
 	}
