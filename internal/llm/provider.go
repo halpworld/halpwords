@@ -25,7 +25,7 @@ const (
 type wire int
 
 const (
-	wireAnthropic wire = iota // the Claude Messages API, through Anthropic's SDK
+	wireAnthropic wire = iota // the Claude Messages API
 	wireChat                  // OpenAI-style chat completions
 )
 

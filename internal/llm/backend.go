@@ -11,9 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
 // Request is one question for the model.
@@ -120,73 +117,140 @@ func newBackend(p *Provider, key string, hc *http.Client, baseURL string) backen
 	return &chat{p: p, key: key, hc: hc, base: strings.TrimSuffix(baseURL, "/")}
 }
 
-// claude speaks the Claude Messages API through Anthropic's Go SDK.
+// sendJSON sends a request with a JSON body, if there is one, and decodes
+// the JSON reply into out. An error status becomes one of the errors above
+// where it can.
+func sendJSON(ctx context.Context, hc *http.Client, method, url string, header http.Header, body, out any) error {
+	var rd io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		rd = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, rd)
+	if err != nil {
+		return err
+	}
+	for k, v := range header {
+		req.Header[k] = v
+	}
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode/100 != 2 {
+		// Both APIs describe errors as {"error": {"message": ...}}.
+		var e struct {
+			Error struct{ Message string }
+		}
+		msg := strings.TrimSpace(string(data))
+		if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
+			msg = e.Error.Message
+		}
+		return statusError(resp.StatusCode, msg)
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("unexpected reply: %w", err)
+	}
+	return nil
+}
+
+// claude speaks the Claude Messages API over plain HTTP, which keeps the
+// game small.
 type claude struct {
-	c anthropic.Client
+	key  string
+	hc   *http.Client
+	base string
 }
 
 func newClaude(key string, hc *http.Client, baseURL string) *claude {
-	return &claude{c: anthropic.NewClient(
-		option.WithoutEnvironmentDefaults(), // the key is the one set in the game
-		option.WithAPIKey(key),
-		option.WithBaseURL(baseURL),
-		option.WithHTTPClient(hc),
-		option.WithMaxRetries(1),
-		// Lets the web version of the game call the API from the browser.
-		option.WithHeader("anthropic-dangerous-direct-browser-access", "true"),
-	)}
+	return &claude{key: key, hc: hc, base: strings.TrimSuffix(baseURL, "/")}
 }
 
-func claudeError(err error) error {
-	var apiErr *anthropic.Error
-	if errors.As(err, &apiErr) {
-		msg := apiErr.RawJSON()
-		var body struct {
-			Error struct{ Message string }
-		}
-		if json.Unmarshal([]byte(msg), &body) == nil && body.Error.Message != "" {
-			msg = body.Error.Message
-		}
-		return statusError(apiErr.StatusCode, msg)
-	}
-	return err
+func (b *claude) header() http.Header {
+	h := http.Header{}
+	h.Set("x-api-key", b.key)
+	h.Set("anthropic-version", "2023-06-01")
+	// Lets the web version of the game call the API from the browser.
+	h.Set("anthropic-dangerous-direct-browser-access", "true")
+	return h
 }
 
 func (b *claude) complete(ctx context.Context, r Request) (Reply, error) {
-	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(r.Model),
-		MaxTokens: int64(r.MaxTokens),
-		Messages:  []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(r.Prompt))},
+	type msg struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	body := map[string]any{
+		"model":      r.Model,
+		"max_tokens": r.MaxTokens,
+		"messages":   []msg{{"user", r.Prompt}},
 	}
 	if r.System != "" {
-		params.System = []anthropic.TextBlockParam{{Text: r.System}}
+		body["system"] = r.System
 	}
-	msg, err := b.c.Messages.New(ctx, params)
-	if err != nil {
-		return Reply{}, claudeError(err)
+	var out struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		StopReason string `json:"stop_reason"`
+		Usage      struct {
+			InputTokens  int64 `json:"input_tokens"`
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
 	}
-	rep := Reply{In: msg.Usage.InputTokens, Out: msg.Usage.OutputTokens}
-	if msg.StopReason == anthropic.StopReasonRefusal {
+	if err := sendJSON(ctx, b.hc, http.MethodPost, b.base+"/v1/messages", b.header(), body, &out); err != nil {
+		return Reply{}, err
+	}
+	rep := Reply{In: out.Usage.InputTokens, Out: out.Usage.OutputTokens}
+	if out.StopReason == "refusal" {
 		return rep, ErrRefused
 	}
-	var sb strings.Builder
-	for _, block := range msg.Content {
-		if t, ok := block.AsAny().(anthropic.TextBlock); ok {
-			sb.WriteString(t.Text)
+	for _, c := range out.Content {
+		if c.Type == "text" {
+			rep.Text += c.Text
 		}
 	}
-	rep.Text = sb.String()
 	return rep, nil
 }
 
 func (b *claude) models(ctx context.Context) ([]string, error) {
 	var ids []string
-	pager := b.c.Models.ListAutoPaging(ctx, anthropic.ModelListParams{})
-	for pager.Next() {
-		ids = append(ids, pager.Current().ID)
-	}
-	if err := pager.Err(); err != nil {
-		return nil, claudeError(err)
+	after := ""
+	for page := 0; page < 10; page++ {
+		url := b.base + "/v1/models?limit=1000"
+		if after != "" {
+			url += "&after_id=" + after
+		}
+		var out struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+			HasMore bool   `json:"has_more"`
+			LastID  string `json:"last_id"`
+		}
+		if err := sendJSON(ctx, b.hc, http.MethodGet, url, b.header(), nil, &out); err != nil {
+			return nil, err
+		}
+		for _, m := range out.Data {
+			ids = append(ids, m.ID)
+		}
+		if !out.HasMore || out.LastID == "" {
+			break
+		}
+		after = out.LastID
 	}
 	return ids, nil
 }
@@ -204,51 +268,11 @@ type chat struct {
 	base string
 }
 
-// do sends a request and decodes a JSON reply into out.
+// do sends a request to path.
 func (b *chat) do(ctx context.Context, method, path string, body, out any) error {
-	var rd io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return err
-		}
-		rd = bytes.NewReader(data)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, b.base+path, rd)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+b.key)
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := b.hc.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode/100 != 2 {
-		var e struct {
-			Error struct {
-				Message string
-				Code    any
-			}
-		}
-		msg := strings.TrimSpace(string(data))
-		if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
-			msg = e.Error.Message
-		}
-		return statusError(resp.StatusCode, msg)
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return fmt.Errorf("unexpected reply: %w", err)
-	}
-	return nil
+	h := http.Header{}
+	h.Set("Authorization", "Bearer "+b.key)
+	return sendJSON(ctx, b.hc, method, b.base+path, h, body, out)
 }
 
 func (b *chat) complete(ctx context.Context, r Request) (Reply, error) {

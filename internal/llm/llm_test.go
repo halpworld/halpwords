@@ -63,6 +63,8 @@ type fake struct {
 	status  int      // when set, every request fails with it
 	balance string   // DeepSeek's balance reply
 	bodies  []map[string]any
+	headers []http.Header
+	stop    string // Claude's stop reason, when set
 	in, out int64
 }
 
@@ -105,17 +107,25 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
 		f.bodies = append(f.bodies, body)
+		f.headers = append(f.headers, r.Header.Clone())
 		text := "hello"
 		if len(f.replies) > 0 {
 			text, f.replies = f.replies[0], f.replies[1:]
 		}
 		tj, _ := json.Marshal(text)
 		if claude {
-			io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","model":"claude-haiku-4-5","content":[{"type":"text","text":`+string(tj)+`}],"stop_reason":"end_turn","usage":{"input_tokens":`+itoa(f.in)+`,"output_tokens":`+itoa(f.out)+`}}`)
+			io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","model":"claude-haiku-4-5","content":[{"type":"text","text":`+string(tj)+`}],"stop_reason":"`+f.stopReason()+`","usage":{"input_tokens":`+itoa(f.in)+`,"output_tokens":`+itoa(f.out)+`}}`)
 		} else {
 			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":`+string(tj)+`},"finish_reason":"stop"}],"usage":{"prompt_tokens":`+itoa(f.in)+`,"completion_tokens":`+itoa(f.out)+`}}`)
 		}
 	}
+}
+
+func (f *fake) stopReason() string {
+	if f.stop != "" {
+		return f.stop
+	}
+	return "end_turn"
 }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
@@ -183,8 +193,23 @@ func TestClaudeSetupAndSpend(t *testing.T) {
 	if !near(s.Session(), want) || !near(s.Left(Anthropic), DefaultBudget-want) {
 		t.Fatalf("session %f left %f", s.Session(), s.Left(Anthropic))
 	}
-	if body := f.bodies[0]; body["model"] != "claude-haiku-4-5" || body["max_tokens"] != float64(minTokens) {
+	if body := f.bodies[0]; body["model"] != "claude-haiku-4-5" || body["max_tokens"] != float64(minTokens) || body["system"] != "sys" {
 		t.Fatalf("request body %v", body)
+	}
+	if h := f.headers[0]; h.Get("anthropic-version") != "2023-06-01" || h.Get("anthropic-dangerous-direct-browser-access") != "true" {
+		t.Fatalf("request headers %v", h)
+	}
+	f.stop = "refusal"
+	if _, err := s.Ask(context.Background(), false, "sys", "hi", 100); !errors.Is(err, ErrRefused) {
+		t.Fatalf("refusal: %v", err)
+	}
+	if !s.Ready() {
+		t.Fatal("a refusal should not turn the AI off")
+	}
+	f.stop = ""
+	want *= 2 // a refused request still uses tokens, and is counted
+	if got := s.Spent(Anthropic); got.Requests != 2 || !near(got.Spent, want) {
+		t.Fatalf("after a refusal: %+v", got)
 	}
 
 	// The settings and spending come back when the game starts again.
