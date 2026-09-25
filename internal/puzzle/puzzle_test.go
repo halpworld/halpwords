@@ -35,7 +35,7 @@ func each(t *testing.T, fn func(p Puzzle, lang *words.Language, lock Lock, depth
 				rng := rand.New(rand.NewPCG(uint64(depth), uint64(lock)))
 				deck := words.NewDeck(entries, rng)
 				for n := 0; n < 40; n++ {
-					fn(New(lock, depth, deck, lang, rng), lang, lock, depth)
+					fn(New(lock, depth, deck, lang, lang.Defaults, rng), lang, lock, depth)
 				}
 			}
 		}
@@ -233,8 +233,8 @@ func TestKinds(t *testing.T) {
 		rng := rand.New(rand.NewPCG(9, 9))
 		deck := words.NewDeck(entries, rng)
 		for n := 0; n < 60; n++ {
-			seen[New(Door, 5, deck, lang, rng).Kind()] = true
-			seen[New(Chest, 5, deck, lang, rng).Kind()] = true
+			seen[New(Door, 5, deck, lang, lang.Defaults, rng).Kind()] = true
+			seen[New(Chest, 5, deck, lang, lang.Defaults, rng).Kind()] = true
 		}
 	}
 	for k := Reverse; k <= Crossword; k++ {
@@ -254,11 +254,11 @@ func TestFallbacks(t *testing.T) {
 		{Prompt: "yes", Answers: []string{"oui"}},
 		{Prompt: "in", Answers: []string{"en"}},
 	}, rng)
-	if k := Make(OddOneOut, Door, 1, deck, fr, rng).Kind(); k != Spell {
+	if k := Make(OddOneOut, Door, 1, deck, fr, fr.Defaults, rng).Kind(); k != Spell {
 		t.Errorf("odd one out without groups made %s", k)
 	}
 	for n := 0; n < 20; n++ {
-		p := Make(Anagram, Door, 1, deck, fr, rng)
+		p := Make(Anagram, Door, 1, deck, fr, fr.Defaults, rng)
 		if w := p.Check(Attempt{}).Expected; w == "en" && p.Kind() != Spell {
 			t.Errorf("anagram of %q made %s", w, p.Kind())
 		}

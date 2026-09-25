@@ -115,16 +115,31 @@ func Kinds(lock Lock, depth int) []Kind {
 }
 
 // New makes a random puzzle for a lock on floor depth, with words dealt from
-// deck.
-func New(lock Lock, depth int, deck *words.Deck, lang *words.Language, rng *rand.Rand) Puzzle {
+// deck. Answers in lang are graded by rules.
+func New(lock Lock, depth int, deck *words.Deck, lang *words.Language, rules words.Rules, rng *rand.Rand) Puzzle {
 	ks := Kinds(lock, depth)
-	return Make(ks[rng.IntN(len(ks))], lock, depth, deck, lang, rng)
+	return Make(ks[rng.IntN(len(ks))], lock, depth, deck, lang, rules, rng)
 }
 
 // Make makes a puzzle of kind k. When the word lists cannot make that kind
 // (a word too short to scramble, or lists without groups), it makes a
 // spelling puzzle instead.
-func Make(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rng *rand.Rand) Puzzle {
+func Make(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rules words.Rules, rng *rand.Rand) Puzzle {
+	p := makeKind(k, lock, depth, deck, lang, rng)
+	switch p := p.(type) {
+	case *typed:
+		if p.lang == lang {
+			p.rules = rules // a Reverse puzzle is answered in English
+		}
+	case *tumbler:
+		p.rules = rules
+	case *crossword:
+		p.rules = rules
+	}
+	return p
+}
+
+func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rng *rand.Rand) Puzzle {
 	var p Puzzle
 	switch k {
 	case OddOneOut:

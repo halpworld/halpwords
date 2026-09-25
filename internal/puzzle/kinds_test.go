@@ -21,7 +21,7 @@ func made(t *testing.T, k Kind, lock Lock, fn func(p Puzzle, lang *words.Languag
 			rng := rand.New(rand.NewPCG(uint64(depth), uint64(k)))
 			deck := words.NewDeck(entries, rng)
 			for n := 0; n < 30; n++ {
-				p := Make(k, lock, depth, deck, lang, rng)
+				p := Make(k, lock, depth, deck, lang, lang.Defaults, rng)
 				if p.Kind() != k {
 					t.Fatalf("%s with %s words made %s", k, lang.Name, p.Kind())
 				}
@@ -75,7 +75,7 @@ func TestPairsNeedFourWords(t *testing.T) {
 		{Prompt: "bird", Answers: []string{"l'oiseau"}},
 	}, rng)
 	for n := 0; n < 20; n++ {
-		if k := Make(Pairs, Door, 1, deck, fr, rng).Kind(); k != Spell {
+		if k := Make(Pairs, Door, 1, deck, fr, fr.Defaults, rng).Kind(); k != Spell {
 			t.Fatalf("made %s from three distinct words", k)
 		}
 	}
@@ -120,7 +120,7 @@ func TestTumblerFixedPlates(t *testing.T) {
 	fr, _ := words.Lookup("fr")
 	rng := rand.New(rand.NewPCG(2, 2))
 	deck := words.NewDeck([]words.Entry{{Prompt: "bird", Answers: []string{"l'oiseau"}}}, rng)
-	q := Make(Tumbler, Chest, 3, deck, fr, rng).(*tumbler)
+	q := Make(Tumbler, Chest, 3, deck, fr, fr.Defaults, rng).(*tumbler)
 	if o := q.Options(); len(o) != 7 || len(o[0]) != 1 || o[0][0] != "l'" {
 		t.Fatalf("options %q", o)
 	}
@@ -216,7 +216,7 @@ func TestRiddle(t *testing.T) {
 	fr, _ := words.Lookup("fr")
 	rng := rand.New(rand.NewPCG(1, 1))
 	deck := words.NewDeck([]words.Entry{{Prompt: "yes", Answers: []string{"oui"}}}, rng)
-	if k := Make(Riddle, Door, 1, deck, fr, rng).Kind(); k != Spell {
+	if k := Make(Riddle, Door, 1, deck, fr, fr.Defaults, rng).Kind(); k != Spell {
 		t.Errorf("riddle without a riddle word made %s", k)
 	}
 }

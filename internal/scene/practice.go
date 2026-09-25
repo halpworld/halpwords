@@ -16,25 +16,29 @@ import (
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/typing"
 	"github.com/halpworld/halpwords/internal/words"
 )
 
-// Practice is a stand-alone spelling drill. It exercises the typing, grading
-// and scoring code that battles will use.
+// Practice is a stand-alone spelling drill. Words are dealt by spaced
+// repetition, and every answer goes in the Grimoire.
 type Practice struct {
 	bg    *ebiten.Image
 	rng   *rand.Rand
 	langs []*words.Language // languages that have at least one list
 	li    int
 
-	entries []words.Entry
-	cur     int
-	field   *typing.Field
-	started uint64 // tick the current word appeared
+	deck     *words.Deck
+	settings profile.LangSettings
+	word     words.Entry
+	cur      int
+	field    *typing.Field
+	started  uint64 // tick the current word appeared
 
 	showing bool // showing the result of the last answer
 	result  words.Result
+	mistake words.Mistake
 	typed   string
 	taken   float64
 	streak  int
@@ -57,22 +61,16 @@ func (p *Practice) lang() *words.Language { return p.langs[p.li] }
 
 func (p *Practice) setLanguage(ctx *game.Context, i int) {
 	p.li = (i + len(p.langs)) % len(p.langs)
-	p.entries = p.entries[:0]
-	for _, l := range ctx.ListsFor(p.lang().Code) {
-		p.entries = append(p.entries, l.Entries...)
-	}
+	p.deck = words.NewDeck(entriesFor(ctx, p.lang()), p.rng)
+	p.deck.SetMemory(ctx.Profile.MemoryFor(p.lang().Code))
+	p.settings = ctx.Profile.Settings.For(p.lang())
 	p.field = typing.NewField(p.lang())
 	p.streak = 0
-	p.cur = -1
 	p.next(ctx)
 }
 
 func (p *Practice) next(ctx *game.Context) {
-	n := p.rng.IntN(len(p.entries))
-	if n == p.cur && len(p.entries) > 1 {
-		n = (n + 1) % len(p.entries)
-	}
-	p.cur = n
+	p.word, p.cur = p.deck.Next()
 	p.field.Reset()
 	p.showing = false
 	p.started = ctx.Tick
@@ -103,10 +101,15 @@ func (p *Practice) Update(ctx *game.Context) error {
 		return nil
 	}
 	if typeInto(ctx, p.field) {
-		e := p.entries[p.cur]
 		p.typed = p.field.Text()
 		p.taken = float64(ctx.Tick-p.started) / float64(ebiten.TPS())
-		p.result = words.Grade(p.typed, e, p.lang(), p.lang().Defaults, p.field.UsedBackspace)
+		p.result = words.Grade(p.typed, p.word, p.lang(), p.settings.Rules, p.field.UsedBackspace)
+		p.mistake = words.NoMistake
+		if p.result.Tier < words.Correct {
+			p.mistake = words.Classify(p.typed, p.result.Expected, p.lang())
+		}
+		p.deck.Answer(p.cur, words.Answer{Tier: p.result.Tier, Timed: true, Secs: p.taken, Mistake: p.mistake})
+		ctx.Profile.SaveMemory()
 		p.showing = true
 		ctx.Sound.Play(tierSound[p.result.Tier])
 		if p.result.Tier >= words.Correct {
@@ -153,8 +156,15 @@ func (p *Practice) Draw(dst *ebiten.Image, ctx *game.Context) {
 	// Main window.
 	const wx, wy, ww, wh = 40, 48, game.ScreenW - 80, 204
 	gfx.Window(dst, wx, wy, ww, wh)
-	e := p.entries[p.cur]
+	e := p.word
 	f.DrawCentered(dst, "Translate into "+p.lang().Name+":", cx, wy+14, 1, pal.Steel)
+	box := "new word"
+	if b := p.deck.Memory().Box(e); b == words.Boxes {
+		box = "mastered"
+	} else if b > 0 {
+		box = fmt.Sprintf("box %d of %d", b, words.Boxes)
+	}
+	f.DrawShadow(dst, box, wx+ww-12-f.Width(box, 1), wy+8, 1, boxColors[p.deck.Memory().Box(e)])
 	sc := f.FitScale(e.Prompt, ww-40, 3)
 	f.DrawCentered(dst, e.Prompt, cx, wy+34, sc, pal.White)
 
@@ -163,26 +173,25 @@ func (p *Practice) Draw(dst *ebiten.Image, ctx *game.Context) {
 	if p.showing {
 		text = p.typed
 	}
-	sc = f.FitScale(text+"_", ww-40, 3)
-	lineY := wy + 88
-	gfx.FillRect(dst, wx+20, lineY+16*sc+4, ww-40, 2, pal.Indigo)
-	tw := f.Width(text, sc)
-	tx := cx - tw/2
-	f.DrawShadow(dst, text, tx, lineY, sc, pal.Ice)
-	if !p.showing && ctx.Tick/16%2 == 0 {
-		gfx.FillRect(dst, tx+tw+2, lineY+2, 4*sc, 14*sc, pal.Yellow)
+	good := -1
+	if p.settings.Highlight && !p.showing {
+		good = goodPrefix(text, e.Answers, p.lang())
 	}
+	drawTypedMarked(dst, ctx, text, good, cx, wy+88, ww-40, 3, !p.showing)
 
 	if p.showing {
 		r := p.result
-		f.DrawCentered(dst, r.Tier.String()+"!", cx, wy+148, 2, tierColor[r.Tier])
+		f.DrawCentered(dst, r.Tier.String()+"!", cx, wy+138, 2, tierColor[r.Tier])
 		info := fmt.Sprintf("Answer: %s", r.Expected)
 		if r.Tier >= words.Graze {
 			speed := combat.Speed(utf8.RuneCountInString(r.Expected), p.taken)
 			power := combat.Accuracy(r.Tier) * speed
 			info += fmt.Sprintf("    %.1fs   speed ×%.1f   power %d%%", p.taken, speed, int(power*100))
 		}
-		f.DrawCentered(dst, info, cx, wy+180, 1, pal.Ice)
+		f.DrawCentered(dst, info, cx, wy+186, 1, pal.Ice)
+		if tip := p.mistake.Tip(); tip != "" && p.result.Tier < words.Correct {
+			f.DrawCentered(dst, tip, cx, wy+168, 1, pal.Orange)
+		}
 	} else {
 		secs := float64(ctx.Tick-p.started) / float64(ebiten.TPS())
 		f.DrawCentered(dst, fmt.Sprintf("%.1fs", secs), cx, wy+160, 1, pal.Ash)

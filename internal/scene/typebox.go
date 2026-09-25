@@ -67,11 +67,21 @@ func drawTypedMarked(dst *ebiten.Image, ctx *game.Context, text string, good, cx
 }
 
 // goodPrefix returns how many letters at the start of typed could still
-// become one of answers, ignoring capitals.
-func goodPrefix(typed string, answers []string) int {
+// become one of answers, ignoring capitals. Answers can be typed without
+// the articles of lang.
+func goodPrefix(typed string, answers []string, lang *words.Language) int {
 	t := []rune(strings.ToLower(typed))
 	best := 0
+	var all []string
 	for _, a := range answers {
+		all = append(all, a)
+		for _, art := range lang.Articles {
+			if rest, ok := strings.CutPrefix(strings.ToLower(a), art); ok && rest != "" {
+				all = append(all, rest)
+			}
+		}
+	}
+	for _, a := range all {
 		ar := []rune(strings.ToLower(a))
 		n := 0
 		for n < len(t) && n < len(ar) && t[n] == ar[n] {

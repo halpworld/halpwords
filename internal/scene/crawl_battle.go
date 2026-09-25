@@ -67,7 +67,7 @@ const hourglassTime = 1.5
 
 // timeScale is how much longer than usual the hero has to type an attack.
 func (c *Crawl) timeScale() float64 {
-	k := c.run.hero.TimeBonus()
+	k := c.run.hero.TimeBonus() * c.run.settings.Timer.Scale()
 	if c.battle != nil && c.battle.slow {
 		k *= hourglassTime
 	}
@@ -137,12 +137,13 @@ func traitWords(t dungeon.Trait) string {
 func (c *Crawl) deal(ctx *game.Context, p phase) {
 	b := c.battle
 	ok := false
+	target := wordTarget(c.run.depth, b.m.Kind.Boss())
 	if b.m.Phase > 0 {
 		// An angry boss asks for longer words.
-		b.word, b.wordID, ok = c.run.deck.NextWhere(func(e words.Entry) bool { return runes(e.Answers[0]) >= 6 })
+		b.word, b.wordID, ok = c.run.deck.NextNear(target, func(e words.Entry) bool { return runes(e.Answers[0]) >= 6 })
 	}
 	if !ok {
-		b.word, b.wordID = c.run.deck.Next()
+		b.word, b.wordID, _ = c.run.deck.NextNear(target, nil)
 	}
 	b.hints = 0
 	b.field.Reset()
@@ -151,12 +152,22 @@ func (c *Crawl) deal(ctx *game.Context, p phase) {
 	b.warned = false
 }
 
+// wordTarget is the Difficulty of the words monsters on floor depth ask for:
+// short, plain words at first, longer ones deeper down and from bosses.
+func wordTarget(depth int, boss bool) float64 {
+	t := 4.5 + 0.6*float64(depth-1)
+	if boss {
+		t += 2
+	}
+	return min(t, 14)
+}
+
 func (c *Crawl) beginAttack(ctx *game.Context) { c.deal(ctx, phaseAttack) }
 
 func (c *Crawl) beginDefend(ctx *game.Context) {
 	c.deal(ctx, phaseDefend)
 	b := c.battle
-	b.limit = combat.DefendTime(runes(b.word.Answers[0])) * c.run.hero.DodgeBonus()
+	b.limit = combat.DefendTime(runes(b.word.Answers[0])) * c.run.hero.DodgeBonus() * c.run.settings.Timer.Scale()
 	if b.slow {
 		b.limit *= hourglassTime
 	}
@@ -208,12 +219,12 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 			c.play(audio.Warn)
 		}
 		if left <= 0 {
-			c.dodge(ctx, words.Result{Tier: words.Miss, Expected: b.word.Answers[0]}, "", true)
+			c.dodge(ctx, words.Result{Tier: words.Miss, Expected: b.word.Answers[0]}, "", b.limit)
 			return
 		}
 		if typeInto(ctx, b.field) {
 			typed := b.field.Text()
-			c.dodge(ctx, c.grade(typed), typed, false)
+			c.dodge(ctx, c.grade(typed), typed, secs(ctx.Tick-b.start))
 		}
 		c.run.greek = b.field.Greek
 	case phaseResult:
@@ -238,25 +249,38 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 }
 
 func (c *Crawl) grade(typed string) words.Result {
-	l := c.run.lang
-	return words.Grade(typed, c.battle.word, l, l.Defaults, c.battle.field.UsedBackspace)
+	return words.Grade(typed, c.battle.word, c.run.lang, c.run.rules(), c.battle.field.UsedBackspace)
 }
 
-// scoreAnswer records an answer for spaced practice and the combo streak.
-// An accent slip neither builds nor breaks the streak. An id below 0 is an
-// answer that was not about one word, such as an odd-one-out pick. A word
-// answered with a hint comes back for practice, however it was spelled.
-// The first perfect spelling of each word is worth XP.
-func (c *Crawl) scoreAnswer(id int, t words.Tier, hinted bool) {
+// scoreAnswer records an answer for spaced practice, the combo streak and
+// the score. An accent slip neither builds nor breaks the streak. An id
+// below 0 is an answer that was not about one word, such as an odd-one-out
+// pick. A word answered with a hint comes back for practice, however it
+// was spelled. secs is how long a timed answer took, or 0. The first
+// perfect spelling of each word is worth XP.
+func (c *Crawl) scoreAnswer(id int, res words.Result, typed string, hinted bool, secs float64) {
 	r, h := c.run, &c.run.hero
+	t := res.Tier
 	if id >= 0 {
-		r.deck.Mark(id, t >= words.Correct && !hinted)
+		a := words.Answer{Tier: t, Hinted: hinted, Secs: secs, Timed: secs > 0}
+		if t < words.Correct && typed != "" {
+			a.Mistake = words.Classify(typed, res.Expected, r.lang)
+		}
+		r.deck.Answer(id, a)
+		r.remember()
 	}
 	switch {
 	case t >= words.Correct:
 		h.Streak++
+		r.tally.BestCombo = max(r.tally.BestCombo, h.Streak)
 	case t < words.AccentSlip:
 		h.Streak = 0
+	}
+	if t == words.Miss {
+		r.tally.Misses++
+	}
+	if t == words.Perfect && id >= 0 && !hinted {
+		r.tally.Perfect++
 	}
 	if t == words.Perfect && id >= 0 && !hinted && !r.perfect[id] {
 		r.perfect[id] = true
@@ -338,16 +362,25 @@ func hintText(answer string, n int) string {
 }
 
 // answerLines explains an answer: the right spelling, and what was typed if
-// it was wrong.
-func answerLines(e words.Entry, res words.Result, typed string) []logLine {
+// it was wrong, with a tip about the mistake.
+func answerLines(e words.Entry, res words.Result, typed string, lang *words.Language) []logLine {
 	lines := []logLine{{e.Prompt + " = " + res.Expected, pal.White}}
-	switch {
-	case res.Tier == words.AccentSlip:
-		lines = append(lines, logLine{"You typed " + typed + ". Watch the accents!", pal.Cyan})
-	case res.Tier < words.AccentSlip && typed != "":
-		lines = append(lines, logLine{"You typed " + typed + ".", pal.Steel})
+	if res.Tier < words.Correct && typed != "" {
+		lines = append(lines, mistakeLine("You typed "+typed+".", typed, res, lang))
 	}
 	return lines
+}
+
+// mistakeLine is what the hero typed, with a tip about their mistake.
+func mistakeLine(said, typed string, res words.Result, lang *words.Language) logLine {
+	col := pal.Steel
+	if res.Tier == words.AccentSlip {
+		col = pal.Cyan
+	}
+	if tip := words.Classify(typed, res.Expected, lang).Tip(); tip != "" {
+		said += " " + tip
+	}
+	return logLine{said, col}
 }
 
 func (c *Crawl) showResult(ctx *game.Context, title string, col color.RGBA, lines []logLine, wait bool, next phase) {
@@ -376,8 +409,8 @@ func (c *Crawl) strike(ctx *game.Context) {
 		dmg = int(float64(dmg)/1.5 + 0.5)
 	}
 	combo := combat.Combo(h.Streak)
-	c.scoreAnswer(b.wordID, res.Tier, hinted)
-	lines := answerLines(b.word, res, typed)
+	c.scoreAnswer(b.wordID, res, typed, hinted, secs(ctx.Tick-b.start))
+	lines := answerLines(b.word, res, typed, c.run.lang)
 	if res.Tier == words.Perfect && !hinted && h.Restore(1) > 0 {
 		lines = append(lines, logLine{"Perfect spelling restores 1 MP.", pal.Sky})
 	}
@@ -399,6 +432,7 @@ func (c *Crawl) strike(ctx *game.Context) {
 		lines = append(lines, logLine{"You fumble and nick yourself: 1 damage.", pal.Rose})
 		c.run.say(fmt.Sprintf("You miss the %s.", m.Name()), pal.Rose)
 	default:
+		c.run.tally.Damage += min(dmg, m.HP)
 		m.HP -= dmg
 		b.flash = 10
 		switch {
@@ -433,11 +467,13 @@ func (c *Crawl) strike(ctx *game.Context) {
 	}
 }
 
-// dodge grades a defence. A good answer dodges; a graze halves the blow.
-func (c *Crawl) dodge(ctx *game.Context, res words.Result, typed string, timeout bool) {
+// dodge grades a defence typed in taken seconds. A good answer dodges; a
+// graze halves the blow. Nothing typed means time ran out.
+func (c *Crawl) dodge(ctx *game.Context, res words.Result, typed string, taken float64) {
 	b, h, m := c.battle, &c.run.hero, c.battle.m
-	c.scoreAnswer(b.wordID, res.Tier, b.hints > 0)
-	lines := answerLines(b.word, res, typed)
+	timeout := typed == ""
+	c.scoreAnswer(b.wordID, res, typed, b.hints > 0, taken)
+	lines := answerLines(b.word, res, typed, c.run.lang)
 	hit := h.Hit(max(1, m.ATK+c.run.rng.IntN(3)-1))
 	dmg := int(math.Round(float64(hit) * combat.Block(res.Tier)))
 	b.lunge = 16
@@ -482,6 +518,12 @@ func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []log
 	lines = append(lines, logLine{fmt.Sprintf("The %s is defeated! +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow})
 	c.run.say(fmt.Sprintf("You defeat the %s. +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow)
 	loot := m.Loot
+	switch {
+	case m.Kind.Boss():
+		c.run.tally.Bosses++
+	case m.Kind.Family == dungeon.Mimic:
+		c.run.tally.Chests++ // the chest it was guarding
+	}
 	if m.Kind.Boss() {
 		// Bosses always drop gear, a tier better than the floor's.
 		g := rpg.RandomGear(c.run.depth+2, c.run.rng)
@@ -631,8 +673,8 @@ func (c *Crawl) drawBattlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 		sc := f.FitScale(prompt, w-40, 2)
 		f.DrawCentered(dst, prompt, cx, y+28, sc, pcol)
 		good := -1
-		if b.clarity {
-			good = goodPrefix(b.field.Text(), b.word.Answers)
+		if b.clarity || c.run.settings.Highlight {
+			good = goodPrefix(b.field.Text(), b.word.Answers, c.run.lang)
 		}
 		drawTypedMarked(dst, ctx, b.field.Text(), good, cx, y+60, min(560, w-40), 2, !c.muted)
 	default:

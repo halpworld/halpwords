@@ -1,18 +1,21 @@
 package words
 
 import (
+	"math"
 	"math/rand/v2"
 	"unicode"
 )
 
 // Deck deals words for battles and puzzles. It avoids repeating recent
 // words, and brings back words the player got wrong until they get them
-// right, so practice goes where it is needed.
+// right, so practice goes where it is needed. With a Memory, it deals
+// mostly words that are due for practice, and some new ones.
 type Deck struct {
 	entries []Entry
 	rng     *rand.Rand
 	recent  []int
 	review  []int // entries answered wrongly, oldest first
+	mem     *Memory
 }
 
 // recentLen is how many words must pass before one can be dealt again.
@@ -22,6 +25,13 @@ const recentLen = 6
 func NewDeck(entries []Entry, rng *rand.Rand) *Deck {
 	return &Deck{entries: entries, rng: rng}
 }
+
+// SetMemory makes the deck deal by what the player knows, and record
+// answers in m. A nil m deals at random.
+func (d *Deck) SetMemory(m *Memory) { d.mem = m }
+
+// Memory returns the deck's memory, which may be nil.
+func (d *Deck) Memory() *Memory { return d.mem }
 
 // Len returns the number of words in the deck.
 func (d *Deck) Len() int { return len(d.entries) }
@@ -52,6 +62,12 @@ func (d *Deck) Next() (Entry, int) {
 // NextWhere deals a word that ok accepts (any word when ok is nil), the
 // same way Next does. It reports false when ok accepts no word.
 func (d *Deck) NextWhere(ok func(Entry) bool) (Entry, int, bool) {
+	return d.NextNear(-1, ok)
+}
+
+// NextNear deals a word that ok accepts, preferring words whose Difficulty
+// is near target. A target below 0 has no preference.
+func (d *Deck) NextNear(target float64, ok func(Entry) bool) (Entry, int, bool) {
 	fits := func(i int) bool { return ok == nil || ok(d.entries[i]) }
 	var can []int
 	for i := range d.entries {
@@ -74,16 +90,81 @@ func (d *Deck) NextWhere(ok func(Entry) bool) (Entry, int, bool) {
 		}
 	}
 	if i < 0 {
-		i = can[d.rng.IntN(len(can))]
-		for try := 0; try < 10 && d.isRecent(i, min(recentLen, len(can)-1)); try++ {
-			i = can[d.rng.IntN(len(can))]
-		}
+		i = d.pick(d.pool(can), can, target)
 	}
 	d.recent = append(d.recent, i)
 	if len(d.recent) > recentLen {
 		d.recent = d.recent[1:]
 	}
 	return d.entries[i], i, true
+}
+
+// Shares of deals, in percent, that go to words that are due and to new
+// words, when there are some. The rest can be any word.
+const (
+	dueShare = 60
+	newShare = 25
+)
+
+// pool chooses the words to deal from: with a memory, mostly words that are
+// due, sometimes new ones, and otherwise any word in can.
+func (d *Deck) pool(can []int) []int {
+	if d.mem == nil {
+		return can
+	}
+	var due, fresh []int
+	for _, i := range can {
+		e := d.entries[i]
+		switch c := d.mem.Card(e); {
+		case c == nil:
+			fresh = append(fresh, i)
+		case c.Box > 0 && c.Due <= d.mem.Clock:
+			due = append(due, i)
+		}
+	}
+	r := d.rng.IntN(100)
+	switch {
+	case len(due) > 0 && r < dueShare:
+		return due
+	case len(fresh) > 0 && r < dueShare+newShare:
+		return fresh
+	}
+	return can
+}
+
+// pick chooses a word from pool that has not been dealt lately, or from can
+// if every word in pool has. With a target, it looks at a few words and
+// takes the one nearest the target difficulty.
+func (d *Deck) pick(pool, can []int, target float64) int {
+	gap := min(recentLen, len(can)-1)
+	fresh := func(ids []int) []int {
+		var out []int
+		for _, i := range ids {
+			if !d.isRecent(i, gap) {
+				out = append(out, i)
+			}
+		}
+		return out
+	}
+	from := fresh(pool)
+	if len(from) == 0 {
+		from = fresh(can)
+	}
+	if len(from) == 0 {
+		from = pool
+	}
+	i := from[d.rng.IntN(len(from))]
+	if target < 0 {
+		return i
+	}
+	best := math.Abs(Difficulty(d.entries[i]) - target)
+	for k := 0; k < 3; k++ {
+		j := from[d.rng.IntN(len(from))]
+		if dj := math.Abs(Difficulty(d.entries[j]) - target); dj < best {
+			i, best = j, dj
+		}
+	}
+	return i
 }
 
 func (d *Deck) isRecent(i, n int) bool {
@@ -107,6 +188,19 @@ func (d *Deck) Mark(i int, ok bool) {
 	}
 	if !ok {
 		d.review = append(d.review, i)
+	}
+}
+
+// Answer records an answer to word i (from Next): a word answered wrongly,
+// or with a hint, comes back soon, and the memory, if any, learns how it
+// went.
+func (d *Deck) Answer(i int, a Answer) {
+	if i < 0 || i >= len(d.entries) {
+		return
+	}
+	d.Mark(i, a.Tier >= Correct && !a.Hinted)
+	if d.mem != nil {
+		d.mem.Record(d.entries[i], a)
 	}
 }
 

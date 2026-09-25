@@ -19,11 +19,13 @@ const (
 	pauseResume pauseItem = iota
 	pauseFlee
 	pauseItems
+	pauseGrimoire
 	pauseSuspend
 	pauseQuit
+	pauseGiveUp
 )
 
-var pauseLabels = [...]string{"Resume", "Flee", "Items", "Suspend and quit", "Quit to title"}
+var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend and quit", "Quit to title", "Give up the run"}
 
 // pause stops the game and opens the pause menu. Everything stands still,
 // including the battle clock.
@@ -46,12 +48,17 @@ func (c *Crawl) unpause(ctx *game.Context) {
 	}
 }
 
-// pauseItems lists the pause menu. Fleeing is only for battles.
+// pauseItems lists the pause menu. Fleeing is only for battles, and a
+// Hardcore run can't be left without saving: it can only be given up.
 func (c *Crawl) pauseItems() []pauseItem {
+	items := []pauseItem{pauseResume, pauseItems, pauseGrimoire, pauseSuspend, pauseQuit}
 	if c.resume == modeBattle {
-		return []pauseItem{pauseResume, pauseFlee, pauseItems, pauseSuspend, pauseQuit}
+		items = []pauseItem{pauseResume, pauseFlee, pauseItems, pauseGrimoire, pauseSuspend, pauseQuit}
 	}
-	return []pauseItem{pauseResume, pauseItems, pauseSuspend, pauseQuit}
+	if c.run.hardcore() {
+		items[len(items)-1] = pauseGiveUp
+	}
+	return items
 }
 
 // canChoose reports whether a pause menu item can be used now. The hero can
@@ -63,7 +70,7 @@ func (c *Crawl) canChoose(it pauseItem) bool {
 		return c.battle != nil && c.battle.phase == phaseAttack
 	case pauseItems:
 		return c.resume == modeExplore || (c.battle != nil && c.battle.phase == phaseAttack)
-	case pauseSuspend:
+	case pauseSuspend, pauseGrimoire:
 		return c.resume == modeExplore
 	}
 	return true
@@ -104,6 +111,11 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 	case pauseItems:
 		c.play(audio.Select)
 		c.openItems(ctx)
+	case pauseGrimoire:
+		c.play(audio.Select)
+		ctx.Push(NewGrimoire(ctx, c.run.lang))
+	case pauseGiveUp:
+		c.mode = modeQuit
 	case pauseSuspend:
 		if c.writeSave(ctx, true) {
 			c.play(audio.Select)
@@ -125,6 +137,9 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 // updateQuit asks whether to quit without saving.
 func (c *Crawl) updateQuit(ctx *game.Context) {
 	switch {
+	case (input.Pressed(ebiten.KeyY) || input.Confirm()) && c.run.hardcore():
+		c.play(audio.Fall)
+		ctx.Replace(newGameOver(ctx, c.run, true))
 	case input.Pressed(ebiten.KeyY) || input.Confirm():
 		c.play(audio.Back)
 		ctx.Replace(NewTitle(ctx))
@@ -150,12 +165,17 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Black, 0.5))
 
 	items := c.pauseItems()
-	w, h := 300, 84+len(items)*20
+	w, h := 360, 100+len(items)*20
 	x, y := viewX+vw/2-w/2, viewY+(vh-22)/2-h/2
 	gfx.Window(view, x, y, w, h)
 	f.DrawCentered(view, "PAUSED", x+w/2, y+10, 2, pal.Yellow)
+	about := c.run.mode.String() + " · seed " + c.run.seedCode()
+	if c.run.hardcore() {
+		about += " · score " + groupDigits(c.run.score())
+	}
+	f.DrawCentered(view, about, x+w/2, y+42, 1, pal.Tan)
 	for i, it := range items {
-		iy := y + 48 + i*20
+		iy := y + 64 + i*20
 		col := pal.Steel
 		switch {
 		case !c.canChoose(it):
@@ -163,16 +183,18 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 		case i == c.menuSel:
 			col = pal.White
 			if ctx.Tick/20%2 == 0 {
-				f.Draw(view, "►", x+76, iy, 1, pal.Yellow)
+				f.Draw(view, "►", x+106, iy, 1, pal.Yellow)
 			}
 		}
-		f.DrawShadow(view, pauseLabels[it], x+96, iy, 1, col)
+		f.DrawShadow(view, pauseLabels[it], x+126, iy, 1, col)
 	}
 
 	note, ncol := "Your progress is saved.", pal.Lime
 	switch {
 	case c.resume != modeExplore:
 		note, ncol = "Win or flee the battle to suspend.", pal.Tan
+	case c.run.hardcore():
+		note, ncol = "One life! Suspend to keep this run.", pal.Tan
 	case c.lastSave == nil || c.unsaved:
 		note, ncol = "Pray at a Save Shrine, or suspend.", pal.Tan
 	}

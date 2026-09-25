@@ -8,6 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/combat"
+	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
@@ -68,17 +69,24 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 	case modePause:
 		c.drawPause(view, ctx)
 	case modeQuit:
-		text := "You will go back to your last shrine."
-		if c.lastSave == nil {
+		title, text := "Quit without saving?", "You will go back to your last shrine."
+		switch {
+		case c.run.hardcore():
+			title, text = "Give up this run?", fmt.Sprintf("Your score of %s will be recorded.", groupDigits(c.run.score()))
+		case c.lastSave == nil:
 			text = "This adventure has not been saved."
 		}
-		c.drawDialog(view, ctx, "Quit without saving?", text, "Y quit · N go back")
+		c.drawDialog(view, ctx, title, text, "Y yes · N go back")
 	case modeShrine:
 		c.drawDialog(view, ctx, "SAVE SHRINE", "Pray here to save your adventure?", "Y pray · N leave")
 	case modeCampfire:
 		c.drawCampfire(view, ctx)
 	case modeDead:
 		gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Red, 0.35))
+		if c.run.hardcore() {
+			c.drawDialog(view, ctx, "YOU HAVE FALLEN", fmt.Sprintf("Floor %d · score %s", c.run.depth, groupDigits(c.run.score())), "Enter see your score")
+			break
+		}
 		c.drawDialog(view, ctx, "YOU HAVE FALLEN", c.wakeText(), "Enter try again · Esc give up")
 	}
 
@@ -187,6 +195,12 @@ func (c *Crawl) drawSide(dst *ebiten.Image, ctx *game.Context) {
 		return
 	}
 	title := fmt.Sprintf("Floor %d · %s", c.run.depth, c.theme.Name)
+	if c.run.hardcore() {
+		title = fmt.Sprintf("Floor %d · Score %s", c.run.depth, groupDigits(c.run.score()))
+		if best := ctx.Profile.Fame.Best(compete.TableKey(c.run.mode, c.run.lang.Code)); best > 0 && c.run.score() > best {
+			f.DrawShadow(dst, "★ BEST", x+w-10-f.Width("★ BEST", 1), y+7, 1, pal.Yellow)
+		}
+	}
 	f.DrawShadow(dst, title, x+10, y+7, 1, pal.Tan)
 	c.drawAutomap(dst, x+6, y+26, w-12, 128-32, 8, false)
 }

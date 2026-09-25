@@ -52,6 +52,6 @@ func newRiddle(deck *words.Deck, lang *words.Language, rng *rand.Rand) *typed {
 		kind: Riddle, answer: Foreign, id: id,
 		ask:   "Answer the riddle in " + lang.Name + ":",
 		clue:  rs[rng.IntN(len(rs))],
-		grade: e, lang: lang, shown: e.Prompt,
+		grade: e, lang: lang, rules: lang.Defaults, shown: e.Prompt,
 	}
 }

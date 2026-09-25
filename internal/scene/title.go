@@ -13,7 +13,7 @@ import (
 )
 
 // Version is shown on the title screen.
-const Version = "v0.5 (milestone 4: the RPG layer)"
+const Version = "v0.6 (milestone 5: learning and competition)"
 
 // Title is the title screen and main menu.
 type Title struct {
@@ -31,18 +31,21 @@ const (
 	titleContinue titleItem = iota
 	titleNew
 	titlePractice
+	titleGrimoire
+	titleFame
 	titleWordLists
+	titleSettings
 	titleQuit
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Spelling Practice", "Word Lists", "Quit"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "Quit"}
 
 // NewTitle creates the title screen.
 func NewTitle(*game.Context) game.Scene {
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleWordLists, titleQuit},
+		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleQuit},
 	}
 	if s, ok := saveSummary(); ok {
 		t.saved = s
@@ -51,21 +54,38 @@ func NewTitle(*game.Context) game.Scene {
 	return t
 }
 
+// rows is how many items are in each of the menu's two columns.
+func (t *Title) rows() int { return (len(t.items) + 1) / 2 }
+
 // Update implements game.Scene.
 func (t *Title) Update(ctx *game.Context) error {
 	for _, tr := range t.torches {
 		tr.Update()
 	}
+	n := len(t.items)
 	switch {
 	case input.Up():
 		ctx.Sound.Play(audio.Blip)
-		t.sel = (t.sel + len(t.items) - 1) % len(t.items)
+		t.sel = (t.sel + n - 1) % n
 	case input.Down():
 		ctx.Sound.Play(audio.Blip)
-		t.sel = (t.sel + 1) % len(t.items)
+		t.sel = (t.sel + 1) % n
+	case input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyA):
+		if t.sel >= t.rows() {
+			ctx.Sound.Play(audio.Blip)
+			t.sel -= t.rows()
+		}
+	case input.Repeat(ebiten.KeyArrowRight) || input.Repeat(ebiten.KeyD):
+		if t.sel < t.rows() {
+			ctx.Sound.Play(audio.Blip)
+			t.sel = min(n-1, t.sel+t.rows())
+		}
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
-		switch t.items[t.sel] {
-		case titleContinue:
+		it := t.items[t.sel]
+		if it == titleQuit {
+			return ebiten.Termination
+		}
+		if it == titleContinue {
 			c, err := loadCrawl(ctx)
 			if err != nil {
 				ctx.Sound.Play(audio.Wrong)
@@ -74,18 +94,17 @@ func (t *Title) Update(ctx *game.Context) error {
 			}
 			ctx.Sound.Play(audio.Select)
 			ctx.Replace(c)
-		case titleNew:
-			ctx.Sound.Play(audio.Select)
-			ctx.Replace(NewAdventure(ctx))
-		case titlePractice:
-			ctx.Sound.Play(audio.Select)
-			ctx.Replace(NewPractice(ctx))
-		case titleWordLists:
-			ctx.Sound.Play(audio.Select)
-			ctx.Replace(NewWordLists(ctx))
-		case titleQuit:
-			return ebiten.Termination
+			return nil
 		}
+		ctx.Sound.Play(audio.Select)
+		ctx.Replace(map[titleItem]func(*game.Context) game.Scene{
+			titleNew:       NewNewGame,
+			titlePractice:  NewPractice,
+			titleGrimoire:  func(ctx *game.Context) game.Scene { return NewGrimoire(ctx, nil) },
+			titleFame:      NewHallOfFame,
+			titleWordLists: NewWordLists,
+			titleSettings:  NewSettings,
+		}[it](ctx))
 	}
 	return nil
 }
@@ -105,44 +124,38 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 	for i, r := range logo {
 		s := string(r)
 		dy := int(math.Round(math.Sin(float64(ctx.Tick)*0.05+float64(i)*0.6) * 4))
-		f.DrawOutline(dst, s, x+scale, 56+dy+scale, scale, pal.Mahogany, pal.Mahogany) // drop shadow
-		f.DrawOutline(dst, s, x, 56+dy, scale, pal.Yellow, pal.Black)
+		f.DrawOutline(dst, s, x+scale, 40+dy+scale, scale, pal.Mahogany, pal.Mahogany) // drop shadow
+		f.DrawOutline(dst, s, x, 40+dy, scale, pal.Yellow, pal.Black)
 		x += f.Width(s, scale)
 	}
-	f.DrawCentered(dst, "~ A Dungeon of Words ~", game.ScreenW/2, 150, 2, pal.Tan)
+	f.DrawCentered(dst, "~ A Dungeon of Words ~", game.ScreenW/2, 132, 2, pal.Tan)
+	if t.saved != "" {
+		f.DrawCentered(dst, "Saved: "+t.saved, game.ScreenW/2, 172, 1, pal.Ice)
+	}
 
-	// Menu. The saved adventure is described next to Continue.
-	mw := 0
+	// Menu, in two columns.
+	colW := 0
 	for _, it := range t.items {
-		w := f.Width(titleLabels[it], 2)
-		if it == titleContinue {
-			w += f.Width(t.saved, 1) + 24
-		}
-		mw = max(mw, w)
+		colW = max(colW, f.Width(titleLabels[it], 2))
 	}
-	mw += 88
-	step := 28
-	if len(t.items) > 4 {
-		step = 26
-	}
-	mh := step*len(t.items) + 24
-	mx, my := game.ScreenW/2-mw/2, min(205, game.ScreenH-26-mh)
+	colW += 60
+	const step = 26
+	rows := t.rows()
+	mw, mh := colW*2+16, step*rows+20
+	mx, my := game.ScreenW/2-mw/2, 196
 	gfx.Window(dst, mx, my, mw, mh)
 	for i, it := range t.items {
-		y := my + 14 + i*step
+		x, y := mx+8+(i/rows)*colW, my+10+(i%rows)*step
 		c := pal.Steel
 		if i == t.sel {
 			c = pal.White
 			if ctx.Tick/20%2 == 0 {
-				f.Draw(dst, "►", mx+18, y, 2, pal.Yellow)
+				f.Draw(dst, "►", x+10, y, 2, pal.Yellow)
 			}
 		}
-		f.DrawShadow(dst, titleLabels[it], mx+44, y, 2, c)
-		if it == titleContinue {
-			f.DrawShadow(dst, t.saved, mx+mw-20-f.Width(t.saved, 1), y+8, 1, pal.Ash)
-		}
+		f.DrawShadow(dst, titleLabels[it], x+36, y, 2, c)
 	}
 
-	f.DrawShadow(dst, "↑/↓ choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
+	f.DrawShadow(dst, "Arrows choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
 	f.DrawShadow(dst, Version, game.ScreenW-8-f.Width(Version, 1), game.ScreenH-20, 1, pal.Ash)
 }

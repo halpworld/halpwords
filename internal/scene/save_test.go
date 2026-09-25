@@ -9,6 +9,7 @@ import (
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/words"
@@ -20,7 +21,7 @@ func testContext(t *testing.T) *game.Context {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &game.Context{Lists: lists}
+	return &game.Context{Lists: lists, Profile: profile.New(), Sound: &game.Sound{Muted: true}}
 }
 
 // useTempDir points the save folder at a fresh temporary folder.

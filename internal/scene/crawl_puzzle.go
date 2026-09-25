@@ -57,7 +57,7 @@ func (c *Crawl) startPuzzle(at dungeon.Point, lock puzzle.Lock) {
 // dealPuzzle puts a new puzzle on the lock.
 func (c *Crawl) dealPuzzle() {
 	lp := c.puzzle
-	lp.p = puzzle.New(lp.lock, c.run.depth, c.run.deck, c.run.lang, c.run.rng)
+	lp.p = puzzle.New(lp.lock, c.run.depth, c.run.deck, c.run.lang, c.run.rules(), c.run.rng)
 	lp.pick, lp.showing, lp.hints = 0, false, 0
 	lp.field, lp.choice, lp.fields = nil, nil, nil
 	switch lp.p.Answer() {
@@ -294,7 +294,7 @@ func (c *Crawl) solvePuzzle() {
 		shown = dialed(lp)
 	}
 	res := lp.p.Check(a)
-	c.scoreAnswer(lp.p.Word(), res.Tier, lp.hints > 0)
+	c.scoreAnswer(lp.p.Word(), res.Result, shown, lp.hints > 0, 0)
 	lp.lines = lp.lines[:0]
 	for _, s := range res.Solution {
 		lp.lines = append(lp.lines, logLine{s, pal.White})
@@ -306,12 +306,14 @@ func (c *Crawl) solvePuzzle() {
 	switch {
 	case lp.p.Answer() == puzzle.Pick && !res.Passed():
 		lp.lines = append(lp.lines, logLine{"You picked " + lp.p.Tiles()[lp.pick] + ".", pal.Steel})
-	case res.Tier == words.AccentSlip && shown != "":
-		lp.lines = append(lp.lines, logLine{verb + shown + ". Watch the accents!", pal.Cyan})
+	case res.Tier < words.Correct && shown != "":
+		lang := c.run.lang
+		if lp.p.Answer() == puzzle.Native {
+			lang = words.English
+		}
+		lp.lines = append(lp.lines, mistakeLine(verb+shown+".", shown, res.Result, lang))
 	case res.Tier == words.AccentSlip:
 		lp.lines = append(lp.lines, logLine{"Watch the accents!", pal.Cyan})
-	case !res.Passed() && shown != "":
-		lp.lines = append(lp.lines, logLine{verb + shown + ".", pal.Steel})
 	}
 	lp.showing = true
 	if !res.Passed() {
@@ -332,6 +334,7 @@ func (c *Crawl) solvePuzzle() {
 	c.play(audio.Chest)
 	ch := c.level.Chests[lp.at]
 	ch.Open = true
+	c.run.tally.Chests++
 	gold := h.GoldFind(ch.Gold, true)
 	h.Gold += gold
 	loot := fmt.Sprintf("The chest opens: %d gold! +%d XP", gold, xp)
@@ -482,15 +485,30 @@ func (c *Crawl) drawPuzzlePanel(dst *ebiten.Image, ctx *game.Context, x, y, w in
 		for i, line := range wrap(f, clue, w-40) {
 			f.DrawCentered(dst, line, cx, y+26+i*16, 1, pal.White)
 		}
-		drawTyped(dst, ctx, lp.field.Text(), cx, y+62, min(560, w-40), 2, !c.muted)
+		c.drawPuzzleTyped(dst, ctx, cx, y+62, min(560, w-40))
 	case len(tiles) > 0:
 		f.DrawCentered(dst, lp.p.Clue(), cx, y+26, f.FitScale(lp.p.Clue(), w-40, 1), pal.White)
 		drawTiles(dst, ctx, tiles, cx, y+44)
-		drawTyped(dst, ctx, lp.field.Text(), cx, y+64, min(560, w-40), 2, !c.muted)
+		c.drawPuzzleTyped(dst, ctx, cx, y+64, min(560, w-40))
 	default:
 		f.DrawCentered(dst, lp.p.Clue(), cx, y+28, f.FitScale(lp.p.Clue(), w-40, 2), pal.White)
-		drawTyped(dst, ctx, lp.field.Text(), cx, y+60, min(560, w-40), 2, !c.muted)
+		c.drawPuzzleTyped(dst, ctx, cx, y+60, min(560, w-40))
 	}
+}
+
+// drawPuzzleTyped draws what the hero has typed, with typos marked when
+// live highlighting is on.
+func (c *Crawl) drawPuzzleTyped(dst *ebiten.Image, ctx *game.Context, cx, y, width int) {
+	lp := c.puzzle
+	good := -1
+	if c.run.settings.Highlight {
+		lang := c.run.lang
+		if lp.p.Answer() == puzzle.Native {
+			lang = words.English
+		}
+		good = goodPrefix(lp.field.Text(), []string{puzzleAnswer(lp.p)}, lang)
+	}
+	drawTypedMarked(dst, ctx, lp.field.Text(), good, cx, y, width, 2, !c.muted)
 }
 
 // wrap splits s into lines no wider than width at scale 1.

@@ -21,6 +21,7 @@ type typed struct {
 	// grade holds the accepted answers, graded in lang.
 	grade words.Entry
 	lang  *words.Language
+	rules words.Rules
 	// shown starts the solution line: "shown = answer".
 	shown string
 }
@@ -33,7 +34,7 @@ func (t *typed) Tiles() []string { return t.tiles }
 func (t *typed) Word() int       { return t.id }
 
 func (t *typed) Check(a Attempt) Result {
-	res := words.Grade(a.Text, t.grade, t.lang, t.lang.Defaults, a.UsedBackspace)
+	res := words.Grade(a.Text, t.grade, t.lang, t.rules, a.UsedBackspace)
 	return Result{Result: res, Solution: []string{t.shown + " = " + res.Expected}}
 }
 
@@ -43,7 +44,7 @@ func newSpell(e words.Entry, id int, lang *words.Language) *typed {
 		kind: Spell, answer: Foreign, id: id,
 		ask:   "Spell in " + lang.Name + ":",
 		clue:  e.Prompt,
-		grade: e, lang: lang, shown: e.Prompt,
+		grade: e, lang: lang, rules: lang.Defaults, shown: e.Prompt,
 	}
 }
 
@@ -65,7 +66,7 @@ func newMissing(e words.Entry, id, depth int, lang *words.Language, rng *rand.Ra
 		kind: Missing, answer: Foreign, id: id,
 		ask:   "Fill in the " + lang.Name + " word:",
 		clue:  e.Prompt + "  →  " + blank,
-		grade: only(e, word), lang: lang, shown: e.Prompt,
+		grade: only(e, word), lang: lang, rules: lang.Defaults, shown: e.Prompt,
 	}
 }
 
@@ -111,7 +112,7 @@ func newAnagram(e words.Entry, id int, lock Lock, depth int, all []words.Entry, 
 		ask:   ask,
 		clue:  e.Prompt + "  →  " + string(pattern),
 		tiles: tiles,
-		grade: only(e, word), lang: lang, shown: e.Prompt,
+		grade: only(e, word), lang: lang, rules: lang.Defaults, shown: e.Prompt,
 	}
 }
 
@@ -129,7 +130,7 @@ func newReverse(e words.Entry, id int, all []words.Entry) *typed {
 		kind: Reverse, answer: Native, id: id,
 		ask:   "Type the English for this word:",
 		clue:  word,
-		grade: g, lang: words.English, shown: word,
+		grade: g, lang: words.English, rules: words.English.Defaults, shown: word,
 	}
 }
 

@@ -53,6 +53,7 @@ type crossword struct {
 	answers []string // the words without articles
 	id      int
 	lang    *words.Language
+	rules   words.Rules
 }
 
 // newCrossword returns nil if the deck has no words that cross.
@@ -71,7 +72,7 @@ func newCrossword(deck *words.Deck, depth int, lang *words.Language, rng *rand.R
 	if !ok {
 		return nil
 	}
-	c := &crossword{id: id, lang: lang}
+	c := &crossword{id: id, lang: lang, rules: lang.Defaults}
 	c.add(across, Placed{Len: len(units(bare(across, lang))), Clue: across.Prompt})
 	a := units(c.answers[0])
 
@@ -172,7 +173,7 @@ func (c *crossword) Check(a Attempt) Result {
 		if i < len(a.Texts) {
 			typed = a.Texts[i]
 		}
-		res := words.Grade(typed, only(e, c.answers[i]), c.lang, c.lang.Defaults, a.UsedBackspace)
+		res := words.Grade(typed, only(e, c.answers[i]), c.lang, c.rules, a.UsedBackspace)
 		r.Tier = min(r.Tier, res.Tier)
 		r.MarkError = r.MarkError || res.MarkError
 		want = append(want, c.answers[i])
