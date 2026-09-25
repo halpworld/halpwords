@@ -24,7 +24,7 @@ MACOS_SIGN_IDENTITY ?= -
 STATICCHECK := honnef.co/go/tools/cmd/staticcheck@2026.2.1
 
 .PHONY: help run test vet check sounds balance icon build build-mac build-mac-intel build-mac-universal \
-	bundle-mac winres build-windows build-windows-arm64 build-linux build-web serve-web \
+	bundle-mac winres build-windows build-windows-arm64 build-linux build-web serve-web build-moved \
 	release-mac release-windows release-linux release-web clean
 
 help: ## Show this help
@@ -100,6 +100,13 @@ build-web: icon ## Build the WebAssembly version into dist/web
 	sed -e 's/@VERSION@/$(VERSION)/g' -e "s/@WASM_SIZE@/$$(wc -c < $(DIST)/web/$(APP).wasm | tr -d ' ')/g" \
 		build/web/index.html > $(DIST)/web/index.html
 	@echo "Built $(DIST)/web. Try it with: make serve-web"
+
+# The "We've moved" page for the web game's old address, which hands a
+# player's saves over to the new one. See docs/RELEASING.md.
+build-moved: icon ## Build the page for the web game's old address into dist/moved
+	mkdir -p $(DIST)/moved
+	cp web/moved/index.html web/moved/moved.js $(DIST)/icon/favicon.png $(DIST)/moved/
+	@echo "Built $(DIST)/moved"
 
 serve-web: build-web ## Build the web version and serve it at http://localhost:8000
 	python3 -m http.server -d $(DIST)/web 8000

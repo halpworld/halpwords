@@ -24,7 +24,7 @@ func main() {
 	}
 	ebiten.SetWindowIcon(icons) // macOS shows the app's own icon instead
 
-	g, err := game.New(scene.NewTitle)
+	g, err := game.New(scene.NewStart)
 	if err != nil {
 		game.Crash(err, nil)
 		log.Fatal(err)

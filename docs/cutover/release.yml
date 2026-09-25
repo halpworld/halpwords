@@ -1,0 +1,188 @@
+# PROPOSED: the release workflow after the web game moves to
+# play.halpwords.com (W1.16). Copy it over .github/workflows/release.yml at
+# the cut-over, following the checklist in docs/RELEASING.md. Changes from
+# the current workflow:
+#   - the web game is pushed to the halpworld/play repository, whose GitHub
+#     Pages site has the custom domain play.halpwords.com (job "play");
+#   - this repository's own Pages site, the old address
+#     halpworld.github.io/halpwords/, now serves the "We've moved" page
+#     (dist/moved), and only after the new address has the game.
+#
+# Builds every platform when a version tag such as v1.0.0 is pushed,
+# publishes them as a GitHub release, puts the web version on
+# play.halpwords.com and the "We've moved" page on the old GitHub Pages
+# address. See docs/RELEASING.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # a dry run: builds everything, publishes nothing
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Ebitengine dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev
+      - run: make vet
+      - run: make test
+
+  linux-windows-web:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Ebitengine dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev
+      - run: make release-linux release-windows release-web build-moved
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-windows-web
+          path: dist/release/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/web
+      # The old address serves the "We've moved" page.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/moved
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    env:
+      SIGNED: ${{ secrets.MACOS_CERT_P12 != '' }}
+      NOTARISED: ${{ secrets.APPLE_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # With these secrets set, the app is signed with a Developer ID and
+      # notarised, so it opens without a warning. Without them it is
+      # signed just for the Mac that runs it.
+      - name: Import the signing certificate
+        if: env.SIGNED == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          rm cert.p12
+      - name: Build Halpwords.app
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY || '-' }}
+        run: make release-mac MACOS_SIGN_IDENTITY="$MACOS_SIGN_IDENTITY"
+      - name: Notarise
+        if: env.SIGNED == 'true' && env.NOTARISED == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          zip=$(ls dist/release/Halpwords-*-macos.zip)
+          xcrun notarytool submit "$zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple dist/Halpwords.app
+          rm "$zip"
+          (cd dist && ditto -c -k --keepParent Halpwords.app "release/$(basename "$zip")")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: dist/release/*
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-windows-web, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - name: Checksums
+        run: cd release && sha256sum * > SHA256SUMS.txt
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=""
+          if [ -f CHANGELOG.md ]; then
+            # The section for this version, up to the next heading.
+            notes=$(awk -v v="## ${GITHUB_REF_NAME}" '$0 ~ "^"v {on=1; next} /^## / && on {exit} on' CHANGELOG.md)
+          fi
+          gh release create "$GITHUB_REF_NAME" release/* --title "Halpwords $GITHUB_REF_NAME" --notes "${notes:-Halpwords $GITHUB_REF_NAME}"
+
+  # Puts the web game on play.halpwords.com: the halpworld/play
+  # repository's Pages site, served from its main branch, with that custom
+  # domain. PLAY_DEPLOY_KEY is the private half of a deploy key with write
+  # access to halpworld/play.
+  play:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: linux-windows-web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: web
+      - name: Push the web game to halpworld/play
+        env:
+          PLAY_DEPLOY_KEY: ${{ secrets.PLAY_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$PLAY_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git clone --depth 1 git@github.com:halpworld/play.git site
+          rsync -a --delete --exclude .git web/ site/
+          echo play.halpwords.com > site/CNAME
+          touch site/.nojekyll
+          cd site
+          git add -A
+          git -c user.name="Halpwords release" -c user.email="noreply@halpwords.com" \
+            commit -m "Halpwords $GITHUB_REF_NAME" || exit 0
+          git push origin HEAD
+
+  # The old address changes only once the new one has the game.
+  pages:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-windows-web, play]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

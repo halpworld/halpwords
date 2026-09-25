@@ -7,6 +7,14 @@ version as its release notes.
 
 ### Added
 
+- **The web game can move house.** Ready for the move from
+  `halpworld.github.io/halpwords` to `play.halpwords.com` (not live yet): a
+  *We've moved* page for the old address (`web/moved`, `make build-moved`)
+  hands the hero, word memory, own word lists, Hall of Fame and settings
+  over in the new address's URL fragment, in parts if a save is very big.
+  The game takes them in once, asks before replacing progress that is
+  already there, and clears the address. AI helper keys stay behind. The
+  cut-over steps are in `docs/RELEASING.md`.
 - **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
   line gives a list its own cloze puzzles, used with or without the AI
   helper (not on scored runs). The answer must be one of the list's
