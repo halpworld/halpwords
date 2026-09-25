@@ -15,12 +15,34 @@ horse = I pull carts and wear shoes made of iron. What am I?
 bird = I have feathers and wings, I build a nest, and I sing in the morning.
 fish = I live in water, I breathe with gills, and I swim with my fins.
 dragon = I am a huge winged beast. I breathe fire and sleep on a pile of gold.
+mouse = I am small and grey with a long tail. I nibble cheese and run from cats.
+cow = I live on a farm, I say "moo", and the farmer gets milk from me.
+pig = I am pink, I love rolling in the mud, and I say "oink".
+sheep = I say "baa", and my woolly coat is made into jumpers.
+rabbit = I have long ears and a fluffy tail. I hop about and nibble carrots.
+wolf = I am a wild cousin of the dog. I live in a pack and howl at the moon.
+bear = I am big and furry, I love honey, and I sleep all winter in a cave.
+snake = I have no legs. I slither along the ground and hiss.
+spider = I have eight legs and I spin a web to catch flies.
+owl = I hoot at night and can turn my head almost all the way round.
+lion = I am called the king of beasts. I have a golden mane and a mighty roar.
+bull = I am a big, strong male cow with horns. Don't wave a red cape at me!
+ox = I am a strong farm animal with horns. I pull the plough across the field.
+fox = I have red fur and a bushy tail. In stories I am always clever and sly.
+duck = I swim on the pond, I have webbed feet, and I say "quack".
 
 ## home
 house = I have walls, a roof and a front door. A family lives inside me.
 book = I have a spine but no bones, and pages full of words to read.
 door = You knock on me, open me and close me to go in or out of a room.
 window = I am made of glass. You look through me to see outside.
+table = I have four legs but I cannot walk. You eat your dinner at me.
+chair = I have four legs and a back. You sit on me.
+bed = You lie on me at night, with a pillow and a blanket, to sleep.
+kitchen = I am the room where food is cooked. The oven and the fridge are in me.
+garden = I am outside the house, full of grass, flowers and maybe vegetables.
+bedroom = I am the room where you sleep at night.
+room = I have four walls, a floor and a ceiling. A house has lots of us.
 
 ## people
 friend = I play with you, help you, and keep your secrets. Who am I?
@@ -38,11 +60,21 @@ sailor = I work on a ship and sail across the sea.
 king = I wear a crown and sit on a throne. I rule the whole land.
 queen = I wear a crown and rule the land. I am married to the king.
 master = I am in charge. The servants of the house must obey me.
+grandmother = I am your mum's mum or your dad's mum. You might call me Granny.
+grandfather = I am your mum's dad or your dad's dad. You might call me Grandad.
+baby = I am tiny and new to the world. I cry, sleep and drink milk.
+son = I am a boy. To my mum and dad, I am their child.
+daughter = I am a girl. To my mum and dad, I am their child.
+man = I am a grown-up boy. I might have a beard.
+woman = I am a grown-up girl. I might be a mother, an aunt or a queen.
+soldier = I march in an army, wear armour and follow my general's orders.
+knight = I wear shining armour, ride a horse and serve the king.
 
 ## gods
 god = People built temples for me and prayed to me. Zeus and Jupiter were two of us.
 goddess = I am a female god, like Athena or Venus.
 soul = I am the part of you that thinks and feels, and it is said I live forever.
+temple = I am a holy building where people of long ago worshipped their gods.
 
 ## places
 castle = I have towers, thick stone walls and a moat. Kings and knights live in me.
@@ -52,6 +84,16 @@ sea = I am wide, salty and full of waves. Ships sail across me.
 road = People travel along me from town to town. The Romans built me straight.
 field = I am open land where a farmer grows crops or keeps animals.
 island = I am land with water all around me.
+city = I am a very big town, with thousands of people and busy streets.
+river = I flow from the hills down to the sea. Bridges cross over me.
+mountain = I am much taller than a hill. My top may be covered in snow.
+tree = I have a trunk, branches and leaves. Birds build nests in me.
+sky = I am blue by day and dark at night. Clouds float across me.
+moon = I shine at night and change shape, from full and round to a thin crescent.
+star = I twinkle in the night sky. You can make a wish on me.
+earth = I am the ground under your feet, and the name of our planet.
+day = I begin when the sun comes up and end when it goes down.
+night = It is dark, the stars are out, and you are asleep in bed.
 
 ## things
 sword = I am a long sharp blade that a knight carries into battle.
@@ -64,6 +106,12 @@ water = You drink me when you are thirsty. Rain and rivers are made of me.
 sun = I rise in the east, shine all day and set in the west.
 word = I am made of letters. You are learning lots of us right now.
 war = I am a great fight between armies or countries. Peace is my opposite.
+fire = I am hot and bright. I crackle and burn wood in the hearth.
+ship = I sail across the sea, carrying people and cargo.
+money = Coins and banknotes. You pay for things with me.
+monster = I am a scary creature from stories. I lurk in the dungeon.
+ghost = I am see-through and float through walls. I say "Boo!"
+battle = I am a fight between two armies on a battlefield.
 
 ## verbs
 I have = Say that something belongs to you: "____ a dog."
@@ -72,3 +120,93 @@ I say = Say what you do when you speak words: "____ hello."
 I love = Say how you feel about your best friend or your family: "____ you."
 I see = Say what you do with your eyes: "____ a dragon!"
 I am = Say who you are: "____ a hero."
+to eat = You do this with food: bite, chew and swallow.
+to drink = You do this with water or juice when you are thirsty.
+to sleep = You do this in bed at night with your eyes closed.
+to run = You do this when you move on your feet much faster than walking.
+to read = You do this with a book: your eyes follow the words.
+to write = You do this with a pen: you put words on paper.
+to speak = You do this when you say words out loud.
+to play = You do this with toys, games or friends, just for fun.
+to see = You do this with your eyes.
+to love = You feel this for your family and your best friends.
+to sing = You do this with a song, using your voice and a tune.
+I walk = Say what you do on your feet, slower than running: "____ to school."
+I carry = Say what you do with a heavy bag: "____ it home."
+I work = Say what you do at your job all day: "____ hard."
+I sleep = Say what you do in bed at night: "____ until morning."
+I hear = Say what you do with your ears: "____ music."
+I run = Say what you do in a race: "____ very fast!"
+I fight = Say what a knight does in battle: "____ the dragon!"
+I come = Say what you do when someone calls you: "____ at once!"
+I give = Say what you do with a present: "____ it to my friend."
+I release = Say what you do when you untie a rope or set a bird free: "____ it."
+I teach = Say what a teacher does in class: "____ the pupils."
+I learn = Say what you do at school: "____ new words."
+I send = Say what you do with a letter at the post office: "____ it."
+I eat = Say what you do with your dinner: "____ it all up."
+
+## school
+school = I am where you go to learn. I have classrooms, teachers and a playground.
+pen = I am full of ink. You write with me.
+pencil = I am made of wood with grey lead inside. You sharpen me and can rub me out.
+bag = You carry your books and your lunch in me.
+student = I go to school every day to learn, and I sit at a desk.
+homework = My teacher gives me this to do at home in the evening.
+
+## food
+bread = The baker makes me from flour. You toast me or make sandwiches with me.
+cheese = I am made from milk. Mice love me, and I go on top of a pizza.
+apple = I am a round fruit, red or green. One a day keeps the doctor away.
+milk = I am white and come from cows. You pour me on your cereal.
+egg = A hen lays me. You can boil me, fry me or scramble me.
+cake = I have candles on top at a birthday party.
+meat = The butcher sells me. Beef, ham and chicken are kinds of me.
+butter = I am yellow and made from cream. You spread me on your toast.
+chocolate = I am a sweet brown treat. Easter eggs are made of me.
+potato = I grow under the ground. You can make me into chips, crisps or mash.
+
+## body
+head = I sit on top of your neck. Your eyes, nose and mouth are on me.
+hand = I am at the end of your arm. I have fingers and a thumb.
+foot = I am at the end of your leg. I have five toes and I wear a shoe.
+eye = You see with me. I blink, and you have two of us.
+nose = I am in the middle of your face. You sniff and smell with me.
+mouth = You eat, talk and smile with me. Your teeth and tongue are inside me.
+arm = I have an elbow and a wrist. You wave me to say hello.
+leg = I have a knee and an ankle. You walk and kick a ball with me.
+heart = I beat in your chest all day and all night. Valentine's cards show me.
+ear = You hear with me. You have one on each side of your head.
+body = I am all of you, from the top of your head to the tips of your toes.
+
+## numbers
+one = I am the smallest counting number: a single thing on its own.
+two = You have this many eyes, ears, hands and feet.
+three = The little pigs, the bears that Goldilocks met, and the sides of a triangle.
+four = A table has this many legs, and so does a dog.
+five = Count the fingers on one hand, with the thumb.
+six = An insect has this many legs, and a dice has this many faces.
+seven = I am the number of days in a week and colours in a rainbow.
+eight = A spider has this many legs, and so does an octopus.
+nine = I am three threes, one less than ten.
+ten = Count all your fingers, or all your toes.
+
+## colours
+red = I am the colour of strawberries, fire engines and ripe tomatoes.
+blue = I am the colour of the sky on a sunny day and of the deep sea.
+green = Grass, leaves and frogs are this colour.
+yellow = Bananas, lemons and the sun are this colour.
+black = I am the colour of the night sky and a crow's feathers.
+white = Snow, milk and clouds are this colour.
+grey = Elephants and rain clouds are this colour.
+pink = Flamingos and piglets are this colour. Mix red and white to make me.
+
+## adjectives
+good = I am the opposite of bad. A kind and helpful person is this.
+bad = I am the opposite of good. A naughty puppy has been this.
+big = I am the opposite of small. An elephant is very this.
+small = I am the opposite of big. A mouse is this.
+happy = You feel this when you smile and laugh. Sad is my opposite.
+brave = A hero is this: not afraid to face the dragon.
+beautiful = I am lovely to look at, like a sunset or a rose.
+wise = An old owl is said to be this. I know a lot and think well.

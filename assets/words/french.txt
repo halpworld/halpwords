@@ -1,4 +1,5 @@
 # Starter list for French. Format: english = answer | other accepted answer
+# Nouns carry their article (le, la, l', les), so players learn the gender.
 title: French - First Steps
 language: fr
 
@@ -8,17 +9,106 @@ cat = le chat
 horse = le cheval
 bird = l'oiseau
 fish = le poisson
+mouse = la souris
+cow = la vache
+pig = le cochon
+sheep = le mouton
+rabbit = le lapin
+wolf = le loup
+bear = l'ours
+snake = le serpent
+spider = l'araignée
+owl = le hibou | la chouette
+
+## family
+mother = la mère
+father = le père
+sister = la sœur
+brother = le frère
+grandmother = la grand-mère
+grandfather = le grand-père
+baby = le bébé
+friend = l'ami | l'amie
+girl = la fille
+boy = le garçon
+teacher = le professeur | la professeure
 
 ## home
 house = la maison
 book = le livre
 door = la porte
 window = la fenêtre
+table = la table
+chair = la chaise
+bed = le lit
+kitchen = la cuisine
+garden = le jardin
+bedroom = la chambre
 
-## people
-friend = l'ami | l'amie
-sister = la sœur
-brother = le frère
+## school
+school = l'école
+pen = le stylo
+pencil = le crayon
+bag = le sac
+student = l'élève
+homework = les devoirs
+
+## food
+bread = le pain
+cheese = le fromage
+apple = la pomme
+milk = le lait
+egg = l'œuf
+water = l'eau
+cake = le gâteau
+meat = la viande
+butter = le beurre
+chocolate = le chocolat
+
+## body
+head = la tête
+hand = la main
+foot = le pied
+eye = l'œil
+nose = le nez
+mouth = la bouche
+arm = le bras
+leg = la jambe
+heart = le cœur
+
+## numbers
+one = un | une
+two = deux
+three = trois
+four = quatre
+five = cinq
+six = six
+seven = sept
+eight = huit
+nine = neuf
+ten = dix
+
+## colours
+red = rouge
+blue = bleu | bleue
+green = vert | verte
+yellow = jaune
+black = noir | noire
+white = blanc | blanche
+grey = gris | grise
+pink = rose
+
+## verbs
+to eat = manger
+to drink = boire
+to sleep = dormir
+to run = courir
+to read = lire
+to write = écrire
+to speak = parler
+to play = jouer
+to see = voir
+to love = aimer
 
 ## dungeon
 castle = le château
@@ -27,3 +117,10 @@ sword = l'épée
 treasure = le trésor
 key = la clé | la clef
 dragon = le dragon
+monster = le monstre
+knight = le chevalier
+king = le roi
+queen = la reine
+gold = l'or
+shield = le bouclier
+ghost = le fantôme

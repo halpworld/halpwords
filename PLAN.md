@@ -198,6 +198,14 @@ bread = le pain
   French, Cambridge Latin Course-style Latin, Athenaze/JACT-style Greek, and
   Junior Cycle Irish. Each pack is checked by a person before release.
 
+  *Now (1.0):* French 102, Latin 98, Greek 96 and Irish 100 words. Nouns
+  carry their article in French and are bare in the others; Latin and
+  Greek adjectives are masculine nominative singular, Latin and Greek verbs
+  1st person present, French verbs infinitives, and Irish verbs the
+  imperative (the dictionary form). Every word has a riddle (180 in all).
+  The lists were drafted for 1.0 and **still need checking by a speaker of
+  each language**.
+
 ### Spaced repetition
 - A Leitner box system (5 boxes) per word per profile. Misses send a word back
   to box 1; perfect answers promote it.
@@ -775,7 +783,7 @@ the secrets are set, and the web version on GitHub Pages
   `tools/balance` (`make balance`) prints, per class and typist, attacks per
   fight, HP lost per fight and to the boss, falls, level and gold per floor;
   `sim_test.go` keeps the balance within bounds.
-- `go vet`, `staticcheck` and `gofmt` in CI.
+- `go vet`, `staticcheck` and `gofmt` in CI (`make vet`).
 
 ---
 
@@ -806,19 +814,26 @@ little more than other monsters. The tuning:
 - DEF takes off at most two thirds of a blow.
 - Every class gains DEF on even levels; the Knight starts with DEF 1, the
   Scribe with 30 HP (+6 a level), the Rogue with DEF 0.
+- *For 1.0*, the starter lists grew from about 20 words to about 100,
+  including very short ones (numbers, colours). Monsters then found easy
+  words for their target, and strong typists finished early fights in one
+  word. Word targets now start at difficulty 6 (floors 1–3 all ask for 6,
+  then it grows by 0.6 a floor as before).
 
-Now, on average (300 runs; HP lost per fight, then to the boss):
+Now, on average (300 runs with the French list; HP lost per fight, then to
+the boss):
 
 | Typist | Floor 1 | Floor 6 | Floor 12 | Fell on floor 12 |
 |---|---|---|---|---|
-| Beginner | 7–11% | 23%, boss 48–55% | 20–23%, boss 67–93% | 87–91% |
-| Average | 3–4% | 10–11%, boss 18–22% | 10–13%, boss 27–37% | 9–20% |
-| Strong | 1–2% | 4–5%, boss 7–10% | 6–8%, boss 14–21% | 0% |
+| Beginner | 5–8% | 21%, boss 42–48% | 18–22%, boss 55–84% | 75–84% |
+| Average | 1–2% | 8–9%, boss 16–19% | 10–12%, boss 25–36% | 2–13% |
+| Strong | 0% | 4%, boss 6–9% | 6–7%, boss 13–19% | 0% |
 
 Beginners are safe on floors 1–3 and meet real danger from floor 5, where
-shrines and relaxed timers help. Strong typists start to fall around
-floors 21–24, which gives Hardcore a ceiling. Fights take two to six
-attacks, so each asks for four to twelve words.
+shrines and relaxed timers help. Fights take about one and a half to six
+attacks (strong typists at the short end), so each asks for three to
+twelve words. Greek plays a little easier than French, as its accents and
+breathings are ignored by default.
 
 Stretch: Oracle NPC, side quests, Bard's Tale, text-to-speech pronunciation
 (useful for French and Irish), two-player race mode, online leaderboard, a

@@ -99,18 +99,18 @@ func (s *Sound) Play(id audio.ID) {
 	if s.pcm[id] == nil {
 		s.pcm[id] = audio.Encode(audio.Render(audio.Sounds[id], audio.SampleRate))
 	}
-	// Let finished voices go, and make room for the new one.
+	// Let finished voices go, and make room for the new one. Since oto
+	// v3.4 a player is freed once nothing refers to it, so a voice still
+	// playing is paused before it is dropped.
 	live := s.voices[:0]
 	for _, v := range s.voices {
 		if v.IsPlaying() {
 			live = append(live, v)
-		} else {
-			v.Close()
 		}
 	}
 	s.voices = live
 	if len(s.voices) >= maxVoices {
-		s.voices[0].Close()
+		s.voices[0].Pause()
 		s.voices = s.voices[1:]
 	}
 	p := s.ctx.NewPlayer(bytes.NewReader(s.pcm[id]))
@@ -179,7 +179,6 @@ type music struct {
 	playing audio.Track
 	p       *oto.Player
 	fade    float64 // 0 silent to 1 full
-	out     bool    // fading out, to change track
 
 	cache   map[audio.Track][]byte
 	order   []audio.Track // oldest first
@@ -211,7 +210,7 @@ func (m *music) update(s *Sound) {
 			m.volume(s)
 			return
 		}
-		m.p.Close()
+		m.p.Pause()
 		m.p, m.fade = nil, 0
 	}
 	if m.p == nil && m.want.Mood != audio.Quiet {

@@ -95,7 +95,8 @@ file.
   included. Suspend and quit from the pause menu, and pick up where you
   left off with **Continue**.
 - **Four languages.** French, Latin, Ancient Greek (polytonic) and Irish, with
-  built-in starter word lists.
+  a built-in starter list of about 100 words each: animals, family, home,
+  school, food, the body, numbers, colours, verbs, gods and the dungeon.
 - **Forgiving grading.** Answers are graded as Perfect, Correct, Accent slip,
   Graze or Miss, so a missing accent or a small typo still counts for
   something.
