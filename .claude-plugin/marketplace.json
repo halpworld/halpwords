@@ -1,0 +1,16 @@
+{
+  "name": "halpwords",
+  "owner": {
+    "name": "Halpwords"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for working on Halpwords and halpwords-server."
+  },
+  "plugins": [
+    {
+      "name": "halpwords",
+      "source": "./plugins/halpwords",
+      "description": "Sub-agents for the Halpwords game and server: the game-server contract, languages, children's privacy and safety, LLM features, balance, the plans, and UI."
+    }
+  ]
+}

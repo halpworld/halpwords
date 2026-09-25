@@ -1,0 +1,10 @@
+{
+  "name": "halpwords",
+  "version": "0.1.0",
+  "description": "Sub-agents for the Halpwords game and server: the game-server contract, languages, children's privacy and safety, LLM features, balance, the plans, and UI.",
+  "author": {
+    "name": "Kenth Fagerlund"
+  },
+  "repository": "https://github.com/halpworld/halpwords",
+  "license": "Apache-2.0"
+}

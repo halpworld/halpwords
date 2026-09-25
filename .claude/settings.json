@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "halpwords": {
+      "source": {
+        "source": "github",
+        "repo": "halpworld/halpwords"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "halpwords@halpwords": true
+  }
+}
