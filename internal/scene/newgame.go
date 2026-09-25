@@ -6,11 +6,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/audio"
-	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/pkg/compete"
 )
 
 // modeChoice is a way to play, offered by the New Adventure screen.

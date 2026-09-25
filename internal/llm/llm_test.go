@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // memStore keeps files in memory.

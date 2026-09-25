@@ -7,7 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/safety"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Batch sizes: how many words one request covers.
@@ -67,7 +68,7 @@ Words:
 %s
 Reply with JSON only: {"items":[{"n":1,"cloze":"...","cloze_en":"...","riddle":"..."}]}`,
 		langLine(lang), lang.Name, lang.Name, wordLines(todo))
-	text, err := s.Ask(ctx, false, Policy, prompt, 250*len(todo)+200)
+	text, err := s.Ask(ctx, false, safety.Policy, prompt, 250*len(todo)+200)
 	if err != nil {
 		return 0, err
 	}
@@ -137,7 +138,7 @@ func CheckCloze(text, english string, e words.Entry, lang *words.Language) (Cloz
 	if strings.Count(text, Gap) != 1 || !short(text, 70) || !short(english, 100) {
 		return Cloze{}, false
 	}
-	if !Clean(text) || !Clean(english) || !hasScript(text, lang) {
+	if !safety.Clean(text) || !safety.Clean(english) || !hasScript(text, lang) {
 		return Cloze{}, false
 	}
 	answer := e.Answers[0]
@@ -164,7 +165,7 @@ func CheckCloze(text, english string, e words.Entry, lang *words.Language) (Cloz
 // CheckRiddle checks a generated riddle for e and tidies it.
 func CheckRiddle(riddle string, e words.Entry) (string, bool) {
 	riddle = tidy(riddle)
-	if !short(riddle, 110) || !Clean(riddle) {
+	if !short(riddle, 110) || !safety.Clean(riddle) {
 		return "", false
 	}
 	low := strings.ToLower(riddle)
@@ -188,7 +189,7 @@ Write %d short battle cries that silly dungeon monsters shout at a young hero, i
 %s
 Reply with JSON only: {"taunts":[{"text":"...","english":"..."}]}`,
 		langLine(lang), tauntMake, lang.Name, wordLines(sample))
-	text, err := s.Ask(ctx, false, Policy, prompt, 900)
+	text, err := s.Ask(ctx, false, safety.Policy, prompt, 900)
 	if err != nil {
 		return 0, err
 	}
@@ -213,7 +214,7 @@ func CheckTaunt(text, english string, lang *words.Language) (Taunt, bool) {
 	text, english = tidy(text), tidy(english)
 	text = strings.Trim(text, "\"«»“”")
 	english = strings.Trim(english, "\"“”()")
-	if !short(text, 50) || !short(english, 70) || !Clean(text) || !Clean(english) ||
+	if !short(text, 50) || !short(english, 70) || !safety.Clean(text) || !safety.Clean(english) ||
 		!hasScript(text, lang) || strings.EqualFold(text, english) {
 		return Taunt{}, false
 	}
@@ -240,7 +241,7 @@ func (s *Service) FillTips(ctx context.Context, lang *words.Language, entries []
 A student keeps misspelling these words. For each, write one memory tip of at most 100 characters: a vivid memory hook, a link to an English word, or a note on the tricky letters. Be accurate; only give an etymology you are sure of.
 %s
 Reply with JSON only: {"tips":[{"n":1,"tip":"..."}]}`, langLine(lang), wordLines(todo))
-	text, err := s.Ask(ctx, false, Policy, prompt, 120*len(todo)+120)
+	text, err := s.Ask(ctx, false, safety.Policy, prompt, 120*len(todo)+120)
 	if err != nil {
 		return 0, err
 	}
@@ -256,7 +257,7 @@ Reply with JSON only: {"tips":[{"n":1,"tip":"..."}]}`, langLine(lang), wordLines
 	n := 0
 	for _, t := range out.Tips {
 		tip := tidy(t.Tip)
-		if t.N < 1 || t.N > len(todo) || !short(tip, 120) || !Clean(tip) {
+		if t.N < 1 || t.N > len(todo) || !short(tip, 120) || !safety.Clean(tip) {
 			continue
 		}
 		bank.setTip(todo[t.N-1], tip)

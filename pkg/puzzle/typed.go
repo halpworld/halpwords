@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // typed is a puzzle answered by typing one word: Spell, Missing, Anagram and

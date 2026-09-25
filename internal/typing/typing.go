@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // MaxLen is the longest answer the field accepts, in characters.

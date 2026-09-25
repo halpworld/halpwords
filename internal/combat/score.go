@@ -1,7 +1,7 @@
 // Package combat holds the battle formulas.
 package combat
 
-import "github.com/halpworld/halpwords/internal/words"
+import "github.com/halpworld/halpwords/pkg/words"
 
 // TargetTime is the time in seconds a fluent typist needs for an answer of n
 // characters. Answering faster than this gives a speed bonus.

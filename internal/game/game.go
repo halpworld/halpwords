@@ -20,7 +20,7 @@ import (
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/unifont"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // The logical screen size. Everything is drawn at this size and then scaled.

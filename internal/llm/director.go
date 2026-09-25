@@ -6,7 +6,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/safety"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Floor is what the Dungeon Director is told about the next floor.
@@ -71,7 +72,7 @@ Reply with JSON only:
  "boss": ""}`,
 		f.Depth, f.Lang.Name, wordLines(f.Words[:min(len(f.Words), 12)]), strings.Join(tags, ", "),
 		strings.Join(f.Monsters, ", "), boss, themes.String(), f.Lang.Name)
-	text, err := s.Ask(ctx, false, Policy, prompt, 700)
+	text, err := s.Ask(ctx, false, safety.Policy, prompt, 700)
 	if err != nil {
 		return nil, err
 	}
@@ -104,17 +105,17 @@ func nameLike(s string) bool {
 // the other parts are dropped if they fail the checks.
 func CheckScript(name string, theme *int, intro string, lore []string, monsters map[string]string, boss string, f Floor) (*Script, error) {
 	sc := &Script{Name: tidy(name), Theme: -1, Intro: tidy(intro)}
-	if !short(sc.Name, 28) || !Clean(sc.Name) || !nameLike(sc.Name) {
+	if !short(sc.Name, 28) || !safety.Clean(sc.Name) || !nameLike(sc.Name) {
 		return nil, ErrEmpty
 	}
 	if theme != nil && *theme >= 0 && *theme < len(f.Themes) {
 		sc.Theme = *theme
 	}
-	if !short(sc.Intro, 100) || !Clean(sc.Intro) {
+	if !short(sc.Intro, 100) || !safety.Clean(sc.Intro) {
 		sc.Intro = ""
 	}
 	for _, l := range lore {
-		if l = tidy(l); short(l, 100) && Clean(l) && len(sc.Lore) < 4 {
+		if l = tidy(l); short(l, 100) && safety.Clean(l) && len(sc.Lore) < 4 {
 			sc.Lore = append(sc.Lore, l)
 		}
 	}
@@ -124,14 +125,14 @@ func CheckScript(name string, theme *int, intro string, lore []string, monsters 
 	}
 	for k, v := range monsters {
 		v = tidy(v)
-		if known[k] && short(v, 22) && Clean(v) && nameLike(v) {
+		if known[k] && short(v, 22) && safety.Clean(v) && nameLike(v) {
 			if sc.Names == nil {
 				sc.Names = map[string]string{}
 			}
 			sc.Names[k] = v
 		}
 	}
-	if b := tidy(boss); f.Boss != "" && short(b, 24) && Clean(b) && nameLike(b) {
+	if b := tidy(boss); f.Boss != "" && short(b, 24) && safety.Clean(b) && nameLike(b) {
 		sc.Boss = b
 	}
 	return sc, nil

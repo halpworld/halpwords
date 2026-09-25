@@ -9,8 +9,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/game"
-	"github.com/halpworld/halpwords/internal/proc"
 	"github.com/halpworld/halpwords/internal/scene"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 func main() {

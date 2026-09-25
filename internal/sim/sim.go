@@ -16,7 +16,7 @@ import (
 	"github.com/halpworld/halpwords/internal/combat"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/rpg"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Typist is how well a bot spells and how fast it types.

@@ -6,7 +6,7 @@ package puzzle
 import (
 	"math/rand/v2"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Kind is a type of puzzle.

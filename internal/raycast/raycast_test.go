@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
-	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 func startCamera(l *dungeon.Level) Camera {

@@ -73,15 +73,18 @@ halpwords/
 │   ├── gfx/                     # palette, procedural tiles, sprite generator,
 │   │                            # text rendering, particles, screen shake, lighting
 │   ├── audio/                   # sfxr-style synth, procedural music sequencer
-│   ├── words/                   # word packs, answer matching, Unicode normalisation, SRS
 │   ├── combat/                  # damage/dodge formulas, monster traits, encounter builder
-│   ├── puzzle/                  # puzzle interface, generators, fixed puzzle bank
 │   ├── rpg/                     # stats, levelling, items, equipment, loot tables
-│   ├── compete/                 # Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
 │   ├── profile/                 # settings, word memory and Hall of Fame, kept between runs
 │   ├── llm/                     # provider interface, Anthropic + OpenAI-compatible,
 │   │                            # prompt templates, JSON validation, cache, budget
 │   └── save/                    # profiles, run saves, settings (JSON in user config dir)
+├── pkg/                         # public API, also used by halpwords-server
+│   ├── words/                   # word packs, answer matching, Unicode normalisation, SRS
+│   ├── puzzle/                  # puzzle interface, generators, fixed puzzle bank
+│   ├── compete/                 # Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
+│   ├── proc/                    # procedural pixel art, the app icon
+│   └── safety/                  # family-safe AI policy and text filter
 ├── assets/                      # embedded: font, word packs, puzzle bank, hero template
 │   ├── fonts/                   # Unifont subset (.hex) + OFL licence
 │   ├── words/                   # starter lists: french.txt, latin.txt, greek.txt, irish.txt
@@ -93,6 +96,17 @@ Rules:
 - **Game logic is pure Go with no Ebitengine imports** (`dungeon`, `words`,
   `combat`, `puzzle`, `rpg`, `compete`, `profile`, `llm`). That makes it unit-testable, deterministic
   from a seed, and portable.
+- **`pkg/` is a public API.** halpwords-server imports `pkg/words`,
+  `pkg/compete`, `pkg/puzzle`, `pkg/proc` and `pkg/safety` (list format,
+  grading, word memory, seeds and scores, worksheets, pictures, the AI
+  policy), so the two never disagree. Rules for it:
+  - No Ebitengine, `internal/game`, `internal/scene` or `internal/gfx`,
+    directly or through another package; `pkg/imports_test.go` checks this.
+  - Any change to an exported name or to behaviour the server relies on
+    (list format, grading, scores) needs a note in `CHANGELOG.md`, and
+    breaking changes are avoided: add, don't rename.
+  - The server requires a commit or tag of this module, so nothing there
+    changes until it moves to a newer one.
 - **Scenes are a stack** (explore → battle → back to explore; puzzle overlays).
 - **Seeded RNG everywhere**, so a dungeon seed can reproduce a run for debugging
   and sharing.
@@ -353,7 +367,7 @@ so none need an LLM.
 | **Riddle / cloze** | Hand-written riddles and fill-in-the-blank sentences from `assets/puzzles/`. |
 | **Reverse rune** | Given the foreign word, type the native one (recognition practice). |
 
-*Now (M3, done):* `internal/puzzle` has a `Puzzle` interface (`Kind`,
+*Now (M3, done):* `internal/puzzle` (now `pkg/puzzle`) has a `Puzzle` interface (`Kind`,
 `Answer`, `Ask`, `Clue`, `Tiles`, `Check`, `Word`) with no Ebitengine
 dependency; the crawl scene draws it and reads the keys. Puzzles answered by
 setting slots (pairs, tumblers) also implement `Chooser`, and crosswords
@@ -544,7 +558,7 @@ mastery (SRS data) is **always** kept, so every run makes you better.
 - An online leaderboard is a possible later addition (it needs a small server,
   which is out of scope for now).
 
-*Now (M5, done):* `internal/compete` (no Ebitengine dependency) holds the
+*Now (M5, done):* `internal/compete` (now `pkg/compete`) (no Ebitengine dependency) holds the
 score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
 `halloffame.json`.
 

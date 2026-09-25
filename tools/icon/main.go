@@ -14,7 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 func main() {

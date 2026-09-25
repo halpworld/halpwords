@@ -735,23 +735,25 @@ internal/game/     main loop, scene stack, pixel-perfect scaling
 internal/scene/    screens (title, practice, the dungeon crawl, ...)
 internal/dungeon/  floor generation, monsters, bosses, shrines and shops
 internal/rpg/      classes, stats, levels, items and gear (no Ebitengine dependency)
-internal/compete/  Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
 internal/profile/  settings, word progress and the Hall of Fame, kept between runs
 internal/save/     save files (local storage on the web)
 internal/raycast/  first-person 3D view
-internal/words/    word lists, languages, grading, spaced repetition, mistake kinds
 internal/typing/   text entry, Tab accents, Greek input mode
 internal/combat/   battle formulas and monster trait effects
-internal/puzzle/   door and chest word puzzles (no Ebitengine dependency)
 internal/llm/      optional AI: providers, keys, budget, Director, generated content (no Ebitengine dependency)
 internal/clipboard/ pasting from the system clipboard
 internal/audio/    sound effect synth and music composer (no Ebitengine dependency)
 internal/sim/      typing bots that play the dungeon, to check the balance (no Ebitengine dependency)
 internal/input/    keyboard helpers
-internal/proc/     procedural pixel art and the app icon (no Ebitengine dependency)
 internal/gfx/      drawing: text, windows, torches, sparks
 internal/pal/      the 32-colour palette
 internal/unifont/  bitmap font parser
+pkg/               public API shared with halpwords-server (no Ebitengine dependency):
+pkg/words/         word lists, languages, grading, spaced repetition, mistake kinds
+pkg/compete/       Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
+pkg/puzzle/        door and chest word puzzles
+pkg/proc/          procedural pixel art and the app icon
+pkg/safety/        family-safe policy and filter for generated text
 assets/            embedded font, starter word lists and riddle bank
 tools/fontsubset/  regenerates the font subset from GNU Unifont
 tools/sfxdump/     writes the sound effects and music as WAV files

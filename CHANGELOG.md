@@ -3,6 +3,16 @@
 Notable changes to Halpwords. The release workflow uses the section for a
 version as its release notes.
 
+## Unreleased
+
+### Changed
+
+- **Shared packages.** `words`, `compete`, `puzzle` and `proc` moved from
+  `internal/` to `pkg/`, and the AI safety policy and filter (`Policy`,
+  `Clean`) moved from `internal/llm` to `pkg/safety`, so halpwords-server
+  can import them. They are now a public API: changes to them are noted
+  here. No change to how the game plays.
+
 ## v1.0.0
 
 The first release: every milestone in [PLAN.md](PLAN.md) is done.

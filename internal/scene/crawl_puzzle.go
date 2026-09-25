@@ -13,10 +13,10 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/puzzle"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/puzzle"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // lockPuzzle is a word puzzle on a sealed door or a chest. There is no

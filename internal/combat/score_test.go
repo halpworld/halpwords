@@ -3,7 +3,7 @@ package combat
 import (
 	"testing"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func TestSpeed(t *testing.T) {

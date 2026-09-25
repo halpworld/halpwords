@@ -14,11 +14,11 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
-	"github.com/halpworld/halpwords/internal/puzzle"
 	"github.com/halpworld/halpwords/internal/raycast"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
+	"github.com/halpworld/halpwords/pkg/proc"
+	"github.com/halpworld/halpwords/pkg/puzzle"
 )
 
 // Layout of the crawl screen, in screen pixels unless noted.

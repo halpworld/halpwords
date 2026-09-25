@@ -8,13 +8,13 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/combat"
-	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
+	"github.com/halpworld/halpwords/pkg/compete"
 )
 
 const exploreHelp = "↑↓ walk ←→ turn Q/E strafe Space use P potion I items M map Esc menu"

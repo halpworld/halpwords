@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/halpworld/halpwords/internal/game"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func useTempUserDir(t *testing.T) {

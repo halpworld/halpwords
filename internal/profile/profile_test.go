@@ -5,9 +5,9 @@ package profile
 import (
 	"testing"
 
-	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/save"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func useTempDir(t *testing.T) {

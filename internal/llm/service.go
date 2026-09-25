@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpwords/pkg/safety"
 )
 
 // Store keeps the service's files. The game passes its save folder.
@@ -497,7 +499,7 @@ func (s *Service) Check(p ProviderID) {
 func (s *Service) Try() *Job[string] {
 	return Start(func() (string, error) {
 		text, err := s.Ask(context.Background(), false,
-			Policy, "In at most 12 words, greet a young adventurer about to enter a dungeon of words.", 60)
+			safety.Policy, "In at most 12 words, greet a young adventurer about to enter a dungeon of words.", 60)
 		if err == nil {
 			text = firstLine(text)
 			s.mu.Lock()

@@ -38,13 +38,12 @@ format, matching, SRS) and §8 (seeds, share codes, score).
 
 - **One implementation.** List parsing, `Grade`, `Memory`, `Classify`,
   `Difficulty`, seeds, share codes and scores live in the game's packages
-  (`internal/…` today, `pkg/…` after W0.1). The server imports them and
+  under `pkg/`. The server imports them and
   never re-implements them. Flag any server code that parses lists, grades
   answers, schedules Leitner boxes or computes scores by itself.
-- **Shared packages stay pure.** Nothing under `pkg/` (or the packages being
-  moved there) may import Ebitengine, `internal/game`, `internal/scene` or
-  anything that pulls in graphics or audio. Check with
-  `go list -deps ./pkg/... | grep -i ebiten`.
+- **Shared packages stay pure.** Nothing under `pkg/` may import Ebitengine, `internal/game`, `internal/scene` or
+  anything that pulls in graphics or audio. `pkg/imports_test.go` checks
+  this.
 - **Lists are forward and backward compatible.** Older games must not break
   on newer lists: unknown `x-` lines are ignored, new headers are optional,
   and a list saved by the server parses with the game's parser. A changed

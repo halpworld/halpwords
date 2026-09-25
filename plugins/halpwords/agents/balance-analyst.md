@@ -19,7 +19,7 @@ simulation run or a test, not from reasoning alone.
 Read first. Game `PLAN.md` §6 (combat formulas and traits), §8 (RPG layer,
 Hardcore score), §12 and §13a (the simulation and the current balance
 table), and `internal/sim`, `internal/combat`, `internal/rpg`,
-`internal/compete`, `tools/balance`. Server `PLAN.md` §13 (multiplayer) and
+`pkg/compete`, `tools/balance`. Server `PLAN.md` §13 (multiplayer) and
 §14 (rankings, fair play) and WAVES W7.
 
 ## Targets (game §13a, update them if the plan changes)

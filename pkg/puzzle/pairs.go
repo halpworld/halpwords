@@ -5,7 +5,7 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // pairs shows PairCount foreign words, each set to one of their English
