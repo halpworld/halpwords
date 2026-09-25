@@ -15,6 +15,7 @@ import (
 	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/save"
@@ -47,6 +48,9 @@ type Context struct {
 	// Profile is what lasts between adventures: settings, what the player
 	// knows of each word, and the Hall of Fame.
 	Profile *profile.Profile
+	// AI is the connection to a language model, when one is set up. The
+	// game plays the same without it.
+	AI *llm.Service
 
 	scenes  *manager
 	notice  string // a short message in the corner, like "Sound off"
@@ -145,6 +149,13 @@ func (c *Context) LoadLists() error {
 	return nil
 }
 
+// saveStore keeps the AI settings in the user's folder.
+type saveStore struct{}
+
+func (saveStore) Read(name string) ([]byte, error)            { return save.Read(name) }
+func (saveStore) Write(name string, data []byte) error        { return save.Write(name, data) }
+func (saveStore) WritePrivate(name string, data []byte) error { return save.WritePrivate(name, data) }
+
 // UserDir is where saves, settings and the user's own word lists live, e.g.
 // ~/Library/Application Support/halpwords on macOS.
 func UserDir() (string, error) { return save.Dir() }
@@ -173,6 +184,10 @@ func New(first func(*Context) Scene) (*Game, error) {
 	ctx.Profile = prof
 	if len(errs) > 0 {
 		ctx.Notify("Some saved progress was damaged")
+	}
+	ctx.AI = llm.Load(saveStore{})
+	if p := ctx.AI.Provider(); p != nil {
+		ctx.AI.Check(p.ID) // free: it lists the models the key can use
 	}
 	ctx.scenes.stack = []Scene{first(ctx)}
 	return &Game{ctx: ctx}, nil

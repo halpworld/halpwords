@@ -397,7 +397,8 @@ puzzle's answer.
   postman.`). The hero reads the riddle and types the answer in the target
   language, so one bank works for every language. Only words in the active
   lists with a riddle can be used; otherwise the lock gets another puzzle.
-  Cloze sentences in the target language wait for LLM generation (M6).
+  Cloze sentences in the target language came with LLM generation in M6
+  (gap-fill puzzles).
 - [x] **Pair matching** (doors): four foreign words on the left, their
   English meanings shuffled on the right. `↑`/`↓` choose a row and `←`/`→`
   swap its meaning with another row's. All four pairs must be right. Needs
@@ -639,6 +640,14 @@ boss portraits, NPC portraits.
 - A `Provider` interface with an **Anthropic (Claude)** implementation first and
   an **OpenAI-compatible** implementation second. The second also covers local
   models via Ollama or LM Studio, for free, private play.
+  *Now (M6):* `internal/llm` offers Anthropic (through the official Go SDK),
+  OpenAI, Meta (its Model API with the Muse Spark models, since the Llama API
+  closed in July 2026) and DeepSeek. A catalog prices the known models; any
+  other model a key can use is counted at the provider's highest price. The
+  AI Helper screen sets the provider, key, models and a budget per provider,
+  and shows the spending the game has counted plus DeepSeek's own balance
+  (the others have no balance API for normal keys). `UseEndpoint` can point
+  a provider at a local server.
 - Default models: a fast, cheap model (e.g. Claude Haiku 4.5) for in-game
   content, and a stronger model (e.g. Claude Sonnet 5) for Word Forge pack
   generation.
@@ -736,7 +745,7 @@ boss portraits, NPC portraits.
 | **M3** ✅ | Puzzles | Locked doors and chests, 6+ puzzle generators, fixed riddle bank, Mimic. *Done: the `Puzzle` interface, nine generators (reverse rune, odd one out, pair matching, riddle, anagram, missing letters, tumbler lock, mini crossword, spelling), an English riddle bank that works for every language, and the Mimic. Target-language cloze sentences wait for M6.* |
 | **M4** ✅ | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. *Done: three classes, six stats, five items, generated gear, a merchant, campfires, five bosses with phases, Save Shrines with a one-use suspend save, and MP hints (§8). The Grimoire screen waits for M5; campfires show the missed words for now.* |
 | **M5** ✅ | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. *Done: a five-box Leitner memory per word that lasts across runs and Practice, mistake kinds with tips, difficulty that grows with depth, the Grimoire, a Settings screen, Hardcore, Daily Dungeon and Seed Challenge modes, share codes that can be checked, and a Hall of Fame (§4, §8).* |
-| **M6** | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. |
+| **M6** ✅ | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. *Done: four providers (Anthropic through its Go SDK; OpenAI, Meta's Model API and DeepSeek through chat completions), an AI Helper screen (provider, pasted key checked for free, game and Word Forge models with prices, a budget, spending and DeepSeek's live balance), the Dungeon Director with the next floor pre-fetched, gap-fill (cloze) puzzles and riddles kept in a content bank, monster taunts, the Scroll of Insight at campfires, and the Word Forge with a checking pass (§10). Phrase dodges, the Oracle, side quests, the Bard's Tale recap and coaching wait.* |
 | **M7** | Polish and ship | Procedural music, CRT shader, juice pass, balance simulation, `.app` bundle, Windows/Linux/Web release builds. |
 
 Stretch: Oracle NPC, side quests, Bard's Tale, text-to-speech pronunciation

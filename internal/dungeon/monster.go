@@ -120,6 +120,9 @@ type Monster struct {
 	Facing Dir
 	Loot   *Chest // what a mimic was guarding, won by defeating it
 	Phase  int    // a boss's phase: 0, then 1 and 2 as it weakens
+	// Title is a name the Dungeon Director gave it, used instead of its
+	// kind's name.
+	Title string
 }
 
 // NewMonster creates a monster of kind k, with stats scaled for depth.
@@ -131,10 +134,14 @@ func NewMonster(k *Kind, depth int, at Point, seed uint64) *Monster {
 
 // Name returns the monster's display name, such as "Swift Grumpy Rat".
 func (m *Monster) Name() string {
-	if m.Extra != 0 {
-		return m.Extra.String() + " " + m.Kind.Name
+	name := m.Kind.Name
+	if m.Title != "" {
+		name = m.Title
 	}
-	return m.Kind.Name
+	if m.Extra != 0 {
+		return m.Extra.String() + " " + name
+	}
+	return name
 }
 
 // Has reports whether the monster has trait t.

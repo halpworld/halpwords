@@ -24,6 +24,8 @@ type typed struct {
 	rules words.Rules
 	// shown starts the solution line: "shown = answer".
 	shown string
+	// extra are more solution lines, such as a cloze sentence filled in.
+	extra []string
 }
 
 func (t *typed) Kind() Kind      { return t.kind }
@@ -35,7 +37,7 @@ func (t *typed) Word() int       { return t.id }
 
 func (t *typed) Check(a Attempt) Result {
 	res := words.Grade(a.Text, t.grade, t.lang, t.rules, a.UsedBackspace)
-	return Result{Result: res, Solution: []string{t.shown + " = " + res.Expected}}
+	return Result{Result: res, Solution: append([]string{t.shown + " = " + res.Expected}, t.extra...)}
 }
 
 // newSpell asks for a word from its meaning.

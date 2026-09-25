@@ -57,7 +57,7 @@ func (c *Crawl) startPuzzle(at dungeon.Point, lock puzzle.Lock) {
 // dealPuzzle puts a new puzzle on the lock.
 func (c *Crawl) dealPuzzle() {
 	lp := c.puzzle
-	lp.p = puzzle.New(lp.lock, c.run.depth, c.run.deck, c.run.lang, c.run.rules(), c.run.rng)
+	lp.p = puzzle.NewWith(lp.lock, c.run.depth, c.run.deck, c.run.lang, c.run.rules(), c.run.rng, c.run.ai.generated(c.run))
 	lp.pick, lp.showing, lp.hints = 0, false, 0
 	lp.field, lp.choice, lp.fields = nil, nil, nil
 	switch lp.p.Answer() {

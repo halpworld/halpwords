@@ -80,6 +80,8 @@ type run struct {
 	// the language's preset.
 	settings profile.LangSettings
 	prof     *profile.Profile
+	// ai is what the run asks the AI for, when one is set up.
+	ai *runAI
 }
 
 // runSetup is what the New Adventure screens choose before the class.
@@ -149,6 +151,7 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 		sound:   ctx.Sound,
 		perfect: map[int]bool{},
 		prof:    ctx.Profile,
+		ai:      newRunAI(ctx),
 	}
 	if r.prof != nil {
 		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))

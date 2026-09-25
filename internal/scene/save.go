@@ -9,6 +9,7 @@ import (
 	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/raycast"
 	"github.com/halpworld/halpwords/internal/rpg"
@@ -43,6 +44,9 @@ type saveFile struct {
 	Mode  compete.Mode  `json:",omitempty"`
 	Day   string        `json:",omitempty"` // a Daily Dungeon's date
 	Tally compete.Tally // what a Hardcore score counts
+	// Scripts are the Dungeon Director's scripts for the floors the save
+	// can go back to, by depth.
+	Scripts map[int]*llm.Script `json:",omitempty"`
 }
 
 type savedLine struct {
@@ -70,6 +74,16 @@ func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir, 
 		Mode:       r.mode,
 		Day:        r.day,
 		Tally:      r.tally,
+	}
+	if r.ai != nil {
+		for depth, sc := range r.ai.scripts {
+			if depth == r.depth || depth == r.shrine.Depth {
+				if s.Scripts == nil {
+					s.Scripts = map[int]*llm.Script{}
+				}
+				s.Scripts[depth] = sc
+			}
+		}
 	}
 	for id := range r.deck.Entries() {
 		if r.perfect[id] {
@@ -132,6 +146,11 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 	}
 	r.shrine = s.Shrine
 	r.onDisk = true
+	for depth, sc := range s.Scripts {
+		if sc != nil {
+			r.ai.scripts[depth] = sc
+		}
+	}
 
 	cp := s.Shrine
 	if s.Suspend != nil {
@@ -200,14 +219,14 @@ func loadCrawl(ctx *game.Context) (*Crawl, error) {
 			return nil, fmt.Errorf("could not update the save")
 		}
 		s.run.onDisk = false
-		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.theme.Name))
+		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.floorName()))
 		s.run.say("Welcome back! Your Hardcore run continues.", pal.Yellow)
 		return c, nil
 	case s.suspended:
 		if !c.writeSave(ctx, false) {
 			return nil, fmt.Errorf("could not update the save")
 		}
-		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.theme.Name))
+		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.floorName()))
 		s.run.say("Welcome back! Your adventure continues.", pal.Yellow)
 	default:
 		c.showBanner("Welcome back!", "You wake at the shrine")

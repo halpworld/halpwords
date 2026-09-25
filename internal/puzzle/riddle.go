@@ -37,17 +37,24 @@ func ParseRiddles(data []byte) map[string][]string {
 	return out
 }
 
-// newRiddle asks for a word from a riddle about it. It returns nil if no
-// word in the deck has a riddle.
-func newRiddle(deck *words.Deck, lang *words.Language, rng *rand.Rand) *typed {
+// newRiddle asks for a word from a riddle about it, from the riddle bank or
+// the riddles an AI wrote. It returns nil if no word in the deck has a
+// riddle.
+func newRiddle(deck *words.Deck, lang *words.Language, gen *Generated, rng *rand.Rand) *typed {
 	bank := Riddles()
-	e, id, ok := deck.NextWhere(func(e words.Entry) bool {
-		return len(bank[strings.ToLower(e.Prompt)]) > 0
-	})
+	riddles := func(e words.Entry) []string {
+		k := strings.ToLower(e.Prompt)
+		rs := bank[k]
+		if gen != nil && len(gen.Riddles[k]) > 0 {
+			rs = append(append([]string(nil), rs...), gen.Riddles[k]...)
+		}
+		return rs
+	}
+	e, id, ok := deck.NextWhere(func(e words.Entry) bool { return len(riddles(e)) > 0 })
 	if !ok {
 		return nil
 	}
-	rs := bank[strings.ToLower(e.Prompt)]
+	rs := riddles(e)
 	return &typed{
 		kind: Riddle, answer: Foreign, id: id,
 		ask:   "Answer the riddle in " + lang.Name + ":",

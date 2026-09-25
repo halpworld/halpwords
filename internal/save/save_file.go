@@ -54,6 +54,19 @@ func Write(name string, data []byte) error {
 	return os.Rename(tmp.Name(), filepath.Join(dir, path.Base(name)))
 }
 
+// WritePrivate replaces the named file with one only the user can read, for
+// secrets such as API keys.
+func WritePrivate(name string, data []byte) error {
+	if err := Write(name, data); err != nil {
+		return err
+	}
+	dir, err := Dir()
+	if err != nil {
+		return err
+	}
+	return os.Chmod(filepath.Join(dir, filepath.FromSlash(name)), 0o600)
+}
+
 // Remove deletes the named file. Removing a file that is not there is not an
 // error.
 func Remove(name string) error {

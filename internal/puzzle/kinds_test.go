@@ -225,3 +225,48 @@ func starterEntry(t *testing.T, lang *words.Language, id int) words.Entry {
 	t.Helper()
 	return starter(t)[lang][id]
 }
+
+func TestCloze(t *testing.T) {
+	fr, _ := words.Lookup("fr")
+	rng := rand.New(rand.NewPCG(3, 3))
+	dog := words.Entry{Prompt: "dog", Answers: []string{"le chien", "un chien"}}
+	entries := []words.Entry{dog, {Prompt: "cat", Answers: []string{"le chat"}}, {Prompt: "yes", Answers: []string{"oui"}}}
+	deck := words.NewDeck(entries, rng)
+	gen := &Generated{
+		Cloze:   map[string][]ClozeLine{words.Key(dog): {{"Je promène ___ au parc.", "I walk the dog in the park."}}},
+		Riddles: map[string][]string{"yes": {"I am the word that agrees."}},
+	}
+	for n := 0; n < 20; n++ {
+		p := MakeWith(Cloze, Door, 1, deck, fr, fr.Defaults, rng, gen)
+		if p.Kind() != Cloze || p.Answer() != Foreign {
+			t.Fatalf("made %s", p.Kind())
+		}
+		if p.Clue() != "Je promène _____ au parc.  (dog)" {
+			t.Fatalf("clue %q", p.Clue())
+		}
+		r := p.Check(Attempt{Text: "le chien"})
+		if r.Tier != words.Perfect || !slices.Contains(r.Solution, "Je promène le chien au parc.") {
+			t.Fatalf("right answer: %v %v", r.Tier, r.Solution)
+		}
+		if p.Check(Attempt{Text: "le chat"}).Passed() {
+			t.Fatal("wrong answer passed")
+		}
+	}
+	// A riddle only the AI wrote can be used.
+	yes := words.NewDeck(entries[2:], rng)
+	if p := MakeWith(Riddle, Door, 1, yes, fr, fr.Defaults, rng, gen); p.Kind() != Riddle || p.Clue() != "I am the word that agrees." {
+		t.Fatalf("riddle %s %q", p.Kind(), p.Clue())
+	}
+	// Without generated content there are no gap fills, and asking for one
+	// makes a spelling puzzle.
+	if k := Make(Cloze, Door, 1, deck, fr, fr.Defaults, rng).Kind(); k != Spell {
+		t.Errorf("cloze without sentences made %s", k)
+	}
+	seen := false
+	for n := 0; n < 200 && !seen; n++ {
+		seen = NewWith(Chest, 1, deck, fr, fr.Defaults, rng, gen).Kind() == Cloze
+	}
+	if !seen {
+		t.Error("NewWith never made a gap fill")
+	}
+}

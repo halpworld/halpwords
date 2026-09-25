@@ -170,6 +170,10 @@ type Crawl struct {
 	menu    *menu            // the shop or items screen
 	feature *dungeon.Feature // the shrine, campfire or merchant in use
 	weakest []logLine        // the words shown at a campfire
+	insight []string         // memory tips shown at a campfire
+
+	lore  []string // notes from the Dungeon Director still to find
+	steps int      // steps taken on this floor
 
 	shake, hurt int // ticks of screen shake and red flash left
 	banner      string
@@ -181,14 +185,16 @@ type Crawl struct {
 // newCrawl starts the floor r.depth.
 func newCrawl(r *run) *Crawl {
 	c := crawlOn(r, r.floor(r.depth))
-	c.showBanner(fmt.Sprintf("Floor %d", r.depth), c.theme.Name)
-	r.say(fmt.Sprintf("Floor %d: %s. Find the stairs down!", r.depth, c.theme.Name), pal.Yellow)
+	c.showBanner(fmt.Sprintf("Floor %d", r.depth), c.floorName())
+	c.arrive()
+	r.ai.startFloor(r)
 	return c
 }
 
 // crawlOn puts the hero at the start of floor l.
 func crawlOn(r *run, l *dungeon.Level) *Crawl {
-	th := proc.ThemeFor(r.depth)
+	th := r.themeFor()
+	dress(l, r.script())
 	return &Crawl{
 		run:    r,
 		level:  l,
@@ -231,6 +237,7 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
+	c.run.ai.poll(c)
 	switch {
 	case c.mode == modePause:
 		c.updatePause(ctx)
@@ -469,6 +476,7 @@ func (c *Crawl) step(ctx *game.Context, d dungeon.Dir, forward bool) {
 	c.animate(to, c.angle, stepTicks, false)
 	c.pos = to
 	c.play(audio.Step)
+	c.walked()
 }
 
 // emptyChest looks in an opened chest, where gear may have been left

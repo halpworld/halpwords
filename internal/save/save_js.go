@@ -49,6 +49,10 @@ func Write(name string, data []byte) error {
 	return err
 }
 
+// WritePrivate replaces the named file. Local storage belongs to the page,
+// so it is as private as a browser allows.
+func WritePrivate(name string, data []byte) error { return Write(name, data) }
+
 // Remove deletes the named file.
 func Remove(name string) error {
 	_, err := storage("removeItem", prefix+name)

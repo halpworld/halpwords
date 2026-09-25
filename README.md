@@ -19,6 +19,7 @@
   <a href="#how-to-play">How to play</a> ·
   <a href="#controls">Controls</a> ·
   <a href="#your-own-word-lists">Word lists</a> ·
+  <a href="#ai-helper-optional">AI helper</a> ·
   <a href="#roadmap">Roadmap</a> ·
   <a href="#contributing">Contributing</a>
 </p>
@@ -40,7 +41,7 @@ adventurous tone. It runs offline, needs no accounts, and ships as a single
 file.
 
 > [!NOTE]
-> **Status: milestone 5 (learning and competition) done; milestone 6 (optional LLM features) is next.** The game is playable from the
+> **Status: milestone 6 (the optional AI helper) done; milestone 7 (polish and release builds) is next.** The game is playable from the
 > first floor down, with sound, but it is early. Expect rough edges and balance changes. See the
 > [roadmap](#roadmap).
 
@@ -103,6 +104,13 @@ file.
   lists, and save them from the **Word Lists** screen.
 - **Practice mode.** Drill words without the dungeon, dealt by spaced
   repetition.
+- **Optional AI helper.** A parent or teacher picks **Anthropic (Claude),
+  OpenAI, Meta or DeepSeek** and pastes an API key. The dungeon then names
+  its floors after your words, deals gap-fill sentences and fresh riddles,
+  has monsters taunt you in the language you learn, writes memory tips for
+  words you keep missing, and forges new word lists on any topic. It shows
+  what has been spent and stops at a budget you set. Without it the game
+  plays exactly the same.
 - **Nearly all generated in code.** Textures, monsters, effects and sound
   effects are procedural. The only art asset is a pixel font.
 - **Runs everywhere.** macOS (Apple Silicon and Intel), Windows, Linux and the
@@ -166,6 +174,22 @@ file.
   <tr>
     <td align="center"><b>Four ways to play</b>, including a Daily Dungeon.</td>
     <td align="center"><b>Settings</b> for each language.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/ai-helper.png" alt="The AI Helper screen: OpenAI chosen, its key checked, GPT-6 Luna as the game model, a $5 budget and what has been spent so far"></td>
+    <td width="50%"><img src="docs/media/ai-taunt.png" alt="A battle with a Soggy Baguette, named by the Dungeon Director, which shouts 'Ton pain est à moi !' (Your bread is mine!)"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>The AI Helper:</b> choose a provider, paste a key, set a budget.</td>
+    <td align="center"><b>With AI:</b> themed floors and monsters that taunt in French.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/gap-fill.png" alt="A gap-fill puzzle on a sealed door: 'Je promène _____ au parc. (dog)'"></td>
+    <td width="50%"><img src="docs/media/scroll-of-insight.png" alt="A campfire with a Scroll of Insight: memory tips for two words the player keeps missing"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Gap-fill puzzles</b> put your words in sentences.</td>
+    <td align="center"><b>A Scroll of Insight</b> with tips for tricky words.</td>
   </tr>
 </table>
 
@@ -366,6 +390,89 @@ that never runs out. Settings are saved in `settings.json`, what you know of
 each word in `progress.json`, and the Hall of Fame in `halloffame.json`,
 next to your save.
 
+### AI helper (optional)
+
+The game never needs an AI, but a parent or teacher can connect one to make
+the dungeon react to what is being learned. Choose **AI Helper** on the
+title screen:
+
+<p align="center">
+  <img src="docs/media/ai-helper.png" width="640" alt="The AI Helper screen">
+</p>
+
+1. **Choose a provider** with <kbd>←</kbd> / <kbd>→</kbd>.
+2. **Paste an API key:** select *API key*, press <kbd>Enter</kbd>, then
+   <kbd>Ctrl</kbd>+<kbd>V</kbd> (<kbd>Cmd</kbd>+<kbd>V</kbd> on a Mac). You can
+   also type it, or drop a text file holding the key on the window. The game
+   checks the key straight away (this costs nothing) and shows **✓ works**.
+
+That's all: the status line turns green and the AI features are on. *Try it*
+sends one tiny test message.
+
+| Provider | Get a key at | Game model (default) | Word Forge model (default) | Key from the environment |
+|---|---|---|---|---|
+| Anthropic (Claude) | [platform.claude.com/settings/keys](https://platform.claude.com/settings/keys) | Claude Haiku 4.5 | Claude Sonnet 5 | `ANTHROPIC_API_KEY` |
+| OpenAI (GPT) | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | GPT-6 Luna | GPT-6 Sol | `OPENAI_API_KEY` |
+| Meta (Muse Spark) | [dev.meta.ai](https://dev.meta.ai) → Model API → API keys | Muse Spark 1.3 | Muse Spark 1.3 | `MODEL_API_KEY` or `META_API_KEY` |
+| DeepSeek | [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) | DeepSeek V4.1 Flash | DeepSeek V4 Pro | `DEEPSEEK_API_KEY` |
+
+(Meta shut down its old Llama API in 2026; its Model API serves the Muse
+Spark models.)
+
+**Models.** The *game model* writes content during play, so a fast, cheap
+one is best. The *Word Forge model* makes whole word lists, where a smarter
+one makes fewer mistakes. Change either with <kbd>←</kbd> / <kbd>→</kbd>, or
+press <kbd>Enter</kbd> for a list with prices. Once the key works, the list
+shows every text model it can use.
+
+**Spending.** The screen shows what the game has spent with the provider
+(worked out from the tokens each request used and the model's price), the
+number of requests, and what is left of the **budget**. Set the budget
+($0.50 to $100, or no limit) to what you put on the account: the game stops
+using AI when it is spent, and never sends a request that could cost more
+than is left. DeepSeek also reports the **account balance** itself, which is
+shown too; the other providers don't share it with apps, so check their
+websites. After adding credit, *Reset the counter* starts counting from $0.
+In-game content is cheap: with the default models a floor costs about a
+cent, often much less.
+
+**What it does:**
+
+- **Dungeon Director:** each floor gets a name, a look, a welcome line,
+  notes scratched on the walls and new names for its monsters, built around
+  the words you will practise ("The Drowned Pantry" for a food list). The
+  next floor's script is fetched while you play, so it is ready when you
+  arrive.
+- **New puzzles:** *gap-fill* sentences in the language you learn, with
+  your word missing, and more riddles for the riddle puzzles.
+- **Monster taunts** in the language you learn, with the English below.
+- **Scroll of Insight:** a word you miss twice gets a memory tip, shown at
+  the next campfire.
+- **Word Forge:** press <kbd>F</kbd> on the **Word Lists** screen, type a
+  topic, choose the language and 10, 20 or 30 words. A second request checks
+  every translation and fixes or drops wrong ones. The list then goes
+  through the usual import, so look it over before saving it.
+
+**Safe and fair:**
+
+- Every request asks for content suitable for 13-year-olds, and everything
+  that comes back is checked before it is used: a word filter, length
+  limits, no links, the right alphabet, and puzzles the game's own grader
+  can mark. The AI never grades answers.
+- Generated content is kept in the user folder (`ai/`), so it is only paid
+  for once and is reused in later games.
+- Hardcore, the Daily Dungeon and Seed Challenges keep to the built-in
+  puzzles, so scores still compare. The AI only renames things there.
+- If the AI is slow, offline or out of credit, the game carries on with its
+  own content. It stops asking after a few failures in a row.
+- It works in the web version too: all four providers accept requests
+  straight from the browser.
+- The key is saved only on this computer, in `ai.json` in the user folder,
+  readable only by you (in a web browser, in the page's local storage). It
+  is never put in saves. The AI is only sent words from your lists,
+  floor details and Word Forge topics, nothing about the player. What was spent is in
+  `ai-spend.json`.
+
 ## Controls
 
 **In the dungeon**
@@ -405,6 +512,8 @@ next to your save.
 | <kbd>←</kbd> / <kbd>→</kbd> | Change language (Practice, Grimoire, Hall of Fame, Settings) |
 | <kbd>Tab</kbd> | Sort the Grimoire; switch Hall of Fame tables |
 | <kbd>C</kbd> | Check a friend's share code (Hall of Fame) |
+| <kbd>F</kbd> | Word Forge: make a new word list with AI (Word Lists) |
+| <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>V</kbd> | Paste an API key (AI Helper) |
 | <kbd>F2</kbd> | Greek letters on/off (Ancient Greek) |
 | <kbd>F3</kbd> | Sound on/off |
 | <kbd>F11</kbd>, <kbd>Alt</kbd>+<kbd>Enter</kbd>, or <kbd>Ctrl</kbd>+<kbd>Cmd</kbd>+<kbd>F</kbd> | Fullscreen |
@@ -460,6 +569,9 @@ Choose **Word Lists** on the title screen to manage your lists in the game:
   you've added words to puts it back as it was.
 - **Save:** changes are kept until you press <kbd>S</kbd>, which saves all
   lists at once. Leaving with unsaved changes asks first.
+- **Word Forge:** with the [AI helper](#ai-helper-optional) on, press
+  <kbd>F</kbd>, type a topic, and an AI makes and checks a new list for you
+  to import.
 
 Imported files can use the format below, or be a plain two-column
 `english<Tab>answer` file, as spreadsheets and flashcard sites export them.
@@ -531,6 +643,8 @@ internal/words/    word lists, languages, grading, spaced repetition, mistake ki
 internal/typing/   text entry, Tab accents, Greek input mode
 internal/combat/   battle formulas and monster trait effects
 internal/puzzle/   door and chest word puzzles (no Ebitengine dependency)
+internal/llm/      optional AI: providers, keys, budget, Director, generated content (no Ebitengine dependency)
+internal/clipboard/ pasting from the system clipboard
 internal/audio/    sound effect synth (no Ebitengine dependency)
 internal/input/    keyboard helpers
 internal/proc/     procedural pixel art (no Ebitengine dependency)
@@ -563,8 +677,10 @@ The full design is in [PLAN.md](PLAN.md). In short:
 - [x] **M5: Learning and competition.** Spaced repetition, the Grimoire,
       settings for each language, Hardcore mode with a score, the Daily
       Dungeon, seed and share codes, and the Hall of Fame.
-- [ ] **M6: LLM (optional).** A "Dungeon Director" that reacts to how you are
-      learning, generated puzzles and memory tips.
+- [x] **M6: AI helper (optional).** Anthropic, OpenAI, Meta and DeepSeek;
+      a setup screen with key checks, model choice, a budget and spending;
+      the Dungeon Director, gap-fill puzzles and riddles, monster taunts,
+      the Scroll of Insight and the Word Forge.
 - [ ] **M7: Polish and ship.** Procedural music, CRT shader, balancing, and
       release builds.
 

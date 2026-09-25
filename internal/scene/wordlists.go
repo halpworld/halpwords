@@ -2,6 +2,7 @@ package scene
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image/color"
 	"io/fs"
@@ -9,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -17,6 +19,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/words"
@@ -31,6 +34,8 @@ const (
 	wlImport         // choosing where an imported list goes
 	wlDelete         // confirming a delete
 	wlLeaving        // asking whether to save before leaving
+	wlForge          // ordering a new list from the Word Forge
+	wlForging        // waiting for the Word Forge
 )
 
 // Layout of the Word Lists screen.
@@ -63,6 +68,13 @@ type WordLists struct {
 	targets  []int
 
 	doomed []int // rows to delete when confirmed
+
+	// The Word Forge order.
+	topic     []rune
+	forgeLang int
+	forgeN    int // index into llm.ForgeCounts
+	forging   *llm.Job[*words.List]
+	forgeAt   uint64 // tick the order went in
 }
 
 // NewWordLists creates the Word Lists screen.
@@ -107,6 +119,10 @@ func (w *WordLists) Update(ctx *game.Context) error {
 		w.updateDelete(ctx)
 	case wlLeaving:
 		w.updateLeaving(ctx)
+	case wlForge:
+		w.updateForge(ctx)
+	case wlForging:
+		w.updateForging(ctx)
 	}
 	if w.mode == wlBrowse && len(w.queue) > 0 {
 		w.startImport(ctx)
@@ -213,7 +229,112 @@ func (w *WordLists) updateBrowse(ctx *game.Context) {
 		w.askDelete(ctx)
 	case input.Pressed(ebiten.KeyS):
 		w.saveAll(ctx)
+	case input.Pressed(ebiten.KeyF):
+		w.openForge(ctx)
 	}
+}
+
+// openForge opens the Word Forge, when an AI is set up.
+func (w *WordLists) openForge(ctx *game.Context) {
+	if !ctx.AI.Ready() {
+		ctx.Sound.Play(audio.Wrong)
+		w.say("The Word Forge needs an AI: set one up in AI Helper on the title screen.", pal.Tan)
+		return
+	}
+	ctx.Sound.Play(audio.Select)
+	if r := w.shelf.rows; len(r) > 0 {
+		for i, l := range words.Languages {
+			if l.Code == r[w.sel].list.Language {
+				w.forgeLang = i
+			}
+		}
+	}
+	w.forgeN = min(w.forgeN, len(llm.ForgeCounts)-1)
+	if w.forgeN == 0 {
+		w.forgeN = 1 // 20 words
+	}
+	w.mode = wlForge
+}
+
+// updateForge takes the Word Forge order: a topic typed in, the language
+// with ←/→ and the number of words with ↑/↓.
+func (w *WordLists) updateForge(ctx *game.Context) {
+	nl, nc := len(words.Languages), len(llm.ForgeCounts)
+	switch {
+	case input.Back():
+		ctx.Sound.Play(audio.Back)
+		w.mode = wlBrowse
+		return
+	case input.Repeat(ebiten.KeyArrowLeft):
+		ctx.Sound.Play(audio.Blip)
+		w.forgeLang = (w.forgeLang + nl - 1) % nl
+		return
+	case input.Repeat(ebiten.KeyArrowRight):
+		ctx.Sound.Play(audio.Blip)
+		w.forgeLang = (w.forgeLang + 1) % nl
+		return
+	case input.Repeat(ebiten.KeyArrowUp):
+		ctx.Sound.Play(audio.Blip)
+		w.forgeN = (w.forgeN + 1) % nc
+		return
+	case input.Repeat(ebiten.KeyArrowDown):
+		ctx.Sound.Play(audio.Blip)
+		w.forgeN = (w.forgeN + nc - 1) % nc
+		return
+	case input.Repeat(ebiten.KeyBackspace) && len(w.topic) > 0:
+		w.topic = w.topic[:len(w.topic)-1]
+		ctx.Sound.Play(audio.Erase)
+		return
+	case input.Confirm():
+		topic := strings.TrimSpace(string(w.topic))
+		if topic == "" {
+			ctx.Sound.Play(audio.Wrong)
+			return
+		}
+		lang, n, ai := words.Languages[w.forgeLang], llm.ForgeCounts[w.forgeN], ctx.AI
+		ctx.Sound.Play(audio.Select)
+		w.forging = llm.Start(func() (*words.List, error) {
+			c, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			return ai.Forge(c, lang, topic, n)
+		})
+		w.forgeAt = ctx.Tick
+		w.mode = wlForging
+		return
+	}
+	for _, r := range ctx.Input.Chars {
+		if r >= ' ' && len(w.topic) < 60 {
+			w.topic = append(w.topic, r)
+			ctx.Sound.Play(audio.Key)
+		}
+	}
+}
+
+// updateForging waits for the Word Forge, then offers the new list to
+// import like a dropped file.
+func (w *WordLists) updateForging(ctx *game.Context) {
+	if input.Back() {
+		ctx.Sound.Play(audio.Back)
+		w.forging = nil // it finishes in the background, unused
+		w.say("Stopped waiting for the Word Forge.", pal.Tan)
+		w.mode = wlBrowse
+		return
+	}
+	if !w.forging.Done() {
+		return
+	}
+	l, err := w.forging.Result()
+	w.forging = nil
+	w.mode = wlBrowse
+	if err != nil {
+		ctx.Sound.Play(audio.Wrong)
+		w.say("The Word Forge failed: "+llm.Explain(err), pal.Rose)
+		return
+	}
+	ctx.Sound.Play(audio.Correct)
+	w.topic = w.topic[:0]
+	w.queue = append(w.queue, l)
+	w.say(fmt.Sprintf("Forged %q: check the words on the right, then press S to save.", l.Title), pal.Lime)
 }
 
 // askDelete asks before deleting the marked lists, or the selected one if
@@ -456,7 +577,7 @@ func (w *WordLists) Draw(dst *ebiten.Image, ctx *game.Context) {
 	w.drawInfo(dst, ctx)
 
 	f.DrawShadow(dst, fit(f, w.msg, game.ScreenW-24, 1), 12, 306, 1, w.msgCol)
-	help1, help2 := "↑/↓ choose   Space mark   A mark all   X delete", "I import (or drop files)   S save all   Esc back"
+	help1, help2 := "↑/↓ choose   Space mark   A mark all   X delete   F Word Forge", "I import (or drop files)   S save all   Esc back"
 	if onWeb() {
 		help2 = "Drop .txt files on the page to import   S save all   Esc back"
 	}
@@ -472,7 +593,43 @@ func (w *WordLists) Draw(dst *ebiten.Image, ctx *game.Context) {
 		w.drawDelete(dst, ctx)
 	case wlLeaving:
 		w.drawLeaving(dst, ctx)
+	case wlForge, wlForging:
+		w.drawForge(dst, ctx)
 	}
+}
+
+func (w *WordLists) drawForge(dst *ebiten.Image, ctx *game.Context) {
+	f := ctx.Font
+	const dw = 520
+	x, y := dialog(dst, ctx, "WORD FORGE", dw, 196)
+	if w.mode == wlForging {
+		dots := strings.Repeat(".", int(ctx.Tick/20%4))
+		f.DrawShadow(dst, "The forge is hot"+dots, x, y+10, 2, pal.Orange)
+		secs := int(ctx.Tick-w.forgeAt) / ebiten.TPS()
+		f.DrawShadow(dst, fmt.Sprintf("Making the words, then checking them (%ds).", secs), x, y+56, 1, pal.Ice)
+		f.DrawShadow(dst, "Esc stop waiting", x, y+106, 1, pal.Ash)
+		return
+	}
+	f.DrawShadow(dst, "An AI makes a new word list on any topic.", x, y, 1, pal.Ice)
+	f.DrawShadow(dst, "Language:", x, y+24, 1, pal.Tan)
+	f.DrawShadow(dst, "◄ "+words.Languages[w.forgeLang].Name+" ►", x+100, y+24, 1, pal.Yellow)
+	f.DrawShadow(dst, "Words:", x, y+42, 1, pal.Tan)
+	f.DrawShadow(dst, fmt.Sprintf("▲ %d ▼", llm.ForgeCounts[w.forgeN]), x+100, y+42, 1, pal.Yellow)
+	f.DrawShadow(dst, "Topic:", x, y+60, 1, pal.Tan)
+	text := string(w.topic)
+	if text == "" {
+		f.DrawShadow(dst, "such as: at the market, sports, the weather", x+100, y+60, 1, pal.Ash)
+	} else {
+		text = fit(f, text, dw-150, 1)
+		f.DrawShadow(dst, text, x+100, y+60, 1, pal.White)
+	}
+	if ctx.Tick/16%2 == 0 {
+		gfx.FillRect(dst, x+100+f.Width(text, 1)+1, y+62, 6, 13, pal.Yellow)
+	}
+	gfx.FillRect(dst, x+100, y+78, dw-140, 1, pal.Indigo)
+	f.DrawShadow(dst, "A second pass checks each translation. Look the list over", x, y+88, 1, pal.Steel)
+	f.DrawShadow(dst, "before playing, and fix any word in its .txt file.", x, y+104, 1, pal.Steel)
+	f.DrawShadow(dst, "←/→ language   ↑/↓ words   Enter forge   Esc cancel", x, y+126, 1, pal.Ash)
 }
 
 func (w *WordLists) drawList(dst *ebiten.Image, ctx *game.Context) {

@@ -122,12 +122,40 @@ func (c *Crawl) rest(ft *dungeon.Feature) {
 	}
 	r.say(msg, pal.Lime)
 	c.weakest = c.weakest[:0]
-	for _, id := range c.weakestWords() {
+	c.insight = c.insight[:0]
+	ids := c.weakestWords()
+	var tipped, rest []int
+	for _, id := range ids {
+		tip, ok := r.ai.tipFor(r, id)
+		if !ok || len(tipped) == maxInsight {
+			if !ok {
+				r.ai.queueTipIf(id) // for the next campfire
+			}
+			rest = append(rest, id)
+			continue
+		}
+		tipped = append(tipped, id)
+		c.insight = append(c.insight, r.deck.Entries()[id].Answers[0]+": "+tip)
+	}
+	if len(tipped) > 0 {
+		// The words with tips first, and fewer words to make room.
+		ids = append(tipped, rest...)[:max(len(tipped), min(len(ids), maxWeakestWithTips))]
+		r.say("A Scroll of Insight glows in the firelight.", pal.Cyan)
+	}
+	for _, id := range ids {
 		e := r.deck.Entries()[id]
 		c.weakest = append(c.weakest, logLine{e.Prompt + " = " + e.Answers[0], pal.White})
 	}
 	c.mode = modeCampfire
 }
+
+// A campfire's Scroll of Insight shows memory tips the AI wrote for up to
+// maxInsight of the weakest words, and then lists fewer words.
+const (
+	maxInsight         = 2
+	maxWeakestWithTips = 2
+	maxInsightLines    = 4
+)
 
 // weakestWords are the words the hero most needs to practise: the ones
 // missed on this adventure first, then the weakest in the Grimoire.
@@ -153,8 +181,20 @@ func (c *Crawl) weakestWords() []int {
 func (c *Crawl) drawCampfire(view *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
-	w, h := vw-40, 60+18*max(1, len(c.weakest))+30
-	x, y := viewX+20, viewY+(vh-22-h)/2
+	w := vw - 40
+	var tips []string
+	for _, t := range c.insight {
+		lines := wrap(f, t, w-24)
+		if len(tips)+len(lines) > maxInsightLines {
+			break
+		}
+		tips = append(tips, lines...)
+	}
+	h := 60 + 18*max(1, len(c.weakest)) + 30
+	if len(tips) > 0 {
+		h += 22 + 16*len(tips)
+	}
+	x, y := viewX+20, viewY+max(0, (vh-22-h)/2)
 	gfx.Window(view, x, y, w, h)
 	f.DrawCentered(view, "You rest by the fire", x+w/2, y+10, 1, pal.Yellow)
 	f.DrawCentered(view, "HP and MP restored.", x+w/2, y+28, 1, pal.Lime)
@@ -164,6 +204,13 @@ func (c *Crawl) drawCampfire(view *ebiten.Image, ctx *game.Context) {
 		f.DrawCentered(view, "The flames show your weakest words:", x+w/2, y+50, 1, pal.Tan)
 		for i, l := range c.weakest {
 			f.DrawCentered(view, l.text, x+w/2, y+70+i*18, 1, l.col)
+		}
+	}
+	if len(tips) > 0 {
+		ty := y + 70 + 18*len(c.weakest) + 4
+		f.DrawCentered(view, "✦ Scroll of Insight ✦", x+w/2, ty, 1, pal.Cyan)
+		for i, t := range tips {
+			f.DrawCentered(view, t, x+w/2, ty+20+i*16, 1, pal.Sky)
 		}
 	}
 	c.drawHint(view, ctx, "Enter continue · G Grimoire")

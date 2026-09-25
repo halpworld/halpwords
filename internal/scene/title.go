@@ -13,7 +13,7 @@ import (
 )
 
 // Version is shown on the title screen.
-const Version = "v0.6 (milestone 5: learning and competition)"
+const Version = "v0.7 (milestone 6: AI helper)"
 
 // Title is the title screen and main menu.
 type Title struct {
@@ -35,17 +35,18 @@ const (
 	titleFame
 	titleWordLists
 	titleSettings
+	titleAI
 	titleQuit
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "Quit"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Quit"}
 
 // NewTitle creates the title screen.
 func NewTitle(*game.Context) game.Scene {
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleQuit},
+		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleQuit},
 	}
 	if s, ok := saveSummary(); ok {
 		t.saved = s
@@ -104,6 +105,7 @@ func (t *Title) Update(ctx *game.Context) error {
 			titleFame:      NewHallOfFame,
 			titleWordLists: NewWordLists,
 			titleSettings:  NewSettings,
+			titleAI:        NewAISetup,
 		}[it](ctx))
 	}
 	return nil
@@ -129,20 +131,22 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 		x += f.Width(s, scale)
 	}
 	f.DrawCentered(dst, "~ A Dungeon of Words ~", game.ScreenW/2, 132, 2, pal.Tan)
-	if t.saved != "" {
-		f.DrawCentered(dst, "Saved: "+t.saved, game.ScreenW/2, 172, 1, pal.Ice)
+	// Menu, in two columns. Five rows sit a little closer and higher.
+	rows := t.rows()
+	step, my, savedY := 26, 196, 172
+	if rows > 4 {
+		step, my, savedY = 24, 186, 166
 	}
-
-	// Menu, in two columns.
+	if t.saved != "" {
+		f.DrawCentered(dst, "Saved: "+t.saved, game.ScreenW/2, savedY, 1, pal.Ice)
+	}
 	colW := 0
 	for _, it := range t.items {
 		colW = max(colW, f.Width(titleLabels[it], 2))
 	}
 	colW += 60
-	const step = 26
-	rows := t.rows()
 	mw, mh := colW*2+16, step*rows+20
-	mx, my := game.ScreenW/2-mw/2, 196
+	mx := game.ScreenW/2 - mw/2
 	gfx.Window(dst, mx, my, mw, mh)
 	for i, it := range t.items {
 		x, y := mx+8+(i/rows)*colW, my+10+(i%rows)*step
@@ -158,4 +162,8 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 
 	f.DrawShadow(dst, "Arrows choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
 	f.DrawShadow(dst, Version, game.ScreenW-8-f.Width(Version, 1), game.ScreenH-20, 1, pal.Ash)
+	if ctx.AI.Ready() {
+		on := "✦ AI on"
+		f.DrawShadow(dst, on, game.ScreenW/2-f.Width(on, 1)/2, game.ScreenH-20, 1, pal.Lime)
+	}
 }
