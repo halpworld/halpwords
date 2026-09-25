@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
+	"github.com/halpworld/halpwords/pkg/compete"
 	"github.com/halpworld/halpwords/pkg/puzzle"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // dealKind puts a puzzle of kind k on a lock in front of the hero.
@@ -74,5 +76,44 @@ func TestTumblerWheels(t *testing.T) {
 	c.solvePuzzle()
 	if !lp.solved || !c.level.Chests[c.pos].Open {
 		t.Fatalf("the right wheels did not open the chest: %q", lp.lines)
+	}
+}
+
+// A word list's own gap-fill sentences make cloze puzzles without an AI,
+// except on scored runs.
+func TestListCloze(t *testing.T) {
+	ctx := testContext(t)
+	l, err := words.Parse(strings.NewReader("title: Home\nlanguage: fr\n## home\nbedroom = la chambre\nfriend = l'ami | l'amie\n## sentences\n>> Je dors dans ___. | la chambre\n>> Voici ___ de Paul. | L’amie\n"), "home.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.Lists = append(ctx.Lists, l)
+	c := testCrawl(t, ctx)
+	seen := map[string]bool{}
+	for n := 0; n < 50 && len(seen) < 2; n++ {
+		lp := dealKind(t, c, puzzle.Door, puzzle.Cloze)
+		switch clue := lp.p.Clue(); {
+		case strings.HasPrefix(clue, "Je dors dans _____."):
+			seen["chambre"] = true
+			if !lp.p.Check(puzzle.Attempt{Text: "la chambre"}).Passed() {
+				t.Error("the right answer failed")
+			}
+		case strings.HasPrefix(clue, "Voici _____ de Paul."):
+			seen["amie"] = true
+			// Only the sentence's own answer fits, not the word's others.
+			if !lp.p.Check(puzzle.Attempt{Text: "l'amie"}).Passed() || lp.p.Check(puzzle.Attempt{Text: "l'ami"}).Tier >= words.AccentSlip {
+				t.Error("graded against the wrong answers")
+			}
+		default:
+			t.Fatalf("clue %q", clue)
+		}
+		c.dealPuzzle()
+	}
+	if len(seen) < 2 {
+		t.Errorf("dealt only %v", seen)
+	}
+	c.run.mode = compete.Hardcore
+	if g := c.run.ai.generated(c.run); g != nil {
+		t.Error("a scored run used the lists' sentences")
 	}
 }

@@ -141,12 +141,31 @@ bird = l'oiseau | un oiseau
 
 ## food
 bread = le pain
+
+## sentences
+>> Le ___ mange du pain. | chien
 ```
 - `english = answer`. Extra accepted answers go after `|`.
-- `title:` and `language:` (`fr`, `la`, `grc`, `ga`) are the only header
-  fields.
+- Header fields: `title:` and `language:` (`fr`, `la`, `grc`, `ga`), and
+  the optional `id:`, `version:` (a whole number), `level:` (such as a CEFR
+  level), `source:` and `licence:`. `id:` and `version:` are set by
+  halpwords-server; the others describe where a list comes from. A header
+  line is read as a header even if its value has `=` in it.
+- Keys starting with `x-` are ignored, so newer lists can add settings
+  without breaking this game. Any other unknown `key:` is an error (it is
+  usually a typo). Game 1.0 knows only `title:` and `language:`, so the
+  server offers downloads *for older games* without the new lines.
 - `## name` starts a tag group, used by puzzles such as odd-one-out and by LLM
-  themes.
+  themes. A bare `##` goes back to no group.
+- `>> sentence with ___ | answer` is a gap-fill sentence for cloze puzzles
+  (§7): one `___` gap, then after the last `|` the word that fills it,
+  which must match one of the list's answers (ignoring case, spacing,
+  apostrophe style and Unicode composition), or the list doesn't load.
+  Only that answer is accepted in the gap. Lists' sentences are used with
+  or without an AI, but not on scored runs (Hardcore, Daily Dungeon).
+- `words.Format` writes a list back in this format (headers, then words in
+  order with their groups, then sentences), and parsing its output gives the
+  same list; the server exports lists with it.
 - Difficulty is worked out automatically from word length, special characters
   and your history, so there are no extra columns.
 - Answers are written in normal Unicode (é, ā, á, ἀ).
@@ -420,7 +439,7 @@ puzzle's answer.
   language, so one bank works for every language. Only words in the active
   lists with a riddle can be used; otherwise the lock gets another puzzle.
   Cloze sentences in the target language came with LLM generation in M6
-  (gap-fill puzzles).
+  (gap-fill puzzles), and word lists can carry their own (`>>` lines, §4).
 - [x] **Pair matching** (doors): four foreign words on the left, their
   English meanings shuffled on the right. `↑`/`↓` choose a row and `←`/`→`
   swap its meaning with another row's. All four pairs must be right. Needs

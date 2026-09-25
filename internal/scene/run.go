@@ -15,6 +15,7 @@ import (
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/pkg/compete"
 	"github.com/halpworld/halpwords/pkg/proc"
+	"github.com/halpworld/halpwords/pkg/puzzle"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -82,6 +83,8 @@ type run struct {
 	prof     *profile.Profile
 	// ai is what the run asks the AI for, when one is set up.
 	ai *runAI
+	// cloze are the gap-fill sentences written in the word lists, or nil.
+	cloze *puzzle.Generated
 }
 
 // runSetup is what the New Adventure screens choose before the class.
@@ -152,6 +155,7 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 		perfect: map[int]bool{},
 		prof:    ctx.Profile,
 		ai:      newRunAI(ctx),
+		cloze:   puzzle.FromLists(ctx.ListsFor(lang.Code)),
 	}
 	if r.prof != nil {
 		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))

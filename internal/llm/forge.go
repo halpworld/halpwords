@@ -75,7 +75,7 @@ Reply with JSON only:
 	if len(l.Entries) < 3 {
 		return nil, ErrEmpty
 	}
-	l.Source = words.FileName(l.Title)
+	l.File = words.FileName(l.Title)
 	if err := s.proofread(ctx, lang, l); err != nil {
 		return nil, fmt.Errorf("checking the words: %w", err)
 	}
