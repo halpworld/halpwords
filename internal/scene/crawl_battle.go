@@ -274,6 +274,11 @@ func (c *Crawl) scoreAnswer(id int, res words.Result, typed string, hinted bool,
 		}
 		r.deck.Answer(id, a)
 		r.remember()
+		mode := r.linkMode()
+		if c.kind != "" {
+			mode += ":" + c.kind
+		}
+		r.link.Answer(r.lang.Code, r.deck.Entries()[id], mode, a)
 	}
 	switch {
 	case t >= words.Correct:
@@ -414,6 +419,7 @@ func (c *Crawl) strike(ctx *game.Context) {
 		dmg = int(float64(dmg)/1.5 + 0.5)
 	}
 	combo := combat.Combo(h.Streak)
+	c.kind = "attack"
 	c.scoreAnswer(b.wordID, res, typed, hinted, secs(ctx.Tick-b.start))
 	lines := answerLines(b.word, res, typed, c.run.lang)
 	if res.Tier == words.Perfect && !hinted && h.Restore(1) > 0 {
@@ -479,6 +485,7 @@ func (c *Crawl) strike(ctx *game.Context) {
 func (c *Crawl) dodge(ctx *game.Context, res words.Result, typed string, taken float64) {
 	b, h, m := c.battle, &c.run.hero, c.battle.m
 	timeout := typed == ""
+	c.kind = "dodge"
 	c.scoreAnswer(b.wordID, res, typed, b.hints > 0, taken)
 	lines := answerLines(b.word, res, typed, c.run.lang)
 	hit := h.Hit(max(1, m.ATK+c.run.rng.IntN(3)-1))

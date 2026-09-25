@@ -34,17 +34,19 @@ const (
 	titleWordLists
 	titleSettings
 	titleAI
+	titleAccount
 	titleQuit
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Quit"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit"}
 
 // NewTitle creates the title screen.
 func NewTitle(ctx *game.Context) game.Scene {
+	ctx.EndSession()
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI},
+		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount},
 	}
 	if runtime.GOOS != "js" {
 		t.items = append(t.items, titleQuit) // a web page is closed, not quit
@@ -107,6 +109,7 @@ func (t *Title) Update(ctx *game.Context) error {
 			titleWordLists: NewWordLists,
 			titleSettings:  NewSettings,
 			titleAI:        NewAISetup,
+			titleAccount:   NewAccount,
 		}[it](ctx))
 	}
 	return nil

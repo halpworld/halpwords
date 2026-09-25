@@ -64,6 +64,12 @@ type Settings struct {
 	Langs map[string]LangSettings `json:",omitempty"`
 	// Game is nil until the game settings are first changed.
 	Game *Options `json:",omitempty"`
+	// Locked are settings a grown-up set on the website, by language, for
+	// a game linked to their account. They replace the player's own, which
+	// are kept for when the lock goes, and are never saved here.
+	Locked map[string]LangSettings `json:"-"`
+	// LockNote says who set the locked settings.
+	LockNote string `json:"-"`
 }
 
 // CRT is how much the screen looks like an old monitor.
@@ -115,6 +121,23 @@ func (s *Settings) SetOptions(o Options) { s.Game = &o }
 
 // For returns the settings for lang.
 func (s *Settings) For(lang *words.Language) LangSettings {
+	if ls, ok := s.Locked[lang.Code]; ok {
+		return ls
+	}
+	if ls, ok := s.Langs[lang.Code]; ok {
+		return ls
+	}
+	return Preset(lang)
+}
+
+// IsLocked reports whether a grown-up set the settings for lang.
+func (s *Settings) IsLocked(lang *words.Language) bool {
+	_, ok := s.Locked[lang.Code]
+	return ok
+}
+
+// Own returns the player's own settings for lang, whatever is locked.
+func (s *Settings) Own(lang *words.Language) LangSettings {
 	if ls, ok := s.Langs[lang.Code]; ok {
 		return ls
 	}

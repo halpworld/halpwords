@@ -15,6 +15,7 @@ import (
 	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
@@ -51,11 +52,18 @@ type Context struct {
 	// AI is the connection to a language model, when one is set up. The
 	// game plays the same without it.
 	AI *llm.Service
+	// Link is the link to a grown-up's account on the website. It is
+	// never nil, and does nothing until the game is linked.
+	Link *link.Client
 
 	scenes  *manager
 	notice  string // a short message in the corner, like "Sound off"
 	noticeT int
 	opts    profile.Options // the game settings in use
+	// linkSeen is the link's change count last picked up; session is the
+	// play session going on.
+	linkSeen int
+	session  *session
 
 	// Full screen changes wait for the one before to finish: on macOS,
 	// changing again during the animation crashes the app.
@@ -203,6 +211,7 @@ func (c *Context) LoadLists() error {
 		}
 	}
 	c.Lists = append(c.Lists, user...)
+	c.Lists = append(c.Lists, c.Link.Lists()...) // assigned lists
 	c.ListErrors = errs
 	return nil
 }
@@ -236,6 +245,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 		Sound:  newSound(),
 		scenes: &manager{},
 	}
+	ctx.openLink()
 	if err := ctx.LoadLists(); err != nil {
 		return nil, err
 	}
@@ -244,6 +254,8 @@ func New(first func(*Context) Scene) (*Game, error) {
 	if len(errs) > 0 {
 		ctx.Notify("Some saved progress was damaged")
 	}
+	ctx.lockSettings()
+	ctx.linkSeen = ctx.Link.Changes()
 	ctx.ApplyOptions()
 	ctx.AI = llm.Load(saveStore{})
 	if p := ctx.AI.Provider(); p != nil {
@@ -260,6 +272,7 @@ func (g *Game) Update() error {
 	g.ctx.syncFullscreen()
 	g.ctx.Input.Update()
 	g.ctx.Sound.update(g.ctx.Tick)
+	g.ctx.pollLink()
 	if g.ctx.noticeT > 0 {
 		g.ctx.noticeT--
 	}

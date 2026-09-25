@@ -78,6 +78,9 @@ func (p *Practice) next(ctx *game.Context) {
 
 // Update implements game.Scene.
 func (p *Practice) Update(ctx *game.Context) error {
+	if p.deck != nil {
+		ctx.Playing("practice", p.lang().Code, nil)
+	}
 	if input.Back() {
 		ctx.Sound.Play(audio.Back)
 		ctx.Replace(NewTitle(ctx))
@@ -110,6 +113,7 @@ func (p *Practice) Update(ctx *game.Context) error {
 		}
 		p.deck.Answer(p.cur, words.Answer{Tier: p.result.Tier, Timed: true, Secs: p.taken, Mistake: p.mistake})
 		ctx.Profile.SaveMemory()
+		ctx.Link.Answer(p.lang().Code, p.word, "practice", words.Answer{Tier: p.result.Tier, Timed: true, Secs: p.taken, Mistake: p.mistake})
 		p.showing = true
 		ctx.Sound.Play(tierSound[p.result.Tier])
 		if p.result.Tier >= words.Correct {

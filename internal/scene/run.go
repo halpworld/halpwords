@@ -10,6 +10,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
@@ -81,6 +82,8 @@ type run struct {
 	// the language's preset.
 	settings profile.LangSettings
 	prof     *profile.Profile
+	// link sends answers to a grown-up's account, when the game is linked.
+	link *link.Client
 	// ai is what the run asks the AI for, when one is set up.
 	ai *runAI
 	// cloze are the gap-fill sentences written in the word lists, or nil.
@@ -154,6 +157,7 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 		sound:   ctx.Sound,
 		perfect: map[int]bool{},
 		prof:    ctx.Profile,
+		link:    ctx.Link,
 		ai:      newRunAI(ctx),
 		cloze:   puzzle.FromLists(ctx.ListsFor(lang.Code)),
 	}
@@ -163,6 +167,15 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 	r.setMode(ctx, compete.Adventure)
 	r.shrine = checkpoint{Depth: 1, Hero: r.hero.Clone()}
 	return r
+}
+
+// linkMode is the run's mode as the grown-up's account knows it:
+// "adventure", or "hardcore" for Hardcore and the Daily Dungeon.
+func (r *run) linkMode() string {
+	if r.mode.Scored() {
+		return "hardcore"
+	}
+	return "adventure"
 }
 
 // rules are how answers are graded on this run.

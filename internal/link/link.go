@@ -423,6 +423,36 @@ func (c *Client) Me() *Me {
 // SeenByText says who can see the learner's progress, such as "Your
 // teacher and your parent can see your progress."
 func SeenByText(roles []string) string {
+	who := adults(roles)
+	switch len(who) {
+	case 0:
+		return "Only the grown-up who linked this game can see your progress."
+	case 1:
+		return upper(who[0]) + " can see your progress."
+	}
+	return upper(strings.Join(who[:len(who)-1], ", ")+" and "+who[len(who)-1]) + " can see your progress."
+}
+
+// SetByText says who set the settings the game locks, for the Settings
+// screen: "Set on the website by your teacher."
+func SetByText(roles []string) string {
+	var who []string
+	for _, w := range adults(roles) {
+		if w != "a teaching assistant" {
+			who = append(who, w)
+		}
+	}
+	switch len(who) {
+	case 0:
+		return "Set on the website by a grown-up."
+	case 1:
+		return "Set on the website by " + who[0] + "."
+	}
+	return "Set on the website by " + strings.Join(who[:len(who)-1], ", ") + " or " + who[len(who)-1] + "."
+}
+
+// adults names the roles of the adults who can see the learner.
+func adults(roles []string) []string {
 	var who []string
 	add := func(s string) {
 		if !slices.Contains(who, s) {
@@ -449,13 +479,7 @@ func SeenByText(roles []string) string {
 			}
 		}
 	}
-	switch len(who) {
-	case 0:
-		return "Only the grown-up who linked this game can see your progress."
-	case 1:
-		return upper(who[0]) + " can see your progress."
-	}
-	return upper(strings.Join(who[:len(who)-1], ", ")+" and "+who[len(who)-1]) + " can see your progress."
+	return who
 }
 
 func upper(s string) string {

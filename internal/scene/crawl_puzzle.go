@@ -294,6 +294,7 @@ func (c *Crawl) solvePuzzle() {
 		shown = dialed(lp)
 	}
 	res := lp.p.Check(a)
+	c.kind = "puzzle"
 	c.scoreAnswer(lp.p.Word(), res.Result, shown, lp.hints > 0, 0)
 	lp.lines = lp.lines[:0]
 	for _, s := range res.Solution {

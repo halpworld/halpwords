@@ -29,7 +29,9 @@ func main() {
 		game.Crash(err, nil)
 		log.Fatal(err)
 	}
-	if err := ebiten.RunGame(g); err != nil {
+	err = ebiten.RunGame(g)
+	g.Close() // sends the last answers to a linked account
+	if err != nil {
 		game.Crash(err, nil)
 		log.Fatal(err)
 	}

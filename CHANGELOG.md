@@ -7,6 +7,12 @@ version as its release notes.
 
 ### Added
 
+- **Account: link the game to a grown-up's account** on the Halpwords
+  website (title screen → Account). A linked game sends answers and play
+  sessions in the background, gets assigned word lists (read-only, in Word
+  Lists), progress from the grown-up's other games, and settings a grown-up
+  set, which Settings then shows locked. It works the same offline, and
+  unlinking keeps your progress.
 - **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
   line gives a list its own cloze puzzles, used with or without the AI
   helper (not on scored runs). The answer must be one of the list's

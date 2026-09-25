@@ -96,6 +96,7 @@ func (w *WordLists) reload(ctx *game.Context) {
 	}
 	user, _ := game.UserLists()
 	w.shelf = newShelf(starters, user)
+	w.shelf.addAssigned(ctx.Link.Lists())
 	w.sel = min(w.sel, len(w.shelf.rows)-1)
 }
 
@@ -202,7 +203,7 @@ func (w *WordLists) updateBrowse(ctx *game.Context) {
 		r := rows[w.sel]
 		if !r.deletable() {
 			ctx.Sound.Play(audio.Wrong)
-			w.say("Starter lists can't be deleted.", pal.Tan)
+			w.say(undeletable(r), pal.Tan)
 			return
 		}
 		ctx.Sound.Play(audio.Key)
@@ -232,6 +233,14 @@ func (w *WordLists) updateBrowse(ctx *game.Context) {
 	case input.Pressed(ebiten.KeyF):
 		w.openForge(ctx)
 	}
+}
+
+// undeletable says why row r can't be deleted.
+func undeletable(r *shelfRow) string {
+	if r.assigned {
+		return "Assigned lists are read-only. Unlinking keeps them as your own."
+	}
+	return "Starter lists can't be deleted."
 }
 
 // openForge opens the Word Forge, when an AI is set up.
@@ -650,6 +659,8 @@ func (w *WordLists) drawList(dst *ebiten.Image, ctx *game.Context) {
 			col = pal.White
 		}
 		switch {
+		case r.assigned:
+			f.Draw(dst, "◆", x+12, ry, 1, pal.Sky)
 		case r.marked:
 			f.Draw(dst, "■", x+12, ry, 1, pal.Rose)
 		case r.deletable():
@@ -706,6 +717,8 @@ func (w *WordLists) drawInfo(dst *ebiten.Image, ctx *game.Context) {
 	}
 	line(info, pal.Ice)
 	switch {
+	case r.assigned:
+		line("◆ Assigned on the website", pal.Sky)
 	case r.own && r.starter != nil:
 		line("Starter list + your words", pal.Tan)
 	case r.own:
@@ -714,6 +727,8 @@ func (w *WordLists) drawInfo(dst *ebiten.Image, ctx *game.Context) {
 		line("Starter list", pal.Steel)
 	}
 	switch {
+	case r.assigned:
+		line("Read-only: it updates when the game syncs", pal.Ash)
 	case r.dirty:
 		line("* Not saved yet", pal.Yellow)
 	case r.own:
