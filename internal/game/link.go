@@ -18,6 +18,7 @@ func (saveStore) Remove(name string) error { return save.Remove(name) }
 func (c *Context) openLink() {
 	c.Link = link.Open(link.Options{Store: saveStore{}, Version: Version, OwnDir: WordsDir})
 	c.Link.Start()
+	watchPage(c.Link)
 }
 
 // pollLink picks up what the link brought in the background: assigned
