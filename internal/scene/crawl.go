@@ -7,7 +7,6 @@ import (
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/dungeon"
@@ -81,7 +80,7 @@ const holdDelay = 14
 func readAction(busy bool) action {
 	for _, ak := range actionKeys {
 		for _, k := range ak.keys {
-			d := inpututil.KeyPressDuration(k)
+			d := input.Duration(k)
 			if d == 1 || (!busy && d >= holdDelay) {
 				return ak.act
 			}
@@ -95,7 +94,7 @@ func readAction(busy bool) action {
 func movementHeld() bool {
 	for _, ak := range actionKeys {
 		for _, k := range ak.keys {
-			if ebiten.IsKeyPressed(k) {
+			if input.Held(k) {
 				return true
 			}
 		}

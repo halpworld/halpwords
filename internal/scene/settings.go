@@ -235,7 +235,7 @@ func (s *Settings) lines(ctx *game.Context) []line {
 func (s *Settings) Update(ctx *game.Context) error {
 	list := s.lines(ctx)
 	n := len(list) + 2
-	step := 0
+	step, fresh := 0, false // fresh: a new press, not a key held down
 	switch {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
@@ -256,14 +256,16 @@ func (s *Settings) Update(ctx *game.Context) error {
 		s.sel = (s.sel + 1) % n
 	case input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyA):
 		step = -1
+		fresh = input.Pressed(ebiten.KeyArrowLeft, ebiten.KeyA)
 	case input.Repeat(ebiten.KeyArrowRight) || input.Repeat(ebiten.KeyD):
 		step = 1
+		fresh = input.Pressed(ebiten.KeyArrowRight, ebiten.KeyD)
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		if s.sel == n-1 {
 			s.reset(ctx)
 			return nil
 		}
-		step = 1
+		step, fresh = 1, true
 	}
 	if step == 0 {
 		return nil
@@ -273,9 +275,13 @@ func (s *Settings) Update(ctx *game.Context) error {
 		s.switchTab(ctx, step)
 	case s.sel < n-1:
 		l := list[s.sel-1]
-		if l.volume {
+		switch {
+		case l.volume:
 			l.change(l.cur + step) // volumes stop at the ends
-		} else {
+		case !fresh:
+			// Holding a key only slides volumes; flicking a choice back and
+			// forth, like full screen, helps no one.
+		default:
 			l.change((l.cur + step + len(l.choices)) % len(l.choices))
 		}
 		s.note = ""

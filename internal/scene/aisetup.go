@@ -226,8 +226,8 @@ func (a *AISetup) choose(ctx *game.Context) {
 // pasteDown reports whether the paste keys were pressed: Ctrl+V, Cmd+V or
 // Shift+Insert.
 func pasteDown() bool {
-	mod := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
-	return (mod && input.Pressed(ebiten.KeyV)) || (ebiten.IsKeyPressed(ebiten.KeyShift) && input.Pressed(ebiten.KeyInsert))
+	mod := input.Held(ebiten.KeyControl) || input.Held(ebiten.KeyMeta)
+	return (mod && input.Pressed(ebiten.KeyV)) || (input.Held(ebiten.KeyShift) && input.Pressed(ebiten.KeyInsert))
 }
 
 func (a *AISetup) updateKey(ctx *game.Context) {
@@ -247,7 +247,7 @@ func (a *AISetup) updateKey(ctx *game.Context) {
 		a.key = []rune(llm.CleanKey(data))
 		ctx.Sound.Play(audio.Accent)
 	}
-	mod := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
+	mod := input.Held(ebiten.KeyControl) || input.Held(ebiten.KeyMeta)
 	switch {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
