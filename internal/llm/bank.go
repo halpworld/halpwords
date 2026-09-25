@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Cloze is a sentence in the language being learned with a gap where a word

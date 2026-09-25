@@ -12,7 +12,7 @@ import (
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/typing"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // typeInto feeds this tick's typing into f: characters, Backspace, Tab for

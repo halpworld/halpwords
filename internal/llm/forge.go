@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/safety"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // ForgeCounts are the list sizes the Word Forge offers.
@@ -20,7 +21,7 @@ var ErrTopic = errors.New("please choose another topic")
 // finds wrong are fixed or dropped. The list still needs saving.
 func (s *Service) Forge(ctx context.Context, lang *words.Language, topic string, count int) (*words.List, error) {
 	topic = tidy(topic)
-	if !short(topic, 60) || !Clean(topic) {
+	if !short(topic, 60) || !safety.Clean(topic) {
 		return nil, ErrTopic
 	}
 	prompt := fmt.Sprintf(`Make a vocabulary list for a 13-year-old learning %s.
@@ -32,7 +33,7 @@ Give %d useful words or short phrases on the topic, easiest first, in two to fou
 Reply with JSON only:
 {"title": "a short list title, at most 24 characters", "groups": [{"tag": "group name, one or two words", "words": [{"en": "...", "answer": "...", "alt": []}]}]}`,
 		langLine(lang), topic, count, lang.Name)
-	text, err := s.Ask(ctx, true, Policy, prompt, 60*count+400)
+	text, err := s.Ask(ctx, true, safety.Policy, prompt, 60*count+400)
 	if err != nil {
 		return nil, err
 	}
@@ -51,14 +52,14 @@ Reply with JSON only:
 		return nil, err
 	}
 	title := tidy(out.Title)
-	if !short(title, 30) || !Clean(title) || !nameLike(title) {
+	if !short(title, 30) || !safety.Clean(title) || !nameLike(title) {
 		title = topic
 	}
 	l := &words.List{Title: lang.Name + " - " + title + " (forged)", Language: lang.Code}
 	seen := map[string]bool{}
 	for _, g := range out.Groups {
 		tag := strings.ToLower(tidy(g.Tag))
-		if !short(tag, 20) || !Clean(tag) || !nameLike(tag) {
+		if !short(tag, 20) || !safety.Clean(tag) || !nameLike(tag) {
 			tag = ""
 		}
 		for _, w := range g.Words {
@@ -87,7 +88,7 @@ Reply with JSON only:
 // checkForged checks one generated word.
 func checkForged(en, answer string, alt []string, lang *words.Language) (words.Entry, bool) {
 	ok := func(s string, script *words.Language) bool {
-		return short(s, 30) && Clean(s) && !strings.ContainsAny(s, "=|#") && (script == nil || hasScript(s, script))
+		return short(s, 30) && safety.Clean(s) && !strings.ContainsAny(s, "=|#") && (script == nil || hasScript(s, script))
 	}
 	en, answer = strings.ToLower(tidy(en)), tidy(answer)
 	if !ok(en, words.English) || !ok(answer, lang) {
@@ -111,7 +112,7 @@ For each numbered line, say whether the %s is a correct, standard translation, s
 Reply with JSON only: {"checks":[{"n":1,"ok":true,"fix":""}]}
 When a line is wrong, set "ok" to false and put the corrected %s in "fix", or leave "fix" empty if the line should be removed.`,
 		langLine(lang), lang.Name, lang.Name, wordLines(l.Entries), lang.Name)
-	text, err := s.Ask(ctx, true, Policy, prompt, 30*len(l.Entries)+300)
+	text, err := s.Ask(ctx, true, safety.Policy, prompt, 30*len(l.Entries)+300)
 	if err != nil {
 		return err
 	}

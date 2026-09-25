@@ -7,7 +7,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/save"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // shelfRow is one word list on the Word Lists screen.

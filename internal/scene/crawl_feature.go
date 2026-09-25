@@ -11,8 +11,8 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
 	"github.com/halpworld/halpwords/internal/raycast"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 // props are the sprites for shrines, campfires and merchants.

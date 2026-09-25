@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // oddOneOut shows four words: three from one group of a word list (the

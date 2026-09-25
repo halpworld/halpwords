@@ -15,10 +15,10 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/typing"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/proc"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Practice is a stand-alone spelling drill. Words are dealt by spaced

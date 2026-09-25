@@ -1,6 +1,6 @@
 package combat
 
-import "github.com/halpworld/halpwords/internal/words"
+import "github.com/halpworld/halpwords/pkg/words"
 
 // ArmorBlocks reports whether an armored monster shrugs off an attack graded
 // tier. Only exact spelling gets through: accent slips and grazes do

@@ -12,7 +12,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 // levels is the number of light levels, from black to fully lit.

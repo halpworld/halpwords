@@ -8,9 +8,9 @@ import (
 	"errors"
 	"io/fs"
 
-	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/save"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // The files the profile is kept in.

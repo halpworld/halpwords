@@ -12,8 +12,8 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
 	"github.com/halpworld/halpwords/internal/rpg"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 // menuRow is one line of the items or shop screen.

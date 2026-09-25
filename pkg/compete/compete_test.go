@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func TestScore(t *testing.T) {

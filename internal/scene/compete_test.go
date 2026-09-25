@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/profile"
-	"github.com/halpworld/halpwords/internal/puzzle"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/puzzle"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // hardcoreCrawl is a Hardcore run on floor depth.

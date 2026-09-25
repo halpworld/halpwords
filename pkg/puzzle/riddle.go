@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/halpworld/halpwords/assets"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Riddles returns the riddle bank: riddles in English, by the English word

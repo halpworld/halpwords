@@ -4,7 +4,7 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Generated is content an AI wrote for the word lists. Everything in it has

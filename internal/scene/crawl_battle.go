@@ -21,7 +21,7 @@ import (
 	"github.com/halpworld/halpwords/internal/raycast"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // phase is a step in a battle.

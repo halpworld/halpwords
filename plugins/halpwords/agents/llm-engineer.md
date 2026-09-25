@@ -32,8 +32,7 @@ claude-api skill or current docs, not memory.
   pass the local checker, lists must parse with the game's parser.
 - **The model never grades spelling** and never chats freely with children.
 - **Family-safe, always.** Every prompt carries the age-appropriate policy
-  (share one definition: the game's `safety` package, `pkg/safety` after
-  W0.1) and every output goes through the local word filter. This can't be
+  (share one definition: the game's `pkg/safety`) and every output goes through the local word filter. This can't be
   turned off.
 - **No personal data in prompts.** No names, emails or free text a child
   typed; use IDs or roles ("the learner", "the class").

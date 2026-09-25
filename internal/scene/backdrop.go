@@ -8,7 +8,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 // stoneRamp runs from mortar to highlight for grey dungeon stone.

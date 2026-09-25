@@ -7,7 +7,7 @@ import (
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // testBattle starts a fight with m on the hero's turn.

@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/halpworld/halpwords/assets"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // starter returns the starter lists' words for each language.

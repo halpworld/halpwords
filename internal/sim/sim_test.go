@@ -5,7 +5,7 @@ import (
 
 	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/rpg"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // These tests are guard rails for the game's balance. If a change to the

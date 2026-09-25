@@ -10,9 +10,9 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
-	"github.com/halpworld/halpwords/internal/puzzle"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/proc"
+	"github.com/halpworld/halpwords/pkg/puzzle"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // runAI is what an adventure asks the AI for. Every request runs in the

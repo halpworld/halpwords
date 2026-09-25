@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/llm"
-	"github.com/halpworld/halpwords/internal/proc"
-	"github.com/halpworld/halpwords/internal/puzzle"
 	"github.com/halpworld/halpwords/internal/rpg"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/proc"
+	"github.com/halpworld/halpwords/pkg/puzzle"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // aiFake is a pretend OpenAI that writes whatever the game asks for.

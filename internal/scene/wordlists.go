@@ -22,7 +22,7 @@ import (
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/save"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // wlMode is what the Word Lists screen is doing.

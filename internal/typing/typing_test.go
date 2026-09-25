@@ -3,7 +3,7 @@ package typing
 import (
 	"testing"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func field(t *testing.T, code string) *Field {

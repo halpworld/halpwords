@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
-	"github.com/halpworld/halpwords/internal/puzzle"
+	"github.com/halpworld/halpwords/pkg/puzzle"
 )
 
 // dealKind puts a puzzle of kind k on a lock in front of the hero.

@@ -21,8 +21,7 @@ right, say so and mark it for a human speaker.
 ## Where things are
 
 - Game: `assets/words/{french,latin,greek,irish}.txt`,
-  `assets/puzzles/riddles.txt`, grading in `internal/words` (later
-  `pkg/words`). Rules in the game's `PLAN.md` §4 and §4a.
+  `assets/puzzles/riddles.txt`, grading in `pkg/words`. Rules in the game's `PLAN.md` §4 and §4a.
 - Server: lists in the database and fixtures, the list format extensions in
   its `PLAN.md` §9 (new headers, `## sentences`, `x-` lines), library and
   publisher packs in §15.

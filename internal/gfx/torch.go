@@ -9,7 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/internal/proc"
+	"github.com/halpworld/halpwords/pkg/proc"
 )
 
 type particle struct {

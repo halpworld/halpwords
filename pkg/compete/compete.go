@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Mode is how an adventure is played.

@@ -12,7 +12,7 @@ import (
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func testContext(t *testing.T) *game.Context {

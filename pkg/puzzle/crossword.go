@@ -4,7 +4,7 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Crossword depths: chests have crosswords of two words from

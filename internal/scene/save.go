@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image/color"
 
-	"github.com/halpworld/halpwords/internal/compete"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/llm"
@@ -14,7 +13,8 @@ import (
 	"github.com/halpworld/halpwords/internal/raycast"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
-	"github.com/halpworld/halpwords/internal/words"
+	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // saveName is the file the adventure is saved in. There is one save slot.
