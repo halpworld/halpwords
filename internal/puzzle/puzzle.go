@@ -22,11 +22,12 @@ const (
 	Riddle                // solve an English riddle in the foreign language
 	Tumbler               // turn letter wheels to spell a word
 	Crossword             // fill in words that cross on a shared letter
+	Cloze                 // fill the gap in a sentence (AI-written)
 )
 
 func (k Kind) String() string {
 	return [...]string{"reverse rune", "odd one out", "anagram", "missing letters", "spelling",
-		"pair matching", "riddle", "tumbler lock", "crossword"}[k]
+		"pair matching", "riddle", "tumbler lock", "crossword", "gap fill"}[k]
 }
 
 // Lock is what a puzzle opens.
@@ -117,15 +118,29 @@ func Kinds(lock Lock, depth int) []Kind {
 // New makes a random puzzle for a lock on floor depth, with words dealt from
 // deck. Answers in lang are graded by rules.
 func New(lock Lock, depth int, deck *words.Deck, lang *words.Language, rules words.Rules, rng *rand.Rand) Puzzle {
+	return NewWith(lock, depth, deck, lang, rules, rng, nil)
+}
+
+// NewWith is New with content an AI wrote. With cloze sentences, every lock
+// can also have a gap-fill puzzle.
+func NewWith(lock Lock, depth int, deck *words.Deck, lang *words.Language, rules words.Rules, rng *rand.Rand, gen *Generated) Puzzle {
 	ks := Kinds(lock, depth)
-	return Make(ks[rng.IntN(len(ks))], lock, depth, deck, lang, rules, rng)
+	if gen != nil && len(gen.Cloze) > 0 {
+		ks = append(ks, Cloze)
+	}
+	return MakeWith(ks[rng.IntN(len(ks))], lock, depth, deck, lang, rules, rng, gen)
 }
 
 // Make makes a puzzle of kind k. When the word lists cannot make that kind
 // (a word too short to scramble, or lists without groups), it makes a
 // spelling puzzle instead.
 func Make(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rules words.Rules, rng *rand.Rand) Puzzle {
-	p := makeKind(k, lock, depth, deck, lang, rng)
+	return MakeWith(k, lock, depth, deck, lang, rules, rng, nil)
+}
+
+// MakeWith is Make with content an AI wrote.
+func MakeWith(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rules words.Rules, rng *rand.Rand, gen *Generated) Puzzle {
+	p := makeKind(k, lock, depth, deck, lang, rng, gen)
 	switch p := p.(type) {
 	case *typed:
 		if p.lang == lang {
@@ -139,9 +154,13 @@ func Make(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, 
 	return p
 }
 
-func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rng *rand.Rand) Puzzle {
+func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rng *rand.Rand, gen *Generated) Puzzle {
 	var p Puzzle
 	switch k {
+	case Cloze:
+		if t := newCloze(deck, lang, gen, rng); t != nil {
+			p = t
+		}
 	case OddOneOut:
 		if o := newOddOneOut(deck.Entries(), rng); o != nil {
 			p = o
@@ -151,7 +170,7 @@ func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Langua
 			p = m
 		}
 	case Riddle:
-		if t := newRiddle(deck, lang, rng); t != nil {
+		if t := newRiddle(deck, lang, gen, rng); t != nil {
 			p = t
 		}
 	case Tumbler:

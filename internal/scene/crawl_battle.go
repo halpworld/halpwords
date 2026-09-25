@@ -16,6 +16,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/raycast"
 	"github.com/halpworld/halpwords/internal/rpg"
@@ -57,10 +58,18 @@ type battle struct {
 
 	flash, lunge, dying int // monster animation ticks
 
+	// taunt is what the monster shouted as the battle began, shown for
+	// tauntT more ticks.
+	taunt  llm.Taunt
+	tauntT int
+
 	slow    bool // an Hourglass gives half as much time again
 	clarity bool // a Rune of Clarity shows typos as they are typed
 	hints   int  // letters shown by hints for this word
 }
+
+// tauntTicks is how long a monster's taunt stays over the view.
+const tauntTicks = 240
 
 // hourglassTime is how much longer an Hourglass gives to type.
 const hourglassTime = 1.5
@@ -104,6 +113,10 @@ func (c *Crawl) startBattle(ctx *game.Context, m *dungeon.Monster, ambush bool) 
 		first = phaseDefend
 	} else {
 		c.run.say(fmt.Sprintf("You fight the %s!", m.Name()), pal.Yellow)
+	}
+	if t, ok := c.run.ai.taunt(c.run); ok {
+		c.battle.taunt, c.battle.tauntT = t, tauntTicks
+		c.run.say(fmt.Sprintf("The %s shouts: “%s” (%s)", m.Name(), t.Text, t.English), pal.Pink)
 	}
 	// The first time the hero meets a trait, explain it before the fight.
 	if fresh := m.Traits &^ c.run.seenTraits; fresh != 0 {
@@ -191,6 +204,9 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 	if b.dying > 0 && b.dying < dyingTicks {
 		b.dying++
 	}
+	if b.tauntT > 0 {
+		b.tauntT--
+	}
 	if (b.phase == phaseAttack || b.phase == phaseDefend) && !c.muted && input.Pressed(ebiten.KeyF4) {
 		c.hint(&b.hints, b.word.Answers[0])
 	}
@@ -275,6 +291,7 @@ func (c *Crawl) scoreAnswer(id int, res words.Result, typed string, hinted bool,
 		r.tally.BestCombo = max(r.tally.BestCombo, h.Streak)
 	case t < words.AccentSlip:
 		h.Streak = 0
+		r.ai.missed(id)
 	}
 	if t == words.Miss {
 		r.tally.Misses++

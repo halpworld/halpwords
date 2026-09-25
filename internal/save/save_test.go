@@ -5,6 +5,9 @@ package save
 import (
 	"errors"
 	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -64,5 +67,20 @@ func TestFolders(t *testing.T) {
 	}
 	if names, _ := List("words"); len(names) != 1 {
 		t.Fatalf("after remove: got %v", names)
+	}
+}
+
+func TestWritePrivate(t *testing.T) {
+	useTempDir(t)
+	if err := WritePrivate("secret.json", []byte("key")); err != nil {
+		t.Fatal(err)
+	}
+	dir, _ := Dir()
+	fi, err := os.Stat(filepath.Join(dir, "secret.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v, want 0600", fi.Mode().Perm())
 	}
 }

@@ -52,6 +52,14 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 			c.drawLetterHint(view, ctx, hintText(b.word.Answers[0], b.hints))
 		}
 		c.drawBuffs(view, ctx)
+		if b.tauntT > 0 && b.hints == 0 {
+			// The monster's taunt, low in the view, clear of the banner.
+			a := min(1, float64(b.tauntT)/30)
+			text := "“" + b.taunt.Text + "”"
+			f.DrawOutline(view, text, cx-f.Width(text, 1)/2, viewY+vh-64, 1, pal.Fade(pal.Pink, a), pal.Fade(pal.Black, a))
+			en := "(" + b.taunt.English + ")"
+			f.DrawOutline(view, en, cx-f.Width(en, 1)/2, viewY+vh-46, 1, pal.Fade(pal.Ice, a), pal.Fade(pal.Black, a))
+		}
 		c.drawHint(view, ctx, c.battleHelp())
 	case modePuzzle:
 		if c.puzzle.fields != nil {
@@ -194,14 +202,14 @@ func (c *Crawl) drawSide(dst *ebiten.Image, ctx *game.Context) {
 		drawGreekChart(dst, ctx, x+10, y+8)
 		return
 	}
-	title := fmt.Sprintf("Floor %d · %s", c.run.depth, c.theme.Name)
+	title := fmt.Sprintf("Floor %d · %s", c.run.depth, c.floorName())
 	if c.run.hardcore() {
 		title = fmt.Sprintf("Floor %d · Score %s", c.run.depth, groupDigits(c.run.score()))
 		if best := ctx.Profile.Fame.Best(compete.TableKey(c.run.mode, c.run.lang.Code)); best > 0 && c.run.score() > best {
 			f.DrawShadow(dst, "★ BEST", x+w-10-f.Width("★ BEST", 1), y+7, 1, pal.Yellow)
 		}
 	}
-	f.DrawShadow(dst, title, x+10, y+7, 1, pal.Tan)
+	f.DrawShadow(dst, fit(f, title, w-20, 1), x+10, y+7, 1, pal.Tan)
 	c.drawAutomap(dst, x+6, y+26, w-12, 128-32, 8, false)
 }
 
