@@ -132,6 +132,7 @@ type floater struct {
 	text string
 	col  color.RGBA
 	t    int
+	big  bool // a critical hit's damage
 }
 
 // Crawl is the first-person dungeon. Exploring, battles and puzzles all
@@ -175,7 +176,9 @@ type Crawl struct {
 	lore  []string // notes from the Dungeon Director still to find
 	steps int      // steps taken on this floor
 
-	shake, hurt int // ticks of screen shake and red flash left
+	shake, hurt int         // ticks of screen shake and red flash left
+	freeze      int         // ticks the action stops for, after a critical hit
+	fx          *gfx.Sparks // sparks, coins and dust over the view
 	banner      string
 	sub         string // smaller line under the banner
 	bannerT     int
@@ -208,6 +211,7 @@ func crawlOn(r *run, l *dungeon.Level) *Crawl {
 		pos:    l.Start,
 		facing: l.StartDir,
 		angle:  raycast.Angle(l.StartDir),
+		fx:     gfx.NewSparks(l.Seed),
 	}
 }
 
@@ -264,6 +268,14 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		// Don't let the battle clock run while the player is in another
 		// window.
 		c.pause(ctx)
+		return nil
+	}
+	c.fx.Update()
+	if c.freeze > 0 {
+		c.freeze-- // a moment's stillness after a critical hit
+		if b := c.battle; b != nil {
+			b.shown++
+		}
 		return nil
 	}
 	if c.shake > 0 {
@@ -571,6 +583,7 @@ func (c *Crawl) drinkPotion() bool {
 	c.play(audio.Potion)
 	c.run.say(fmt.Sprintf("You drink a potion and recover %d HP.", n), pal.Lime)
 	c.float(fmt.Sprintf("+%d", n), pal.Lime)
+	c.fxHeal()
 	return true
 }
 
@@ -722,7 +735,7 @@ func (c *Crawl) Draw(dst *ebiten.Image, ctx *game.Context) {
 	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
 	view := dst.SubImage(image.Rect(viewX, viewY, viewX+vw, viewY+vh)).(*ebiten.Image)
 	ox, oy := viewX, viewY
-	if c.shake > 0 {
+	if c.shake > 0 && ctx.Shake() {
 		ox += (int(ctx.Tick*7)%5 - 2) * gfx.ArtScale
 		oy += (int(ctx.Tick*3)%3 - 1) * gfx.ArtScale
 	}
@@ -730,6 +743,7 @@ func (c *Crawl) Draw(dst *ebiten.Image, ctx *game.Context) {
 	if c.hurt > 0 {
 		gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Red, 0.4*float64(c.hurt)/12))
 	}
+	c.fx.Draw(view)
 	c.drawViewOverlay(view, ctx)
 	c.drawSide(dst, ctx)
 	c.drawPanel(dst, ctx)

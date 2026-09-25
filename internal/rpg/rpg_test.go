@@ -43,7 +43,7 @@ func TestGainXP(t *testing.T) {
 	if ups := h.GainXP(h.NextXP() - 1); len(ups) != 0 {
 		t.Fatalf("levelled up too early: %v", ups)
 	}
-	ups := h.GainXP(1 + 24) // level 2, then exactly level 3
+	ups := h.GainXP(1 + 32) // level 2 needs 12, level 3 32 more
 	if len(ups) != 2 || h.Level != 3 || h.XP != 0 {
 		t.Fatalf("got %v, level %d, XP %d", ups, h.Level, h.XP)
 	}
@@ -76,6 +76,10 @@ func TestHealAndRestore(t *testing.T) {
 	k := NewHero(Knight)
 	if k.Hit(10) != 10-k.DEF() {
 		t.Fatalf("DEF does not soften blows: %d", k.Hit(10))
+	}
+	k.Base.DEF = 50
+	if k.Hit(12) != 4 {
+		t.Fatalf("a blow of 12 through great armour does %d, want a third", k.Hit(12))
 	}
 }
 

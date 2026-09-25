@@ -55,6 +55,31 @@ type Context struct {
 	scenes  *manager
 	notice  string // a short message in the corner, like "Sound off"
 	noticeT int
+	opts    profile.Options // the game settings in use
+}
+
+// ApplyOptions puts the game settings in the profile into effect: the
+// volumes, the CRT filter and full screen.
+func (c *Context) ApplyOptions() {
+	c.opts = c.Profile.Settings.Options()
+	c.Sound.Music = float64(c.opts.Music) / profile.MaxVolume
+	c.Sound.Effects = float64(c.opts.Effects) / profile.MaxVolume
+	c.Sound.music.volume(c.Sound)
+	if ebiten.IsFullscreen() != c.opts.Fullscreen {
+		ebiten.SetFullscreen(c.opts.Fullscreen)
+	}
+}
+
+// Shake reports whether the view may shake. Some players turn it off.
+func (c *Context) Shake() bool { return c.opts.Shake }
+
+// toggleFullscreen switches full screen on or off and remembers it.
+func (c *Context) toggleFullscreen() {
+	o := c.Profile.Settings.Options()
+	o.Fullscreen = !ebiten.IsFullscreen()
+	c.Profile.Settings.SetOptions(o)
+	c.Profile.SaveSettings()
+	c.ApplyOptions()
 }
 
 // Notify shows a short message in the top corner for a moment.
@@ -163,6 +188,7 @@ func UserDir() (string, error) { return save.Dir() }
 // Game implements ebiten.Game.
 type Game struct {
 	ctx *Context
+	crt crt
 }
 
 // New loads shared resources and starts with the scene made by first.
@@ -185,6 +211,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 	if len(errs) > 0 {
 		ctx.Notify("Some saved progress was damaged")
 	}
+	ctx.ApplyOptions()
 	ctx.AI = llm.Load(saveStore{})
 	if p := ctx.AI.Provider(); p != nil {
 		ctx.AI.Check(p.ID) // free: it lists the models the key can use
@@ -195,6 +222,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 
 // Update implements ebiten.Game.
 func (g *Game) Update() error {
+	defer guard()
 	g.ctx.Tick++
 	g.ctx.Input.Update()
 	g.ctx.Sound.update(g.ctx.Tick)
@@ -215,15 +243,18 @@ func (g *Game) Update() error {
 	if input.Pressed(ebiten.KeyF11) ||
 		(input.Pressed(ebiten.KeyEnter) && ebiten.IsKeyPressed(ebiten.KeyAlt)) ||
 		(input.Pressed(ebiten.KeyF) && ebiten.IsKeyPressed(ebiten.KeyMeta) && ebiten.IsKeyPressed(ebiten.KeyControl)) {
-		ebiten.SetFullscreen(!ebiten.IsFullscreen())
+		g.ctx.toggleFullscreen()
 		g.ctx.Input.Chars = g.ctx.Input.Chars[:0]
 		return nil
 	}
-	return g.ctx.scenes.update(g.ctx)
+	err := g.ctx.scenes.update(g.ctx)
+	g.ctx.Sound.PlayMusic(g.ctx.scenes.music())
+	return err
 }
 
 // Draw implements ebiten.Game.
 func (g *Game) Draw(screen *ebiten.Image) {
+	defer guard()
 	g.ctx.scenes.draw(screen, g.ctx)
 	if c := g.ctx; c.noticeT > 0 {
 		a := min(1, float64(c.noticeT)/20)
@@ -245,9 +276,13 @@ func (g *Game) DrawFinalScreen(screen ebiten.FinalScreen, offscreen *ebiten.Imag
 	if scale >= 1 {
 		scale = math.Floor(scale)
 	}
+	x, y := math.Floor((sw-ScreenW*scale)/2), math.Floor((sh-ScreenH*scale)/2)
+	if c := g.ctx.opts.CRT; c != profile.CRTOff && g.crt.draw(screen, offscreen, x, y, ScreenW*scale, ScreenH*scale, scale, c) {
+		return
+	}
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(scale, scale)
-	op.GeoM.Translate(math.Floor((sw-ScreenW*scale)/2), math.Floor((sh-ScreenH*scale)/2))
+	op.GeoM.Translate(x, y)
 	op.Filter = ebiten.FilterNearest
 	screen.DrawImage(offscreen, op)
 }

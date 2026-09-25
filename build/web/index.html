@@ -4,14 +4,81 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Halpwords</title>
-<style>html, body { margin: 0; height: 100%; background: #000; }</style>
+<meta name="description" content="An 8-bit dungeon crawler where spelling is your sword. Learn French, Latin, Ancient Greek or Irish by typing your way through a first-person dungeon.">
+<meta name="theme-color" content="#0d0a14">
+<meta property="og:title" content="Halpwords">
+<meta property="og:description" content="An 8-bit dungeon crawler where spelling is your sword.">
+<meta property="og:image" content="halpwords.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+  :root { color-scheme: dark; --bg: #0d0a14; --ink: #e8dcc0; --dim: #8a7f96; --gold: #ffd640; --frame: #c9a26b; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden;
+    font: 16px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  #loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; padding: 16px; text-align: center; transition: opacity .4s; }
+  #loader.done { opacity: 0; pointer-events: none; }
+  #loader img { width: 128px; height: 128px; image-rendering: pixelated; }
+  h1 { margin: 0; font-size: 40px; letter-spacing: 6px; color: var(--gold); text-shadow: 4px 4px 0 #5c2a1a; }
+  .tag { color: var(--frame); margin-top: -8px; }
+  .bar { width: min(320px, 80vw); height: 14px; border: 2px solid var(--frame); padding: 2px; }
+  .bar div { height: 100%; width: 0; background: var(--gold); transition: width .15s; }
+  #status { color: var(--dim); min-height: 1.4em; }
+  #hint { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; color: var(--dim); font-size: 13px;
+    pointer-events: none; transition: opacity 1s; }
+  .touch { display: none; color: var(--frame); max-width: 30em; }
+  @media (pointer: coarse) { .touch { display: block; } }
+  .error { color: #ff6b6b; }
+</style>
 </head>
 <body>
+<div id="loader">
+  <img src="halpwords.png" alt="">
+  <h1>HALPWORDS</h1>
+  <div class="tag">~ A Dungeon of Words ~</div>
+  <div class="bar"><div id="fill"></div></div>
+  <div id="status">Loading the dungeon…</div>
+  <div class="touch">Halpwords is a typing game: it needs a keyboard.</div>
+</div>
+<div id="hint">Click the game if the keys don't answer · F11 full screen · F3 sound · @VERSION@</div>
 <script src="wasm_exec.js"></script>
 <script>
-const go = new Go();
-WebAssembly.instantiateStreaming(fetch("halpwords.wasm"), go.importObject)
-  .then(r => go.run(r.instance));
+(async () => {
+  const fill = document.getElementById("fill"), status = document.getElementById("status");
+  // The size of the game before compression, filled in by the build, so
+  // progress is right even when the server compresses the download.
+  const size = Number("@WASM_SIZE@") || 0;
+  try {
+    const res = await fetch("halpwords.wasm");
+    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+    const reader = res.body.getReader();
+    const parts = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      got += value.length;
+      if (size) fill.style.width = Math.min(100, 100 * got / size) + "%";
+      status.textContent = "Loading the dungeon… " + (got / 1048576).toFixed(1) + " MB";
+    }
+    fill.style.width = "100%";
+    status.textContent = "Lighting the torches…";
+    const bytes = new Uint8Array(got);
+    let at = 0;
+    for (const p of parts) { bytes.set(p, at); at += p.length; }
+    const go = new Go();
+    const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
+    document.getElementById("loader").classList.add("done");
+    setTimeout(() => { document.getElementById("hint").style.opacity = 0; }, 12000);
+    await go.run(instance);
+  } catch (err) {
+    status.innerHTML = "";
+    const e = document.createElement("span");
+    e.className = "error";
+    e.textContent = "The dungeon failed to load: " + err.message + ". Try reloading the page.";
+    status.appendChild(e);
+  }
+})();
 </script>
 </body>
 </html>

@@ -445,17 +445,18 @@ puzzle's answer.
 *Now (M4, done):* `internal/rpg` holds the hero with no Ebitengine
 dependency: classes, stats, levels, items and gear.
 
-- **Classes** are picked after the language. Knight: 36 HP, DEF 2, +8 HP
-  a level. Scribe: 10 MP, Focus 2, half as much damage again from speed
-  above ×1, hints for 1 MP instead of 2. Rogue: Luck 4, 25% more dodge
-  time, half as much gold again from chests. Each has a 16×16 string-art
-  portrait recoloured per class.
-- **Stats:** HP, MP, ATK, DEF (taken off every blow, never below 1), Focus
-  (5% more typing time each, for the attack speed bonus and dodging), Luck
-  (2% chance each, up to 30%, that a good hit is a lucky critical, and 5%
-  more gold), and Dodge % from gear. Levels grow HP, MP and ATK; DEF, Focus
-  and Luck grow on even levels. Level ups restore HP and MP and list what
-  grew.
+- **Classes** are picked after the language. Knight: 36 HP, DEF 1, +8 HP
+  a level. Scribe: 30 HP, 10 MP, Focus 2, half as much damage again from
+  speed above ×1, hints for 1 MP instead of 2. Rogue: 30 HP, Luck 4, 25%
+  more dodge time, half as much gold again from chests. Each has a 16×16
+  string-art portrait recoloured per class. *(Numbers as tuned in M7.)*
+- **Stats:** HP, MP, ATK, DEF (taken off every blow, but a blow always does
+  a third of its power, and at least 1), Focus (5% more typing time each,
+  for the attack speed bonus and dodging), Luck (2% chance each, up to 30%,
+  that a good hit is a lucky critical, and 5% more gold), and Dodge % from
+  gear. Levels grow HP, MP and ATK; DEF, Focus and Luck grow on even
+  levels. Level ups restore HP and MP and list what grew. Level *n* needs
+  8*n* + 4*n*² XP.
 - **XP** comes from monsters, from solving puzzles (2 or 3 plus half the
   depth), and 2 XP for the first perfect spelling of each word.
 - **MP** pays for hints: <kbd>F4</kbd> in a battle or a typed puzzle shows
@@ -605,6 +606,14 @@ built from blade/guard/hilt parts).
 
 **Effects:** particles, damage numbers, screen shake, torch flicker, and a
 CRT/scanline filter as an optional shader (Kage).
+*Now (M7):* `gfx.Sparks` throws art-pixel sparks: off every blow (more and
+faster for a critical hit, which also freezes the action for five ticks),
+off armour, as dust from a defeated monster, as coins from chests and
+monsters, as runes when a seal breaks or the hero prays, and as light when
+healing or levelling up. Damage numbers pop in a size larger and settle.
+The CRT filter is a Kage shader in `DrawFinalScreen`: curved glass,
+scanlines (from 2× scale), a little glow between pixels and darker
+corners, soft or strong. Screen shake can be turned off.
 
 **Font:** the only required external asset is **GNU Unifont**, an 8×16 pixel
 bitmap font dual-licensed under the SIL OFL 1.1 and GPLv2+ with the font
@@ -626,6 +635,19 @@ embedding exception.
   `HALPWORDS_SOUND=off` skips the audio device entirely.
 - A procedural music sequencer: per-floor key and scale, generated melody and
   bass patterns, and a battle tempo.
+  *Now (M7):* `audio.Compose` writes an 8-bar loop (4 for the lament) from a
+  `Track`, a mood and a seed: a key near A4, a scale and tempo range and a
+  chord progression per mood, a bass line (long notes, eighths or pumping
+  octaves), an arpeggio or a pad, drums, and a lead that walks the scale
+  and lands on chord tones on strong beats, as a phrase, a variation, a
+  contrasting phrase and a return that ends on the home note. Moods:
+  title, delve (each floor its own seed), fight, boss, camp (campfires,
+  shrines, the merchant, Practice) and lament. `RenderLoop` wraps tails
+  round so the loop has no seam. `game.Sound` renders a track in the
+  background (pausing now and then in a browser, which runs one thing at a
+  time), keeps four, loops it through its own `oto` player and cross-fades
+  over half a second. Scenes implement `game.Musical`; a scene without it
+  plays the music of the scene under it, or the title's.
 
 **AI art overrides:** if `overrides/monster_<family>.png` or
 `overrides/title.png` exists, it is used instead of the procedural version. AI
@@ -718,6 +740,18 @@ boss portraits, NPC portraits.
 - macOS code signing and notarisation are documented for public releases.
   Unsigned builds work locally (right-click → Open).
 
+*Now (M7):* builds are stamped with `git describe` (`game.Version`), shown on
+the title screen. `make bundle-mac` makes a universal `Halpwords.app` with
+an `.icns` icon, signed ad hoc or with `MACOS_SIGN_IDENTITY`; the Windows
+builds (x64 and Arm) carry the icon and version through `go-winres`; the
+web page has a loading bar and favicon. The icon is drawn in code
+(`proc.Icon`) and written by `tools/icon`; the window uses it too. Pushing
+a `v*` tag runs `.github/workflows/release.yml`: tests, every build, a
+GitHub release with checksums and the changelog's notes, notarisation when
+the secrets are set, and the web version on GitHub Pages
+([docs/RELEASING.md](docs/RELEASING.md)). A panic in the game loop writes
+`crash.txt` to the user folder.
+
 ---
 
 ## 12. Testing strategy
@@ -732,6 +766,15 @@ boss portraits, NPC portraits.
   - LLM JSON validation using recorded fixture responses.
 - A headless simulation: a bot plays N floors with seeded "typing skill" to
   check balance (time-to-kill, death rate).
+  *Now (M7):* `internal/sim` plays real floors with the game's monsters,
+  hero, deck and formulas: every monster (half of them ambush), every
+  sealed door and chest (Mimics included), the merchant (better gear, then
+  potions up to three), the campfire before the boss, and a potion below
+  35% HP. Typists are *beginner*, *average* and *strong*, with shares of
+  each grade that worsen with word length, and typing times that vary.
+  `tools/balance` (`make balance`) prints, per class and typist, attacks per
+  fight, HP lost per fight and to the boss, falls, level and gold per floor;
+  `sim_test.go` keeps the balance within bounds.
 - `go vet`, `staticcheck` and `gofmt` in CI.
 
 ---
@@ -747,7 +790,35 @@ boss portraits, NPC portraits.
 | **M4** ✅ | RPG layer | Classes, stats, XP and levels, items, equipment, shop, campfire, bosses, Save Shrines, suspend save, title and menus. *Done: three classes, six stats, five items, generated gear, a merchant, campfires, five bosses with phases, Save Shrines with a one-use suspend save, and MP hints (§8). The Grimoire screen waits for M5; campfires show the missed words for now.* |
 | **M5** ✅ | Learning and competition | Spaced repetition, Grimoire stats screen, per-language strictness settings, Hardcore mode with score, Daily Dungeon, seed and share codes, Hall of Fame. *Done: a five-box Leitner memory per word that lasts across runs and Practice, mistake kinds with tips, difficulty that grows with depth, the Grimoire, a Settings screen, Hardcore, Daily Dungeon and Seed Challenge modes, share codes that can be checked, and a Hall of Fame (§4, §8).* |
 | **M6** ✅ | LLM | Provider interface (Claude plus OpenAI-compatible), settings UI, pre-fetch and cache, Dungeon Director, generated puzzles, monster taunts, Mnemonic Tutor, Word Forge. *Done: four providers (Anthropic's Messages API, plus OpenAI, Meta's Model API and DeepSeek through chat completions, all over plain `net/http` to keep the web build small), an AI Helper screen (provider, pasted key checked for free, game and Word Forge models with prices, a budget, spending and DeepSeek's live balance), the Dungeon Director with the next floor pre-fetched, gap-fill (cloze) puzzles and riddles kept in a content bank, monster taunts, the Scroll of Insight at campfires, and the Word Forge with a checking pass (§10). Phrase dodges, the Oracle, side quests, the Bard's Tale recap and coaching wait.* |
-| **M7** | Polish and ship | Procedural music, CRT shader, juice pass, balance simulation, `.app` bundle, Windows/Linux/Web release builds. |
+| **M7** ✅ | Polish and ship | Procedural music, CRT shader, juice pass, balance simulation, `.app` bundle, Windows/Linux/Web release builds. *Done: a music composer with six moods and cross-fades, Sound & Screen settings (volumes, CRT filter, full screen, screen shake) also in the pause menu, sparks, hit-stop and popping damage numbers, a balance simulation with typing bots and the tuning it led to (§13a), a procedural app icon, crash reports, version stamping, a universal macOS app, Windows x64/Arm builds with icons, a web loading page, and a tag-driven release workflow that publishes to GitHub Releases and Pages (§9, §11, §12).* |
+
+### 13a. Balance (M7)
+
+The first simulation showed the dungeon getting *easier* with depth: heroes
+reached level 21 by floor 12 (each level a full heal), damage taken per
+fight fell floor by floor, Knights took almost nothing, and bosses hurt
+little more than other monsters. The tuning:
+
+- Levels need 8*n* + 4*n*² XP (was 12*n*): about level 12 on floor 12.
+- Monster ATK grows 22% a floor (HP still 15%), so deeper floors hurt more
+  without longer fights.
+- Bosses have about 40% more HP and 1 more ATK.
+- DEF takes off at most two thirds of a blow.
+- Every class gains DEF on even levels; the Knight starts with DEF 1, the
+  Scribe with 30 HP (+6 a level), the Rogue with DEF 0.
+
+Now, on average (300 runs; HP lost per fight, then to the boss):
+
+| Typist | Floor 1 | Floor 6 | Floor 12 | Fell on floor 12 |
+|---|---|---|---|---|
+| Beginner | 7–11% | 23%, boss 48–55% | 20–23%, boss 67–93% | 87–91% |
+| Average | 3–4% | 10–11%, boss 18–22% | 10–13%, boss 27–37% | 9–20% |
+| Strong | 1–2% | 4–5%, boss 7–10% | 6–8%, boss 14–21% | 0% |
+
+Beginners are safe on floors 1–3 and meet real danger from floor 5, where
+shrines and relaxed timers help. Strong typists start to fall around
+floors 21–24, which gives Hardcore a ceiling. Fights take two to six
+attacks, so each asks for four to twelve words.
 
 Stretch: Oracle NPC, side quests, Bard's Tale, text-to-speech pronunciation
 (useful for French and Irish), two-player race mode, online leaderboard, a

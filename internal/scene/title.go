@@ -2,6 +2,7 @@ package scene
 
 import (
 	"math"
+	"runtime"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -11,9 +12,6 @@ import (
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
 )
-
-// Version is shown on the title screen.
-const Version = "v0.7 (milestone 6: AI helper)"
 
 // Title is the title screen and main menu.
 type Title struct {
@@ -42,11 +40,14 @@ const (
 var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Quit"}
 
 // NewTitle creates the title screen.
-func NewTitle(*game.Context) game.Scene {
+func NewTitle(ctx *game.Context) game.Scene {
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleQuit},
+		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI},
+	}
+	if runtime.GOOS != "js" {
+		t.items = append(t.items, titleQuit) // a web page is closed, not quit
 	}
 	if s, ok := saveSummary(); ok {
 		t.saved = s
@@ -161,7 +162,8 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 
 	f.DrawShadow(dst, "Arrows choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
-	f.DrawShadow(dst, Version, game.ScreenW-8-f.Width(Version, 1), game.ScreenH-20, 1, pal.Ash)
+	v := game.VersionText()
+	f.DrawShadow(dst, v, game.ScreenW-8-f.Width(v, 1), game.ScreenH-20, 1, pal.Ash)
 	if ctx.AI.Ready() {
 		on := "✦ AI on"
 		f.DrawShadow(dst, on, game.ScreenW/2-f.Width(on, 1)/2, game.ScreenH-20, 1, pal.Lime)

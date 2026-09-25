@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"log"
 	"os"
+	"runtime"
+	"time"
 
 	"github.com/ebitengine/oto/v3"
 
@@ -17,12 +19,18 @@ const maxVoices = 8
 // masterVolume keeps the effects comfortable next to other programs.
 const masterVolume = 0.5
 
+// musicVolume is the music's volume at full, under the effects so words
+// and warnings stand out.
+const musicVolume = 0.35
+
 // Sound plays sound effects. It talks to the audio device directly rather
 // than through Ebitengine's audio package, so a computer without sound
 // (a school PC with no speakers, a VM) just runs silently instead of
 // stopping the game with an error.
 type Sound struct {
 	Muted bool
+	// Effects and Music are the volumes, 0 to 1.
+	Effects, Music float64
 
 	ctx    *oto.Context
 	ready  chan struct{}
@@ -32,6 +40,7 @@ type Sound struct {
 	played [audio.Count]uint64 // tick each sound last started
 	later  []delayed
 	tick   uint64
+	music  music
 }
 
 type delayed struct {
@@ -41,7 +50,7 @@ type delayed struct {
 
 // newSound opens the audio device. HALPWORDS_SOUND=off skips it entirely.
 func newSound() *Sound {
-	s := &Sound{}
+	s := &Sound{Effects: 1, Music: 1}
 	if os.Getenv("HALPWORDS_SOUND") == "off" {
 		s.failed = true
 		return s
@@ -105,7 +114,7 @@ func (s *Sound) Play(id audio.ID) {
 		s.voices = s.voices[1:]
 	}
 	p := s.ctx.NewPlayer(bytes.NewReader(s.pcm[id]))
-	p.SetVolume(masterVolume)
+	p.SetVolume(masterVolume * s.Effects)
 	p.Play()
 	s.voices = append(s.voices, p)
 }
@@ -124,6 +133,7 @@ func (s *Sound) Toggle() bool {
 		}
 		s.later = s.later[:0]
 	}
+	s.music.volume(s)
 	return !s.Muted
 }
 
@@ -146,4 +156,137 @@ func (s *Sound) update(tick uint64) {
 	for _, id := range now {
 		s.Play(id)
 	}
+	if s.usable() {
+		s.music.update(s)
+	}
+}
+
+// PlayMusic asks for a track. The music playing fades out and the new
+// track fades in, once it has been rendered. Asking for the track that is
+// already playing does nothing, so scenes can ask every tick.
+func (s *Sound) PlayMusic(t audio.Track) { s.music.want = t }
+
+// musicFade is how many ticks the music takes to fade out or in.
+const musicFade = 30
+
+// musicCache is how many rendered tracks are kept, so going from a battle
+// back to exploring doesn't render the floor's music again.
+const musicCache = 4
+
+// music plays one looping track at a time.
+type music struct {
+	want    audio.Track
+	playing audio.Track
+	p       *oto.Player
+	fade    float64 // 0 silent to 1 full
+	out     bool    // fading out, to change track
+
+	cache   map[audio.Track][]byte
+	order   []audio.Track // oldest first
+	working map[audio.Track]bool
+	done    chan rendered
+}
+
+type rendered struct {
+	t   audio.Track
+	pcm []byte
+}
+
+func (m *music) update(s *Sound) {
+	if m.done == nil {
+		m.done = make(chan rendered, musicCache)
+		m.cache = map[audio.Track][]byte{}
+		m.working = map[audio.Track]bool{}
+	}
+	for len(m.done) > 0 {
+		m.store(<-m.done)
+	}
+	if _, ok := m.cache[m.want]; !ok && m.want.Mood != audio.Quiet {
+		m.render(m.want) // start now, while the old track fades
+	}
+	if m.p != nil && m.playing != m.want {
+		// Fade out what is playing, then let it go.
+		m.fade -= 1.0 / musicFade
+		if m.fade > 0 {
+			m.volume(s)
+			return
+		}
+		m.p.Close()
+		m.p, m.fade = nil, 0
+	}
+	if m.p == nil && m.want.Mood != audio.Quiet {
+		pcm, ok := m.cache[m.want]
+		if !ok || len(pcm) == 0 {
+			return
+		}
+		m.p = s.ctx.NewPlayer(&loop{pcm: pcm})
+		m.playing, m.fade = m.want, 0
+		m.volume(s)
+		m.p.Play()
+	}
+	if m.p != nil && m.fade < 1 {
+		m.fade = min(1, m.fade+1.0/musicFade)
+		m.volume(s)
+	}
+}
+
+// volume sets the player's volume from the fade and the settings.
+func (m *music) volume(s *Sound) {
+	if m.p == nil {
+		return
+	}
+	v := musicVolume * s.Music * m.fade
+	if s.Muted {
+		v = 0
+	}
+	m.p.SetVolume(v)
+}
+
+// render composes and renders a track in the background.
+func (m *music) render(t audio.Track) {
+	if m.working[t] {
+		return
+	}
+	m.working[t] = true
+	go func() {
+		// A web browser runs one thing at a time: pause now and then so
+		// the game keeps drawing while the music is made.
+		var yield func()
+		if runtime.GOOS == "js" {
+			yield = func() { time.Sleep(time.Millisecond) }
+		}
+		pcm := audio.Encode(audio.RenderLoop(audio.Compose(t), audio.SampleRate, yield))
+		m.done <- rendered{t, pcm}
+	}()
+}
+
+// store keeps a rendered track, dropping the oldest when the cache is full.
+func (m *music) store(r rendered) {
+	delete(m.working, r.t)
+	if _, ok := m.cache[r.t]; ok {
+		return
+	}
+	for len(m.order) >= musicCache {
+		old := m.order[0]
+		m.order = m.order[1:]
+		delete(m.cache, old)
+	}
+	m.cache[r.t] = r.pcm
+	m.order = append(m.order, r.t)
+}
+
+// loop reads the same samples over and over.
+type loop struct {
+	pcm []byte
+	at  int
+}
+
+func (l *loop) Read(p []byte) (int, error) {
+	n := 0
+	for n < len(p) {
+		c := copy(p[n:], l.pcm[l.at:])
+		n += c
+		l.at = (l.at + c) % len(l.pcm)
+	}
+	return n, nil
 }

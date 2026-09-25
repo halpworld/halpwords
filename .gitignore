@@ -2,3 +2,4 @@
 *.exe
 *.wasm
 .DS_Store
+cmd/halpwords/rsrc_windows_*.syso

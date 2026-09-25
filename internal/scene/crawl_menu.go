@@ -207,6 +207,7 @@ func (c *Crawl) useItem(it rpg.Item) {
 		c.play(audio.Potion)
 		m.note = fmt.Sprintf("You drink a potion and recover %d HP.", n)
 		c.float(fmt.Sprintf("+%d", n), pal.Lime)
+		c.fxHeal()
 	case rpg.Ether:
 		if h.MP >= h.MaxMP() {
 			m.note = "Your MP is already full."

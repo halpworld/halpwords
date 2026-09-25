@@ -150,7 +150,7 @@ func traitWords(t dungeon.Trait) string {
 func (c *Crawl) deal(ctx *game.Context, p phase) {
 	b := c.battle
 	ok := false
-	target := wordTarget(c.run.depth, b.m.Kind.Boss())
+	target := combat.WordTarget(c.run.depth, b.m.Kind.Boss())
 	if b.m.Phase > 0 {
 		// An angry boss asks for longer words.
 		b.word, b.wordID, ok = c.run.deck.NextNear(target, func(e words.Entry) bool { return runes(e.Answers[0]) >= 6 })
@@ -163,16 +163,6 @@ func (c *Crawl) deal(ctx *game.Context, p phase) {
 	b.phase, b.start = p, ctx.Tick
 	b.title, b.lines = "", nil
 	b.warned = false
-}
-
-// wordTarget is the Difficulty of the words monsters on floor depth ask for:
-// short, plain words at first, longer ones deeper down and from bosses.
-func wordTarget(depth int, boss bool) float64 {
-	t := 4.5 + 0.6*float64(depth-1)
-	if boss {
-		t += 2
-	}
-	return min(t, 14)
 }
 
 func (c *Crawl) beginAttack(ctx *game.Context) { c.deal(ctx, phaseAttack) }
@@ -302,13 +292,10 @@ func (c *Crawl) scoreAnswer(id int, res words.Result, typed string, hinted bool,
 	if t == words.Perfect && id >= 0 && !hinted && !r.perfect[id] {
 		r.perfect[id] = true
 		e := r.deck.Entries()[id]
-		r.say(fmt.Sprintf("First perfect %s! +%d XP", e.Answers[0], perfectXP), pal.Lime)
-		c.gainXP(perfectXP)
+		r.say(fmt.Sprintf("First perfect %s! +%d XP", e.Answers[0], rpg.PerfectXP), pal.Lime)
+		c.gainXP(rpg.PerfectXP)
 	}
 }
-
-// perfectXP is the XP for the first perfect spelling of a word.
-const perfectXP = 2
 
 // gainXP gives the hero XP and celebrates any level gained. It returns
 // lines describing the level ups.
@@ -320,6 +307,7 @@ func (c *Crawl) gainXP(xp int) []logLine {
 		c.run.say(fmt.Sprintf("Level up! You are now level %d. %s.", up.Level, up), pal.Lime)
 		c.showBanner("LEVEL UP!", fmt.Sprintf("Level %d", up.Level))
 		c.run.sound.PlayLater(audio.LevelUp, 45)
+		c.fxLevelUp()
 	}
 	return lines
 }
@@ -438,6 +426,7 @@ func (c *Crawl) strike(ctx *game.Context) {
 		title, col = "CLANG!", pal.Steel
 		b.flash = 4
 		c.play(audio.Clang)
+		c.fxClang()
 		lines = append(lines, logLine{"Its armor turns the blow. Only exact spelling gets through!", pal.Steel})
 		c.run.say(fmt.Sprintf("Your blow glances off the %s's armor.", m.Name()), pal.Steel)
 	case res.Tier == words.Miss || dmg == 0:
@@ -464,7 +453,8 @@ func (c *Crawl) strike(ctx *game.Context) {
 		default:
 			c.play(audio.Weak)
 		}
-		c.float(fmt.Sprint(dmg), col)
+		c.fxHit(crit, res.Tier < words.Correct)
+		c.floats = append(c.floats, floater{text: fmt.Sprint(dmg), col: col, big: crit})
 		info := fmt.Sprintf("%d damage   speed ×%.1f", dmg, speed)
 		if combo > 1 {
 			info += fmt.Sprintf("   combo ×%.1f", combo)
@@ -532,6 +522,8 @@ func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []log
 	xp, gold := m.XP(), h.GoldFind(m.Gold(), false)
 	h.Gold += gold
 	c.run.sound.PlayLater(audio.Defeat, 12)
+	c.fxDefeat()
+	c.fxCoins(gold)
 	lines = append(lines, logLine{fmt.Sprintf("The %s is defeated! +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow})
 	c.run.say(fmt.Sprintf("You defeat the %s. +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow)
 	loot := m.Loot
@@ -562,13 +554,7 @@ func (c *Crawl) enrage(m *dungeon.Monster) []logLine {
 	if !m.Kind.Boss() || m.HP <= 0 {
 		return nil
 	}
-	phase := 0
-	switch {
-	case m.HP*3 <= m.MaxHP:
-		phase = 2
-	case m.HP*3 <= m.MaxHP*2:
-		phase = 1
-	}
+	phase := combat.BossPhase(m.HP, m.MaxHP)
 	var lines []logLine
 	for m.Phase < phase {
 		m.Phase++

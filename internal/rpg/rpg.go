@@ -28,20 +28,20 @@ var classInfo = [...]ClassInfo{
 	Knight: {
 		Name:  "Knight",
 		Blurb: []string{"Tough and armoured.", "The most HP and DEF."},
-		Start: Stats{MaxHP: 36, MaxMP: 4, ATK: 6, DEF: 2, Focus: 0, Luck: 1},
+		Start: Stats{MaxHP: 36, MaxMP: 4, ATK: 6, DEF: 1, Focus: 0, Luck: 1},
 		Grow:  Stats{MaxHP: 8, MaxMP: 1, ATK: 2, DEF: 1},
 	},
 	Scribe: {
 		Name:  "Scribe",
 		Blurb: []string{"A master of words.", "More damage when fast.", "Hints cost only 1 MP."},
-		Start: Stats{MaxHP: 28, MaxMP: 10, ATK: 6, DEF: 0, Focus: 2, Luck: 1},
-		Grow:  Stats{MaxHP: 5, MaxMP: 2, ATK: 2, Focus: 1},
+		Start: Stats{MaxHP: 30, MaxMP: 10, ATK: 6, DEF: 0, Focus: 2, Luck: 1},
+		Grow:  Stats{MaxHP: 6, MaxMP: 2, ATK: 2, DEF: 1, Focus: 1},
 	},
 	Rogue: {
 		Name:  "Rogue",
 		Blurb: []string{"Quick and lucky.", "25% more time to dodge.", "+50% gold from chests."},
-		Start: Stats{MaxHP: 30, MaxMP: 6, ATK: 6, DEF: 1, Focus: 1, Luck: 4},
-		Grow:  Stats{MaxHP: 6, MaxMP: 1, ATK: 2, Luck: 1},
+		Start: Stats{MaxHP: 30, MaxMP: 6, ATK: 6, DEF: 0, Focus: 1, Luck: 4},
+		Grow:  Stats{MaxHP: 6, MaxMP: 1, ATK: 2, DEF: 1, Luck: 1},
 	},
 }
 
@@ -133,8 +133,21 @@ func (h *Hero) MaxMP() int { return h.Stats().MaxMP }
 func (h *Hero) ATK() int   { return h.Stats().ATK }
 func (h *Hero) DEF() int   { return h.Stats().DEF }
 
+// PerfectXP is the XP for the first perfect spelling of a word in an
+// adventure.
+const PerfectXP = 2
+
+// PuzzleXP is the XP for solving the puzzle on a chest, or else a sealed
+// door, on floor depth.
+func PuzzleXP(chest bool, depth int) int {
+	if chest {
+		return 3 + depth/2
+	}
+	return 2 + depth/2
+}
+
 // NextXP is the experience needed for the next level.
-func (h *Hero) NextXP() int { return 12 * h.Level }
+func (h *Hero) NextXP() int { return 8*h.Level + 4*h.Level*h.Level }
 
 // LevelUp is what one level gained.
 type LevelUp struct {
@@ -242,9 +255,10 @@ func (h *Hero) SpeedDamage(speed float64) float64 {
 	return speed
 }
 
-// Hit returns the damage a monster's blow of n does after DEF, never less
-// than 1.
-func (h *Hero) Hit(n int) int { return max(1, n-h.DEF()) }
+// Hit returns the damage a monster's blow of n does after DEF. However
+// strong the armour, a blow always does a third of its power, and at
+// least 1.
+func (h *Hero) Hit(n int) int { return max(1, (n+2)/3, n-h.DEF()) }
 
 // Equip wears bag item i, putting whatever was in its slot into the bag.
 func (h *Hero) Equip(i int) {

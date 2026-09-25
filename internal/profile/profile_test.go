@@ -30,6 +30,11 @@ func TestProfileRoundTrip(t *testing.T) {
 	ls := Preset(fr)
 	ls.Rules.Accents, ls.Rules.ArticlesRequired, ls.Timer, ls.Highlight = words.Strict, true, Relaxed, true
 	p.Settings.Set(fr, ls)
+	if p.Settings.Options() != DefaultOptions() {
+		t.Fatalf("new game settings %+v", p.Settings.Options())
+	}
+	opts := Options{Music: 2, Effects: 10, CRT: CRTStrong, Fullscreen: true}
+	p.Settings.SetOptions(opts)
 	e := words.Entry{Prompt: "dog", Answers: []string{"le chien"}}
 	p.MemoryFor("fr").Record(e, words.Answer{Tier: words.Perfect})
 	p.Name = "Ada"
@@ -47,8 +52,19 @@ func TestProfileRoundTrip(t *testing.T) {
 	if q.Settings.For(fr) != ls {
 		t.Fatalf("settings %+v, want %+v", q.Settings.For(fr), ls)
 	}
+	if q.Settings.Options() != opts {
+		t.Fatalf("game settings %+v, want %+v", q.Settings.Options(), opts)
+	}
 	if q.MemoryFor("fr").Box(e) != 1 || q.Name != "Ada" || q.Fame.Best(compete.TableKey(compete.Hardcore, "fr")) != 1234 {
 		t.Fatal("the profile did not come back")
+	}
+}
+
+func TestOptionsAreKeptInRange(t *testing.T) {
+	var s Settings
+	s.SetOptions(Options{Music: 99, Effects: -3, CRT: 7})
+	if o := s.Options(); o.Music != MaxVolume || o.Effects != 0 || o.CRT >= numCRT {
+		t.Fatalf("options %+v", o)
 	}
 }
 

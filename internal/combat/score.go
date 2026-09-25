@@ -80,3 +80,26 @@ func Block(tier words.Tier) float64 {
 		return 1
 	}
 }
+
+// WordTarget is the Difficulty of the words monsters on floor depth ask
+// for: short, plain words at first, longer ones deeper down and from
+// bosses.
+func WordTarget(depth int, boss bool) float64 {
+	t := 4.5 + 0.6*float64(depth-1)
+	if boss {
+		t += 2
+	}
+	return min(t, 14)
+}
+
+// BossPhase is how angry a boss with hp of maxHP left is: 0 at first,
+// 1 below two thirds of its HP and 2 below one third.
+func BossPhase(hp, maxHP int) int {
+	switch {
+	case hp*3 <= maxHP:
+		return 2
+	case hp*3 <= maxHP*2:
+		return 1
+	}
+	return 0
+}

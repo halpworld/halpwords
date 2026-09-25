@@ -97,11 +97,11 @@ func TestHints(t *testing.T) {
 		t.Fatal("a hinted word counted as known")
 	}
 	c.scoreAnswer(id, words.Result{Tier: words.Perfect}, "", false, 0)
-	if c.run.deck.Review() != 0 || !c.run.perfect[id] || h.XP != perfectXP {
+	if c.run.deck.Review() != 0 || !c.run.perfect[id] || h.XP != rpg.PerfectXP {
 		t.Fatalf("a perfect word: review %d, XP %d", c.run.deck.Review(), h.XP)
 	}
 	c.scoreAnswer(id, words.Result{Tier: words.Perfect}, "", false, 0)
-	if h.XP != perfectXP {
+	if h.XP != rpg.PerfectXP {
 		t.Fatal("a word's first perfect spelling paid twice")
 	}
 }

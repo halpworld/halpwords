@@ -31,7 +31,19 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 
 	for _, fl := range c.floats {
 		a := min(1, float64(50-fl.t)/15)
-		f.DrawOutline(view, fl.text, cx-f.Width(fl.text, 2)/2, viewY+vh/2-30-fl.t, 2, pal.Fade(fl.col, a), pal.Fade(pal.Black, a))
+		// Numbers pop in large and settle, rising more slowly as they go.
+		sc := 2
+		if fl.big {
+			sc = 3
+		}
+		if fl.t < 4 {
+			sc++
+		}
+		rise := fl.t
+		if fl.t > 10 {
+			rise = 10 + (fl.t-10)/2
+		}
+		f.DrawOutline(view, fl.text, cx-f.Width(fl.text, sc)/2, viewY+vh/2-30-rise-8*(sc-2), sc, pal.Fade(fl.col, a), pal.Fade(pal.Black, a))
 	}
 
 	switch c.mode {
