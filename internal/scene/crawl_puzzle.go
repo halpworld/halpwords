@@ -15,6 +15,7 @@ import (
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/typing"
+	"github.com/halpworld/halpwords/pkg/maps"
 	"github.com/halpworld/halpwords/pkg/puzzle"
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -57,7 +58,7 @@ func (c *Crawl) startPuzzle(at dungeon.Point, lock puzzle.Lock) {
 // dealPuzzle puts a new puzzle on the lock.
 func (c *Crawl) dealPuzzle() {
 	lp := c.puzzle
-	lp.p = puzzle.NewWith(lp.lock, c.run.depth, c.run.deck, c.run.lang, c.run.rules(), c.run.rng, c.run.ai.generated(c.run))
+	lp.p = c.makePuzzle(lp.lock, lp.at)
 	lp.pick, lp.showing, lp.hints = 0, false, 0
 	lp.field, lp.choice, lp.fields = nil, nil, nil
 	switch lp.p.Answer() {
@@ -75,6 +76,42 @@ func (c *Crawl) dealPuzzle() {
 		}
 		lp.field = lp.fields[0]
 	}
+}
+
+// makePuzzle makes a puzzle for the lock at a: the one a hand-made map
+// sets there, or a random one. A word the lists lack, or one that cannot
+// make the kind of puzzle set, gives a puzzle of that kind about another
+// word.
+func (c *Crawl) makePuzzle(lock puzzle.Lock, at dungeon.Point) puzzle.Puzzle {
+	r, depth := c.run, c.level.Depth
+	gen := r.ai.generated(r)
+	plan, ok := c.level.Locks[at]
+	if !ok {
+		return puzzle.NewWith(lock, depth, r.deck, r.lang, r.rules(), r.rng, gen)
+	}
+	if plan.Word != "" {
+		id := maps.FindWord(r.deck.Entries(), plan.Word)
+		kinds := []puzzle.Kind{plan.Kind}
+		if !plan.Set {
+			kinds = nil
+			for _, k := range puzzle.Kinds(lock, depth) {
+				if puzzle.OneWord(k) {
+					kinds = append(kinds, k)
+				}
+			}
+			r.rng.Shuffle(len(kinds), func(i, j int) { kinds[i], kinds[j] = kinds[j], kinds[i] })
+			kinds = append(kinds, puzzle.Spell)
+		}
+		for _, k := range kinds {
+			if p := puzzle.MakeWord(k, lock, depth, r.deck, id, r.lang, r.rules(), r.rng, gen); p != nil {
+				return p
+			}
+		}
+	}
+	if plan.Set {
+		return puzzle.MakeWith(plan.Kind, lock, depth, r.deck, r.lang, r.rules(), r.rng, gen)
+	}
+	return puzzle.NewWith(lock, depth, r.deck, r.lang, r.rules(), r.rng, gen)
 }
 
 // foreignField returns a field for typing in the language being learned.
@@ -322,7 +359,7 @@ func (c *Crawl) solvePuzzle() {
 	}
 	lp.solved = true
 	lp.title, lp.titleCol = res.Tier.String()+"!", tierColor[res.Tier]
-	xp := rpg.PuzzleXP(lp.lock == puzzle.Chest, c.run.depth)
+	xp := rpg.PuzzleXP(lp.lock == puzzle.Chest, c.level.Depth)
 	if lp.lock == puzzle.Door {
 		c.play(audio.Unseal)
 		c.fxRunes()
