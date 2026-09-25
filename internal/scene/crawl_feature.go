@@ -88,6 +88,7 @@ func (c *Crawl) pray(ctx *game.Context) {
 		return
 	}
 	c.play(audio.Pray)
+	c.fxRunes()
 	ctx.Notify("Game saved")
 	c.showBanner("SAVED", "The shrine will remember you")
 	r.say("You pray at the shrine. If you fall, you will wake here.", pal.Cyan)
@@ -116,6 +117,7 @@ func (c *Crawl) rest(ft *dungeon.Feature) {
 	ft.Used = true
 	hp, mp := h.Heal(h.MaxHP()), h.Restore(h.MaxMP())
 	c.play(audio.Rest)
+	c.fxHeal()
 	msg := "You rest by the campfire."
 	if hp > 0 || mp > 0 {
 		msg += fmt.Sprintf(" +%d HP, +%d MP.", hp, mp)

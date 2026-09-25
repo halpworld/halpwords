@@ -15,7 +15,9 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> ·
+  <a href="https://halpworld.github.io/halpwords/"><b>Play in your browser</b></a> ·
+  <a href="#download">Download</a> ·
+  <a href="#quick-start">Build from source</a> ·
   <a href="#how-to-play">How to play</a> ·
   <a href="#controls">Controls</a> ·
   <a href="#your-own-word-lists">Word lists</a> ·
@@ -41,9 +43,10 @@ adventurous tone. It runs offline, needs no accounts, and ships as a single
 file.
 
 > [!NOTE]
-> **Status: milestone 6 (the optional AI helper) done; milestone 7 (polish and release builds) is next.** The game is playable from the
-> first floor down, with sound, but it is early. Expect rough edges and balance changes. See the
-> [roadmap](#roadmap).
+> **Version 1.0: every milestone in the [plan](PLAN.md) is done.** Play it
+> [in your browser](https://halpworld.github.io/halpwords/), or
+> [download it](#download) for macOS, Windows or Linux. Found a bug? Please
+> [open an issue](https://github.com/halpworld/halpwords/issues).
 
 ## Features
 
@@ -111,8 +114,17 @@ file.
   words you keep missing, and forges new word lists on any topic. It shows
   what has been spent and stops at a budget you set. Without it the game
   plays exactly the same.
-- **Nearly all generated in code.** Textures, monsters, effects and sound
-  effects are procedural. The only art asset is a pixel font.
+- **Music for every moment.** A chiptune composer writes the music as you
+  play: a calm theme for each floor, drums for battles, something darker
+  for bosses, and a quiet tune by the campfire.
+- **Juicy.** Sparks fly off every blow, critical hits stop time for a
+  moment, chests shower coins, and seals break in a burst of runes.
+- **Sound and screen settings.** Music and effect volumes, full screen,
+  screen shake, and an optional **CRT filter** with scanlines and curved
+  glass, for the full 1980s look.
+- **Nearly all generated in code.** Textures, monsters, effects, sound
+  effects, music and even the app icon are procedural. The only art asset
+  is a pixel font.
 - **Runs everywhere.** macOS (Apple Silicon and Intel), Windows, Linux and the
   web (WebAssembly).
 
@@ -169,11 +181,11 @@ file.
   </tr>
   <tr>
     <td width="50%"><img src="docs/media/new-game.png" alt="Choosing how to play: Adventure, Hardcore, Daily Dungeon or Seed Challenge"></td>
-    <td width="50%"><img src="docs/media/settings.png" alt="The Settings screen for French: accents, articles, capitals, live typo highlighting and timer speed"></td>
+    <td width="50%"><img src="docs/media/settings.png" alt="The Settings screen's Sound and Screen tab: music and effect volumes, the CRT filter, full screen and screen shake, with a tab for each language"></td>
   </tr>
   <tr>
     <td align="center"><b>Four ways to play</b>, including a Daily Dungeon.</td>
-    <td align="center"><b>Settings</b> for each language.</td>
+    <td align="center"><b>Settings</b> for sound, screen and each language.</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/media/ai-helper.png" alt="The AI Helper screen: OpenAI chosen, its key checked, GPT-6 Luna as the game model, a $5 budget and what has been spent so far"></td>
@@ -191,12 +203,60 @@ file.
     <td align="center"><b>Gap-fill puzzles</b> put your words in sentences.</td>
     <td align="center"><b>A Scroll of Insight</b> with tips for tricky words.</td>
   </tr>
+  <tr>
+    <td colspan="2"><img src="docs/media/crt.jpg" alt="The dungeon with the CRT filter on: curved glass, scanlines and darker corners"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><b>The CRT filter</b>, for the full 1980s look.</td>
+  </tr>
 </table>
+
+## Download
+
+| Where | Get it |
+|---|---|
+| **Any web browser** | Play at **<https://halpworld.github.io/halpwords/>**. Nothing to install; your progress stays in that browser. |
+| **macOS** (Apple Silicon and Intel) | `Halpwords-<version>-macos.zip` from the [latest release](https://github.com/halpworld/halpwords/releases/latest). Unzip it and drag **Halpwords** to Applications. |
+| **Windows** 10 and 11 | `Halpwords-<version>-windows-amd64.zip` (or `-arm64` for Windows on Arm) from the [latest release](https://github.com/halpworld/halpwords/releases/latest). Unzip it and run `halpwords.exe`. |
+| **Linux** (x86-64) | `Halpwords-<version>-linux-amd64.tar.gz` from the [latest release](https://github.com/halpworld/halpwords/releases/latest). Unpack it and run `./halpwords`. |
+
+Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
+
+<details>
+<summary><b>macOS says the app can't be opened</b></summary>
+
+Builds that are not signed with an Apple Developer ID are stopped by
+Gatekeeper the first time. Right-click (or Control-click) **Halpwords** in
+Finder, choose **Open**, then **Open** again. You only need to do this once.
+
+</details>
+
+<details>
+<summary><b>Windows says it protected your PC</b></summary>
+
+SmartScreen warns about new programs it hasn't seen often. Choose **More
+info**, then **Run anyway**.
+
+</details>
+
+<details>
+<summary><b>For schools</b></summary>
+
+- The game needs no account, no installer and no internet. Copy the unzipped
+  folder (or `Halpwords.app`) to each computer, or use the web version.
+- Each player's progress, settings and word lists are kept in their user
+  folder (see [where your files are](#where-your-files-are)), so shared
+  computers keep each student's progress apart when students log in as
+  themselves.
+- The AI helper is off until a parent or teacher sets it up. See
+  [AI helper](#ai-helper-optional).
+
+</details>
 
 ## Quick start
 
-You need [Go 1.26 or newer](https://go.dev/dl/). There are no packaged
-releases yet, so you build the game from source. It takes one command.
+To build the game yourself you need [Go 1.26 or newer](https://go.dev/dl/).
+It takes one command.
 
 ```sh
 git clone https://github.com/halpworld/halpwords.git
@@ -372,8 +432,19 @@ window shows your score and **★ BEST** once you pass your personal best.
 
 ### Settings
 
-**Settings** on the title screen changes how answers are graded, for each
-language:
+**Settings** on the title screen has a **Sound & Screen** tab, and a tab for
+each language. The Sound & Screen tab is also in the pause menu, so you can
+turn the music down without leaving the dungeon.
+
+| Setting | Choices | Standard |
+|---|---|---|
+| Music | off to 100% | 60% |
+| Sound effects | off to 100% | 80% |
+| CRT filter | off · soft · strong | *off* |
+| Full screen | on · off | *off* (remembered when you press <kbd>F11</kbd>) |
+| Screen shake | on · off | *on* |
+
+The language tabs change how answers are graded:
 
 | Setting | Choices | Standard |
 |---|---|---|
@@ -488,7 +559,7 @@ cent, often much less.
 | <kbd>I</kbd> | Items and gear (<kbd>Enter</kbd> use or wear, <kbd>D</kbd> drop) |
 | <kbd>M</kbd> | Full map |
 | <kbd>G</kbd> | Open the Grimoire (at a campfire) |
-| <kbd>Esc</kbd> | Pause menu: items, the Grimoire, suspend, or quit to the title (give up, in Hardcore) |
+| <kbd>Esc</kbd> | Pause menu: items, the Grimoire, sound and screen, suspend, or quit to the title (give up, in Hardcore) |
 
 **In battles and puzzles**
 
@@ -509,7 +580,7 @@ cent, often much less.
 |---|---|
 | Arrow keys, <kbd>Enter</kbd> | Menus |
 | <kbd>Tab</kbd> | Cycle the accent on the last letter (e → é → è → ê → ë, a → ā, a → á) |
-| <kbd>←</kbd> / <kbd>→</kbd> | Change language (Practice, Grimoire, Hall of Fame, Settings) |
+| <kbd>←</kbd> / <kbd>→</kbd> | Change language (Practice, Grimoire, Hall of Fame), or tab (Settings) |
 | <kbd>Tab</kbd> | Sort the Grimoire; switch Hall of Fame tables |
 | <kbd>C</kbd> | Check a friend's share code (Hall of Fame) |
 | <kbd>F</kbd> | Word Forge: make a new word list with AI (Word Lists) |
@@ -532,11 +603,17 @@ Add marks after a vowel: `)` smooth breathing, `(` rough breathing, `/` acute,
 `a)/nqrwpos` types **ἄνθρωπος**. By default, accents and breathings are
 optional.
 
-### Sound
+### Sound and music
 
-All the sound effects are made in code. If your computer has no sound
-device, the game runs silently. Set `HALPWORDS_SOUND=off` to start with sound
-off completely. Run `make sounds` to write every effect to `dist/sounds` as
+All the sound effects and music are made in code. The music is composed as
+you play, from a seed: each floor has its own tune in its own key, battles
+have drums, bosses are faster and darker, and campfires, shrines and the
+merchant are calm. Set the volumes in **Settings**, and press <kbd>F3</kbd>
+to turn all sound off and on.
+
+If your computer has no sound device, the game runs silently. Set
+`HALPWORDS_SOUND=off` to start with sound off completely. Run `make sounds`
+to write every effect, and a loop of each kind of music, to `dist/sounds` as
 WAV files, which helps when tuning them.
 
 ### Replaying a dungeon
@@ -609,22 +686,44 @@ friend = l'ami | l'amie
 
 The built-in lists are in [`assets/words/`](assets/words).
 
+## Where your files are
+
+Saves, settings, progress, the Hall of Fame and your own word lists are in
+your user folder:
+
+| System | Folder |
+|---|---|
+| macOS | `~/Library/Application Support/halpwords` |
+| Windows | `%AppData%\halpwords` |
+| Linux | `~/.config/halpwords` |
+| Web browser | The browser's local storage for the page |
+
+If the game ever crashes, it writes what went wrong to `crash.txt` in that
+folder. Please attach it to a [bug report](https://github.com/halpworld/halpwords/issues).
+
 ## Building
 
 ```sh
 make run             # run the game
-make test            # unit tests
-make vet             # go vet and gofmt check
-make sounds          # write the sound effects to dist/sounds as WAV files
+make check           # go vet, gofmt check and unit tests
+make sounds          # write the sound effects and music to dist/sounds as WAV files
+make balance         # play the dungeon with typing bots and print the balance
+make icon            # draw the app icon into dist/icon
 make build           # build for this computer
 make build-mac       # Apple Silicon (from any OS)
 make build-mac-intel # Intel Macs (from any OS)
-make bundle-mac      # dist/Halpwords.app
-make build-windows   # Windows .exe (from any OS)
+make bundle-mac      # dist/Halpwords.app for every Mac, with its icon (needs macOS)
+make build-windows   # Windows .exe with its icon (from any OS)
 make build-linux     # Linux (run on Linux; needs the packages above)
 make build-web       # WebAssembly, in dist/web
+make serve-web       # build the web version and play it at http://localhost:8000
+make release-web     # zip a build for release into dist/release (also -mac, -windows, -linux)
 make help            # list all targets
 ```
+
+Builds are stamped with the version from the latest git tag. Pushing a tag
+such as `v1.0.1` builds every platform, publishes a GitHub release and
+updates the web version. See [docs/RELEASING.md](docs/RELEASING.md).
 
 <details>
 <summary><b>Project layout</b></summary>
@@ -645,15 +744,19 @@ internal/combat/   battle formulas and monster trait effects
 internal/puzzle/   door and chest word puzzles (no Ebitengine dependency)
 internal/llm/      optional AI: providers, keys, budget, Director, generated content (no Ebitengine dependency)
 internal/clipboard/ pasting from the system clipboard
-internal/audio/    sound effect synth (no Ebitengine dependency)
+internal/audio/    sound effect synth and music composer (no Ebitengine dependency)
+internal/sim/      typing bots that play the dungeon, to check the balance (no Ebitengine dependency)
 internal/input/    keyboard helpers
-internal/proc/     procedural pixel art (no Ebitengine dependency)
-internal/gfx/      drawing: text, windows, torches
+internal/proc/     procedural pixel art and the app icon (no Ebitengine dependency)
+internal/gfx/      drawing: text, windows, torches, sparks
 internal/pal/      the 32-colour palette
 internal/unifont/  bitmap font parser
 assets/            embedded font, starter word lists and riddle bank
 tools/fontsubset/  regenerates the font subset from GNU Unifont
-tools/sfxdump/     writes the sound effects as WAV files
+tools/sfxdump/     writes the sound effects and music as WAV files
+tools/balance/     prints the balance tables from the typing bots
+tools/icon/        writes the app icon as PNG, .icns and .ico
+build/             the macOS app's Info.plist and the web page
 docs/media/        README screenshots and GIFs
 ```
 
@@ -681,8 +784,10 @@ The full design is in [PLAN.md](PLAN.md). In short:
       a setup screen with key checks, model choice, a budget and spending;
       the Dungeon Director, gap-fill puzzles and riddles, monster taunts,
       the Scroll of Insight and the Word Forge.
-- [ ] **M7: Polish and ship.** Procedural music, CRT shader, balancing, and
-      release builds.
+- [x] **M7: Polish and ship.** Procedural music, a CRT filter, sparks and
+      hit-stop, sound and screen settings, a balance simulation and the
+      tuning it led to, an app icon, crash reports, and release builds for
+      macOS, Windows, Linux and the web.
 
 ## Contributing
 
@@ -690,8 +795,9 @@ Contributions are welcome, from bug reports to new word lists to code.
 
 - **Found a bug or have an idea?** [Open an issue](https://github.com/halpworld/halpwords/issues).
   For dungeon bugs, include the `HALPWORDS_SEED` if you can.
-- **Sending a pull request?** Run `make vet test` first. CI runs the same
-  checks and builds every platform.
+- **Sending a pull request?** Run `make check` first. CI runs the same
+  checks and builds every platform. If you change monsters, heroes or the
+  battle formulas, run `make balance` and compare the tables.
 - **Know one of the languages?** Corrections to the
   [starter word lists](assets/words) are very welcome, and so are new
   [riddles](assets/puzzles/riddles.txt).

@@ -23,9 +23,10 @@ const (
 	pauseSuspend
 	pauseQuit
 	pauseGiveUp
+	pauseOptions
 )
 
-var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend and quit", "Quit to title", "Give up the run"}
+var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend and quit", "Quit to title", "Give up the run", "Sound & screen"}
 
 // pause stops the game and opens the pause menu. Everything stands still,
 // including the battle clock.
@@ -51,9 +52,9 @@ func (c *Crawl) unpause(ctx *game.Context) {
 // pauseItems lists the pause menu. Fleeing is only for battles, and a
 // Hardcore run can't be left without saving: it can only be given up.
 func (c *Crawl) pauseItems() []pauseItem {
-	items := []pauseItem{pauseResume, pauseItems, pauseGrimoire, pauseSuspend, pauseQuit}
+	items := []pauseItem{pauseResume, pauseItems, pauseGrimoire, pauseOptions, pauseSuspend, pauseQuit}
 	if c.resume == modeBattle {
-		items = []pauseItem{pauseResume, pauseFlee, pauseItems, pauseGrimoire, pauseSuspend, pauseQuit}
+		items = []pauseItem{pauseResume, pauseFlee, pauseItems, pauseGrimoire, pauseOptions, pauseSuspend, pauseQuit}
 	}
 	if c.run.hardcore() {
 		items[len(items)-1] = pauseGiveUp
@@ -114,6 +115,9 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 	case pauseGrimoire:
 		c.play(audio.Select)
 		ctx.Push(NewGrimoire(ctx, c.run.lang))
+	case pauseOptions:
+		c.play(audio.Select)
+		ctx.Push(newOptions(ctx))
 	case pauseGiveUp:
 		c.mode = modeQuit
 	case pauseSuspend:
@@ -165,7 +169,7 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Black, 0.5))
 
 	items := c.pauseItems()
-	w, h := 360, 100+len(items)*20
+	w, h := 360, 92+len(items)*18
 	x, y := viewX+vw/2-w/2, viewY+(vh-22)/2-h/2
 	gfx.Window(view, x, y, w, h)
 	f.DrawCentered(view, "PAUSED", x+w/2, y+10, 2, pal.Yellow)
@@ -175,7 +179,7 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	}
 	f.DrawCentered(view, about, x+w/2, y+42, 1, pal.Tan)
 	for i, it := range items {
-		iy := y + 64 + i*20
+		iy := y + 62 + i*18
 		col := pal.Steel
 		switch {
 		case !c.canChoose(it):

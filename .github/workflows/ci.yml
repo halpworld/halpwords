@@ -4,11 +4,16 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, for the version
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -18,17 +23,25 @@ jobs:
           sudo apt-get install -y libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev
       - run: make vet
       - run: make test
+      - name: Check the game's balance
+        run: go run ./tools/balance -runs 100 -floors 9
       - name: Build all platforms
         run: make build-linux build-mac build-windows build-web
       - uses: actions/upload-artifact@v4
         with:
           name: halpwords-builds
-          path: dist/
+          path: |
+            dist/linux-amd64
+            dist/mac-arm64
+            dist/windows-amd64
+            dist/web
 
   macos:
     runs-on: macos-latest # Apple Silicon
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -36,5 +49,5 @@ jobs:
       - run: make bundle-mac
       - uses: actions/upload-artifact@v4
         with:
-          name: Halpwords-mac-arm64
+          name: Halpwords-mac
           path: dist/Halpwords.app

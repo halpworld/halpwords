@@ -55,11 +55,11 @@ var MimicKind = Kind{"Mimic", Mimic, 16, 6, 12, 0, 2, 11, 0.5, 0}
 // BossKinds are the monsters that guard the stairs on boss floors, one
 // after another. They are not in Kinds: each only appears as a boss.
 var BossKinds = []Kind{
-	{"Slime King", Slime, 34, 5, 30, 30, 3, 12, 0.95, 0},
-	{"Bone Lord", Skull, 40, 6, 40, 40, 6, 13, 0.95, 0},
-	{"Gazer Queen", Eye, 44, 7, 50, 50, 9, 12, 0.9, 0},
-	{"Golem Titan", Golem, 52, 7, 60, 60, 12, 13, 1, 0},
-	{"Imp Overlord", Imp, 48, 8, 70, 70, 15, 12, 0.95, 0},
+	{"Slime King", Slime, 46, 6, 30, 30, 3, 12, 0.95, 0},
+	{"Bone Lord", Skull, 54, 7, 40, 40, 6, 13, 0.95, 0},
+	{"Gazer Queen", Eye, 60, 8, 50, 50, 9, 12, 0.9, 0},
+	{"Golem Titan", Golem, 70, 8, 60, 60, 12, 13, 1, 0},
+	{"Imp Overlord", Imp, 66, 9, 70, 70, 15, 12, 0.95, 0},
 }
 
 // BossFor returns the boss for floor depth.
@@ -125,11 +125,13 @@ type Monster struct {
 	Title string
 }
 
-// NewMonster creates a monster of kind k, with stats scaled for depth.
+// NewMonster creates a monster of kind k, with stats scaled for depth. Its
+// attack grows faster than its HP, so deeper floors hurt more without
+// making fights longer.
 func NewMonster(k *Kind, depth int, at Point, seed uint64) *Monster {
-	grow := 1 + 0.15*float64(depth-1)
-	hp := int(float64(k.HP) * grow)
-	return &Monster{Kind: k, At: at, HP: hp, MaxHP: hp, ATK: int(float64(k.ATK) * grow), Seed: seed, Traits: k.Traits}
+	hp := int(float64(k.HP) * (1 + 0.15*float64(depth-1)))
+	atk := int(float64(k.ATK) * (1 + 0.22*float64(depth-1)))
+	return &Monster{Kind: k, At: at, HP: hp, MaxHP: hp, ATK: atk, Seed: seed, Traits: k.Traits}
 }
 
 // Name returns the monster's display name, such as "Swift Grumpy Rat".

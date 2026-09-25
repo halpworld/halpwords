@@ -1,6 +1,8 @@
 package scene
 
 import (
+	"fmt"
+
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/audio"
@@ -112,13 +114,19 @@ func b2i(b bool) int {
 	return 0
 }
 
-// Settings changes how answers are graded and timed, for each language.
+// Settings changes the game's sound and screen, and how answers are
+// graded and timed for each language. Its first tab is the game's; then
+// there is one per language.
 type Settings struct {
 	bg    *ebiten.Image
 	langs []*words.Language
-	li    int
-	sel   int // 0 is the language, then the settings, then Reset
+	tab   int // 0 is Sound & Screen, then the languages
+	sel   int // 0 is the tab, then the settings, then Reset
 	note  string
+	// pushed is set when Settings was opened over an adventure. Then it
+	// only has the Sound & Screen tab, since the adventure's grading rules
+	// are fixed when it starts, and Esc goes back to it.
+	pushed bool
 }
 
 // NewSettings creates the Settings screen.
@@ -126,19 +134,119 @@ func NewSettings(ctx *game.Context) game.Scene {
 	return &Settings{bg: backdrop(5, 1.3), langs: words.Languages}
 }
 
-func (s *Settings) lang() *words.Language { return s.langs[s.li] }
+// newOptions creates the Settings screen with only its Sound & Screen tab,
+// to open over an adventure.
+func newOptions(ctx *game.Context) game.Scene {
+	return &Settings{bg: backdrop(5, 1.3), pushed: true}
+}
 
-// rows is the number of lines that can be chosen.
-func (s *Settings) rows() int { return len(settingsFor(s.lang())) + 2 }
+// lang is the language whose tab is showing, or nil on the game's tab.
+func (s *Settings) lang() *words.Language {
+	if s.tab == 0 {
+		return nil
+	}
+	return s.langs[s.tab-1]
+}
+
+func (s *Settings) tabName(i int) string {
+	if i == 0 {
+		return "Sound & Screen"
+	}
+	return s.langs[i-1].Name
+}
+
+// option is a line of the Sound & Screen tab.
+type option struct {
+	name, about string
+	choices     []string
+	volume      bool // drawn as a bar of MaxVolume steps
+	get         func(o *profile.Options) int
+	set         func(o *profile.Options, i int)
+}
+
+func onOff(b bool) int { return b2i(!b) }
+
+var options = []option{
+	{
+		name: "Music", about: "How loud the music is. F3 turns all sound off and on.", volume: true,
+		get: func(o *profile.Options) int { return o.Music },
+		set: func(o *profile.Options, i int) { o.Music = i },
+	},
+	{
+		name: "Sound effects", about: "How loud the sound effects are.", volume: true,
+		get: func(o *profile.Options) int { return o.Effects },
+		set: func(o *profile.Options, i int) { o.Effects = i },
+	},
+	{
+		name: "CRT filter", about: "Makes the screen look like an old monitor, with scanlines.",
+		choices: []string{"off", "soft", "strong"},
+		get:     func(o *profile.Options) int { return int(o.CRT) },
+		set:     func(o *profile.Options, i int) { o.CRT = profile.CRT(i) },
+	},
+	{
+		name: "Full screen", about: "F11 or Alt+Enter switches at any time.",
+		choices: []string{"on", "off"},
+		get:     func(o *profile.Options) int { return onOff(o.Fullscreen) },
+		set:     func(o *profile.Options, i int) { o.Fullscreen = i == 0 },
+	},
+	{
+		name: "Screen shake", about: "The view shakes when the hero is hit or a boss rages.",
+		choices: []string{"on", "off"},
+		get:     func(o *profile.Options) int { return onOff(o.Shake) },
+		set:     func(o *profile.Options, i int) { o.Shake = i == 0 },
+	},
+}
+
+// line is one line of the tab showing, ready to draw or change.
+type line struct {
+	name, about string
+	choices     []string
+	volume      bool
+	cur         int
+	change      func(i int)
+}
+
+// lines lists the settings on the tab showing.
+func (s *Settings) lines(ctx *game.Context) []line {
+	var out []line
+	if lang := s.lang(); lang != nil {
+		ls := ctx.Profile.Settings.For(lang)
+		for _, st := range settingsFor(lang) {
+			out = append(out, line{name: st.name, about: st.about, choices: st.choices, cur: st.get(&ls), change: func(i int) {
+				s.saveLang(ctx, func(ls *profile.LangSettings) { st.set(ls, i) })
+			}})
+		}
+		return out
+	}
+	o := ctx.Profile.Settings.Options()
+	for _, op := range options {
+		n := len(op.choices)
+		if op.volume {
+			n = profile.MaxVolume + 1
+		}
+		out = append(out, line{name: op.name, about: op.about, choices: op.choices, volume: op.volume, cur: op.get(&o), change: func(i int) {
+			s.saveOptions(ctx, func(o *profile.Options) { op.set(o, max(0, min(n-1, i))) })
+		}})
+	}
+	return out
+}
 
 // Update implements game.Scene.
 func (s *Settings) Update(ctx *game.Context) error {
-	n := s.rows()
+	list := s.lines(ctx)
+	n := len(list) + 2
 	step := 0
 	switch {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
-		ctx.Replace(NewTitle(ctx))
+		if s.pushed {
+			ctx.Pop()
+		} else {
+			ctx.Replace(NewTitle(ctx))
+		}
+		return nil
+	case input.Pressed(ebiten.KeyTab):
+		s.switchTab(ctx, 1)
 		return nil
 	case input.Up():
 		ctx.Sound.Play(audio.Blip)
@@ -152,8 +260,7 @@ func (s *Settings) Update(ctx *game.Context) error {
 		step = 1
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		if s.sel == n-1 {
-			s.change(ctx, func(ls *profile.LangSettings) { *ls = profile.Preset(s.lang()) })
-			s.note = s.lang().Name + " is back to the standard settings."
+			s.reset(ctx)
 			return nil
 		}
 		step = 1
@@ -163,24 +270,65 @@ func (s *Settings) Update(ctx *game.Context) error {
 	}
 	switch {
 	case s.sel == 0:
-		ctx.Sound.Play(audio.Blip)
-		s.li = (s.li + step + len(s.langs)) % len(s.langs)
-		s.sel, s.note = 0, ""
+		s.switchTab(ctx, step)
 	case s.sel < n-1:
-		st := settingsFor(s.lang())[s.sel-1]
-		s.change(ctx, func(ls *profile.LangSettings) {
-			st.set(ls, (st.get(ls)+step+len(st.choices))%len(st.choices))
-		})
+		l := list[s.sel-1]
+		if l.volume {
+			l.change(l.cur + step) // volumes stop at the ends
+		} else {
+			l.change((l.cur + step + len(l.choices)) % len(l.choices))
+		}
 		s.note = ""
 	}
 	return nil
 }
 
-// change edits the settings for the language shown, and saves them.
-func (s *Settings) change(ctx *game.Context, edit func(*profile.LangSettings)) {
+// tabs is how many tabs there are.
+func (s *Settings) tabs() int { return len(s.langs) + 1 }
+
+func (s *Settings) switchTab(ctx *game.Context, step int) {
+	if s.tabs() == 1 {
+		return
+	}
+	ctx.Sound.Play(audio.Blip)
+	s.tab = (s.tab + step + s.tabs()) % s.tabs()
+	s.sel, s.note = 0, ""
+}
+
+// reset puts the tab showing back to the standard settings.
+func (s *Settings) reset(ctx *game.Context) {
+	if lang := s.lang(); lang != nil {
+		s.saveLang(ctx, func(ls *profile.LangSettings) { *ls = profile.Preset(lang) })
+		s.note = lang.Name + " is back to the standard settings."
+		return
+	}
+	s.saveOptions(ctx, func(o *profile.Options) {
+		full := o.Fullscreen // leave the window as it is
+		*o = profile.DefaultOptions()
+		o.Fullscreen = full
+	})
+	s.note = "Sound and screen are back to the standard settings."
+}
+
+// saveLang edits the settings for the language shown, and saves them.
+func (s *Settings) saveLang(ctx *game.Context, edit func(*profile.LangSettings)) {
 	ls := ctx.Profile.Settings.For(s.lang())
 	edit(&ls)
 	ctx.Profile.Settings.Set(s.lang(), ls)
+	s.saved(ctx)
+}
+
+// saveOptions edits the game settings, puts them into effect and saves
+// them.
+func (s *Settings) saveOptions(ctx *game.Context, edit func(*profile.Options)) {
+	o := ctx.Profile.Settings.Options()
+	edit(&o)
+	ctx.Profile.Settings.SetOptions(o)
+	ctx.ApplyOptions()
+	s.saved(ctx)
+}
+
+func (s *Settings) saved(ctx *game.Context) {
 	if err := ctx.Profile.SaveSettings(); err != nil {
 		ctx.Sound.Play(audio.Wrong)
 		ctx.Notify("Could not save the settings")
@@ -194,13 +342,36 @@ func (s *Settings) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	cx := game.ScreenW / 2
 	gfx.DrawArt(dst, s.bg, 0, 0)
-	f.DrawCentered(dst, "Settings", cx, 12, 3, pal.Yellow)
+	f.DrawCentered(dst, "Settings", cx, 4, 3, pal.Yellow)
+
+	// The tabs, in a row under the title.
+	tw := 0
+	for i := 0; i < s.tabs(); i++ {
+		tw += f.Width(s.tabName(i), 1) + 20
+	}
+	tx := cx - tw/2
+	for i := 0; i < s.tabs(); i++ {
+		name := s.tabName(i)
+		w := f.Width(name, 1) + 12
+		col, bg := pal.Stone, pal.Fade(pal.Black, 0.5)
+		if i == s.tab {
+			col, bg = pal.Yellow, pal.Fade(pal.Indigo, 0.9)
+			if s.sel == 0 {
+				col = pal.White
+			}
+		}
+		gfx.FillRect(dst, tx, 54, w, 20, bg)
+		if i == s.tab {
+			gfx.FillRect(dst, tx, 72, w, 2, col)
+		}
+		f.DrawShadow(dst, name, tx+6, 56, 1, col)
+		tx += w + 8
+	}
 
 	const x, w, rowH, valX = 24, game.ScreenW - 48, 24, 244
-	y := 70
-	list := settingsFor(s.lang())
+	y := 80
+	list := s.lines(ctx)
 	gfx.Window(dst, x, y, w, rowH*(len(list)+2)+24)
-	ls := ctx.Profile.Settings.For(s.lang())
 	row := func(i int, name string, draw func(y int, sel bool)) {
 		ry := y + 12 + i*rowH
 		if i == len(list)+1 {
@@ -217,17 +388,38 @@ func (s *Settings) Draw(dst *ebiten.Image, ctx *game.Context) {
 			draw(ry, sel)
 		}
 	}
-	row(0, "Language", func(ry int, sel bool) {
-		col := pal.Yellow
-		f.DrawShadow(dst, "◄ "+s.lang().Name+" ►", x+valX, ry, 1, col)
+	show := "◄ " + s.tabName(s.tab) + " ►"
+	if s.tabs() == 1 {
+		show = s.tabName(s.tab)
+	}
+	row(0, "Show", func(ry int, sel bool) {
+		f.DrawShadow(dst, show, x+valX, ry, 1, pal.Yellow)
 	})
-	for i, st := range list {
-		cur := st.get(&ls)
-		row(i+1, st.name, func(ry int, sel bool) {
+	for i, l := range list {
+		row(i+1, l.name, func(ry int, sel bool) {
 			vx := x + valX
-			for k, ch := range st.choices {
+			if l.volume {
+				for k := 1; k <= profile.MaxVolume; k++ {
+					col := pal.Night
+					if k <= l.cur {
+						col = pal.Lime
+						if sel {
+							col = pal.Yellow
+						}
+					}
+					h := 4 + k
+					gfx.FillRect(dst, vx+(k-1)*10, ry+14-h, 7, h, col)
+				}
+				label := "off"
+				if l.cur > 0 {
+					label = fmt.Sprintf("%d0%%", l.cur)
+				}
+				f.DrawShadow(dst, label, vx+110, ry, 1, pal.Steel)
+				return
+			}
+			for k, ch := range l.choices {
 				col := pal.Stone
-				if k == cur {
+				if k == l.cur {
 					col = pal.Lime
 					if sel {
 						col = pal.Yellow
@@ -239,21 +431,32 @@ func (s *Settings) Draw(dst *ebiten.Image, ctx *game.Context) {
 			}
 		})
 	}
-	row(len(list)+1, "Reset "+s.lang().Name+" to the standard settings", nil)
+	what := "sound and screen"
+	if lang := s.lang(); lang != nil {
+		what = lang.Name
+	}
+	row(len(list)+1, "Reset "+what+" to the standard settings", nil)
 
-	about := "Choose a language with ←/→."
+	about := "Choose with ←/→ or Tab."
 	switch {
 	case s.sel > 0 && s.sel <= len(list):
 		about = list[s.sel-1].about
 	case s.sel == len(list)+1:
 		about = "The standard settings suit most classes."
+	case s.tabs() == 1:
+		about = "The grading rules can be changed from the title screen."
 	}
-	by := game.ScreenH - 74
+	by := game.ScreenH - 66
 	f.DrawCentered(dst, about, cx, by, 1, pal.Ice)
-	if s.note != "" {
+	switch {
+	case s.note != "":
 		f.DrawCentered(dst, s.note, cx, by+18, 1, pal.Lime)
-	} else {
+	case s.lang() != nil:
 		f.DrawCentered(dst, "Hardcore runs always use the standard settings, so scores compare.", cx, by+18, 1, pal.Tan)
 	}
-	f.DrawShadow(dst, "↑/↓ choose   ←/→ change   Enter reset   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+	help := "↑/↓ choose   ←/→ change   Tab next tab   Esc back"
+	if s.pushed {
+		help = "↑/↓ choose   ←/→ change   Esc back to the adventure"
+	}
+	f.DrawShadow(dst, help, 8, game.ScreenH-20, 1, pal.Ash)
 }

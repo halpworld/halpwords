@@ -322,9 +322,10 @@ func (c *Crawl) solvePuzzle() {
 	}
 	lp.solved = true
 	lp.title, lp.titleCol = res.Tier.String()+"!", tierColor[res.Tier]
-	xp := puzzleXP(lp.lock, c.run.depth)
+	xp := rpg.PuzzleXP(lp.lock == puzzle.Chest, c.run.depth)
 	if lp.lock == puzzle.Door {
 		c.play(audio.Unseal)
+		c.fxRunes()
 		c.level.Set(lp.at, dungeon.OpenDoor)
 		lp.lines = append(lp.lines, logLine{fmt.Sprintf("The runes fade and the door swings open. +%d XP", xp), pal.Lime})
 		c.run.say(fmt.Sprintf("The seal breaks and the door opens. +%d XP", xp), pal.Lime)
@@ -341,16 +342,9 @@ func (c *Crawl) solvePuzzle() {
 	lp.lines = append(lp.lines, logLine{loot, pal.Yellow})
 	c.run.say(loot, pal.Yellow)
 	c.float(fmt.Sprintf("+%d gold", gold), pal.Yellow)
+	c.fxCoins(gold)
 	lp.lines = append(lp.lines, c.takeLoot(ch, "Inside: ")...)
 	lp.lines = append(lp.lines, c.gainXP(xp)...)
-}
-
-// puzzleXP is the XP for solving a puzzle on a lock at depth.
-func puzzleXP(lock puzzle.Lock, depth int) int {
-	if lock == puzzle.Chest {
-		return 3 + depth/2
-	}
-	return 2 + depth/2
 }
 
 // puzzleAnswer is the answer a typed puzzle wants, for hints.

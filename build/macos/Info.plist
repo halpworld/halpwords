@@ -10,6 +10,8 @@
 	<string>world.halp.halpwords</string>
 	<key>CFBundleExecutable</key>
 	<string>halpwords</string>
+	<key>CFBundleIconFile</key>
+	<string>halpwords.icns</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -22,5 +24,7 @@
 	<true/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.educational-games</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© The Halpwords authors. Apache License 2.0.</string>
 </dict>
 </plist>

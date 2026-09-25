@@ -1,7 +1,8 @@
-// Command sfxdump writes every sound effect to a WAV file, so they can be
-// listened to and tuned without playing the game.
+// Command sfxdump writes every sound effect, and a loop of each kind of
+// music, to WAV files, so they can be listened to and tuned without
+// playing the game.
 //
-//	go run ./tools/sfxdump [-o dir]
+//	go run ./tools/sfxdump [-o dir] [-seed n]
 package main
 
 import (
@@ -16,6 +17,7 @@ import (
 
 func main() {
 	out := flag.String("o", "dist/sounds", "folder to write the WAV files to")
+	seed := flag.Uint64("seed", 1, "the seed the music is composed from")
 	flag.Parse()
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		log.Fatal(err)
@@ -26,7 +28,15 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	log.Printf("wrote %d sounds to %s", audio.Count, *out)
+	for _, m := range audio.Moods {
+		// Two loops, to hear that the seam is clean.
+		loop := audio.RenderLoop(audio.Compose(audio.Track{Mood: m, Seed: *seed}), audio.SampleRate, nil)
+		path := filepath.Join(*out, "music-"+m.String()+".wav")
+		if err := os.WriteFile(path, wav(append(loop, loop...)), 0o644); err != nil {
+			log.Fatal(err)
+		}
+	}
+	log.Printf("wrote %d sounds and %d pieces of music to %s", audio.Count, len(audio.Moods), *out)
 }
 
 // wav encodes mono samples as a 16-bit PCM WAV file.

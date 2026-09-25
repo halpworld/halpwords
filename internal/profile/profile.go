@@ -58,10 +58,60 @@ func Preset(lang *words.Language) LangSettings {
 	return LangSettings{Rules: lang.Defaults}
 }
 
-// Settings are the player's settings for each language.
+// Settings are the player's settings: for the game, and for each
+// language.
 type Settings struct {
 	Langs map[string]LangSettings `json:",omitempty"`
+	// Game is nil until the game settings are first changed.
+	Game *Options `json:",omitempty"`
 }
+
+// CRT is how much the screen looks like an old monitor.
+type CRT uint8
+
+const (
+	CRTOff CRT = iota
+	CRTSoft
+	CRTStrong
+	numCRT
+)
+
+func (c CRT) String() string { return [...]string{"off", "soft", "strong"}[c%numCRT] }
+
+// MaxVolume is the loudest volume setting.
+const MaxVolume = 10
+
+// Options are the settings for the whole game: sound and screen.
+type Options struct {
+	Music   int // 0 to MaxVolume
+	Effects int // 0 to MaxVolume
+	CRT     CRT
+	// Fullscreen is set when the game last ran full screen.
+	Fullscreen bool
+	// Shake shakes the view when the hero is hit. Some players find it
+	// uncomfortable.
+	Shake bool
+}
+
+// DefaultOptions are the game settings to start with.
+func DefaultOptions() Options {
+	return Options{Music: 6, Effects: 8, Shake: true}
+}
+
+// Options returns the game settings.
+func (s *Settings) Options() Options {
+	if s.Game == nil {
+		return DefaultOptions()
+	}
+	o := *s.Game
+	o.Music = max(0, min(MaxVolume, o.Music))
+	o.Effects = max(0, min(MaxVolume, o.Effects))
+	o.CRT %= numCRT
+	return o
+}
+
+// SetOptions changes the game settings.
+func (s *Settings) SetOptions(o Options) { s.Game = &o }
 
 // For returns the settings for lang.
 func (s *Settings) For(lang *words.Language) LangSettings {
