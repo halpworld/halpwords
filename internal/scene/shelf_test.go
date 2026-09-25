@@ -62,7 +62,7 @@ func TestShelfImportSaveDelete(t *testing.T) {
 	}
 	fr := rowFor(s, "french.txt")
 	before := len(s.rows[fr].starter.Entries)
-	if n := s.add(fr, importList(t, "language: fr\ndog = le chien\nowl = le hibou\n")); n != 1 {
+	if n := s.add(fr, importList(t, "language: fr\ndog = le chien\nfrog = la grenouille\n")); n != 1 {
 		t.Fatalf("added %d, want 1 (dog is already there)", n)
 	}
 	if len(s.rows[fr].starter.Entries) != before {

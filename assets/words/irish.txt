@@ -1,4 +1,5 @@
 # Starter list for Irish (An Caighdeán Oifigiúil).
+# Verbs are given as the dictionary form (the imperative), such as "ith".
 title: Irish - First Steps
 language: ga
 
@@ -8,20 +9,103 @@ cat = cat
 horse = capall
 bird = éan
 fish = iasc
+cow = bó
+sheep = caora
+pig = muc
+mouse = luch
+rabbit = coinín
+fox = sionnach | madra rua
+duck = lacha
+wolf = mac tíre
 
-## home
-house = teach
-book = leabhar
-door = doras
-window = fuinneog
-
-## people
+## family
 friend = cara
 girl = cailín
 boy = buachaill
 mother = máthair
 father = athair
 teacher = múinteoir
+brother = deartháir
+sister = deirfiúr
+grandmother = seanmháthair
+grandfather = seanathair
+baby = leanbh | babaí
+
+## home
+house = teach
+book = leabhar
+door = doras
+window = fuinneog
+table = bord
+chair = cathaoir
+bed = leaba
+kitchen = cistin
+garden = gairdín
+room = seomra
+
+## school
+school = scoil
+pen = peann
+pencil = peann luaidhe
+bag = mála
+student = dalta
+homework = obair bhaile
+
+## food
+bread = arán
+milk = bainne
+cheese = cáis
+apple = úll
+egg = ubh
+water = uisce
+butter = im
+meat = feoil
+cake = cáca
+potato = práta
+
+## body
+head = ceann
+hand = lámh
+foot = cos
+eye = súil
+nose = srón
+mouth = béal
+ear = cluas
+heart = croí
+
+## numbers
+one = a haon
+two = a dó
+three = a trí
+four = a ceathair
+five = a cúig
+six = a sé
+seven = a seacht
+eight = a hocht
+nine = a naoi
+ten = a deich
+
+## colours
+red = dearg
+blue = gorm
+green = glas | uaine
+yellow = buí
+black = dubh
+white = bán
+grey = liath
+pink = bándearg | pinc
+
+## verbs
+to eat = ith
+to drink = ól
+to sleep = codail
+to run = rith
+to read = léigh
+to write = scríobh
+to speak = labhair
+to play = imir
+to see = feic
+to sing = can
 
 ## dungeon
 castle = caisleán
@@ -29,3 +113,12 @@ sea = farraige
 gold = ór
 sword = claíomh
 key = eochair
+dragon = dragan
+knight = ridire
+king = rí
+queen = banríon
+monster = ollphéist | arracht
+ghost = taibhse | taise
+shield = sciath
+treasure = taisce | stór
+forest = foraois

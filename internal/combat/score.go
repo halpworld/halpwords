@@ -83,9 +83,11 @@ func Block(tier words.Tier) float64 {
 
 // WordTarget is the Difficulty of the words monsters on floor depth ask
 // for: short, plain words at first, longer ones deeper down and from
-// bosses.
+// bosses. It starts at 6 rather than lower, so that on the first floors a
+// quick typist still needs a few words a fight when the lists hold very
+// short words (numbers, colours).
 func WordTarget(depth int, boss bool) float64 {
-	t := 4.5 + 0.6*float64(depth-1)
+	t := max(6, 4.5+0.6*float64(depth-1))
 	if boss {
 		t += 2
 	}

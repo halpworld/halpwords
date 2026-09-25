@@ -20,6 +20,9 @@ RELEASE := $(DIST)/release
 # a "Developer ID Application: ..." identity signs it for everyone.
 MACOS_SIGN_IDENTITY ?= -
 
+# The staticcheck release `make vet` runs, fetched by go run.
+STATICCHECK := honnef.co/go/tools/cmd/staticcheck@2026.2.1
+
 .PHONY: help run test vet check sounds balance icon build build-mac build-mac-intel build-mac-universal \
 	bundle-mac winres build-windows build-windows-arm64 build-linux build-web serve-web \
 	release-mac release-windows release-linux release-web clean
@@ -33,8 +36,9 @@ run: ## Run the game
 test: ## Run unit tests
 	go test ./...
 
-vet: ## Run go vet and check formatting
+vet: ## Run go vet and staticcheck, and check formatting
 	go vet ./...
+	go run $(STATICCHECK) ./...
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "run gofmt -w ." && exit 1)
 
 check: vet test ## Run every check CI runs

@@ -1,27 +1,118 @@
-# Starter list for Ancient (Attic) Greek. Nouns: nominative singular. Verbs: 1st person present.
+# Starter list for Ancient (Attic) Greek. Nouns: nominative singular.
+# Adjectives: masculine nominative singular. Verbs: 1st person present.
 title: Ancient Greek - First Steps
 language: grc
 
 ## people
 human being = ἄνθρωπος
 brother = ἀδελφός
+sister = ἀδελφή
 child = παῖς
 farmer = γεωργός
+man = ἀνήρ
+woman = γυνή
+mother = μήτηρ
+father = πατήρ
+son = υἱός
+daughter = θυγάτηρ
+king = βασιλεύς
+friend = φίλος
+teacher = διδάσκαλος
+soldier = στρατιώτης
+sailor = ναύτης
+
+## gods
 god = θεός
+goddess = θεά
+soul = ψυχή
 
 ## world
 word = λόγος
-horse = ἵππος
 house = οἰκία
+door = θύρα
 sea = θάλαττα | θάλασσα
 road = ὁδός
 field = ἀγρός
 sun = ἥλιος
 water = ὕδωρ
+city = πόλις
+island = νῆσος
+river = ποταμός
+tree = δένδρον
+sky = οὐρανός
+earth = γῆ
+moon = σελήνη
+star = ἀστήρ
+fire = πῦρ
+night = νύξ
+day = ἡμέρα
+ship = ναῦς
+
+## animals
+horse = ἵππος
+dog = κύων
+ox = βοῦς
+bird = ὄρνις
+fish = ἰχθύς
+wolf = λύκος
+lion = λέων
+snake = ὄφις
+owl = γλαῦξ
+
+## body
+head = κεφαλή
+hand = χείρ
+foot = πούς
+eye = ὀφθαλμός
+body = σῶμα
+heart = καρδία
+
+## things
 gift = δῶρον
-soul = ψυχή
+book = βιβλίον
+bread = ἄρτος
+gold = χρυσός
+money = ἀργύριον
+sword = ξίφος
+shield = ἀσπίς
+war = πόλεμος
+battle = μάχη
+treasure = θησαυρός
+dragon = δράκων
+
+## numbers
+one = εἷς
+two = δύο
+three = τρεῖς
+four = τέτταρες | τέσσαρες
+five = πέντε
+six = ἕξ
+seven = ἑπτά
+eight = ὀκτώ
+nine = ἐννέα
+ten = δέκα
+
+## adjectives
+good = ἀγαθός
+bad = κακός
+beautiful = καλός
+big = μέγας
+small = μικρός
+wise = σοφός
 
 ## verbs
 I have = ἔχω
 I write = γράφω
 I say = λέγω
+I release = λύω
+I teach = διδάσκω
+I learn = μανθάνω
+I see = ὁρῶ | ὁράω
+I hear = ἀκούω
+I send = πέμπω
+I carry = φέρω
+I run = τρέχω
+I walk = βαδίζω
+I love = φιλῶ | φιλέω
+I eat = ἐσθίω
+I fight = μάχομαι

@@ -1,4 +1,5 @@
-# Starter list for Latin. Nouns: nominative singular. Verbs: 1st person present.
+# Starter list for Latin. Nouns: nominative singular. Adjectives: masculine
+# nominative singular. Verbs: 1st person present.
 title: Latin - First Steps
 language: la
 
@@ -11,21 +12,111 @@ friend = amīcus | amīca
 king = rēx
 queen = rēgīna
 master = dominus
+mother = māter
+father = pater
+son = fīlius
+daughter = fīlia
+brother = frāter
+sister = soror
+soldier = mīles
+man = vir
+woman = fēmina
+teacher = magister | magistra
 
 ## gods
 god = deus
 goddess = dea
+temple = templum
+
+## animals
+dog = canis
+cat = fēlēs
+horse = equus
+bird = avis
+fish = piscis
+wolf = lupus
+lion = leō
+bull = taurus
+snake = serpēns | anguis
+
+## body
+head = caput
+hand = manus
+foot = pēs
+eye = oculus
+heart = cor
+body = corpus
+
+## places
+road = via
+island = īnsula
+city = urbs
+house = domus
+field = ager
+forest = silva
+sea = mare
+river = flūmen
+mountain = mōns
+door = iānua
 
 ## things
-road = via
 water = aqua
 gift = dōnum
-island = īnsula
 war = bellum
 sword = gladius
 shield = scūtum
+book = liber
+bread = pānis
+money = pecūnia
+gold = aurum
+ship = nāvis
+fire = ignis
+key = clāvis
+treasure = thēsaurus
+dragon = dracō
+
+## world
+sky = caelum
+sun = sōl
+moon = lūna
+star = stella
+earth = terra
+day = diēs
+night = nox
+
+## numbers
+one = ūnus
+two = duo
+three = trēs
+four = quattuor
+five = quīnque
+six = sex
+seven = septem
+eight = octō
+nine = novem
+ten = decem
+
+## adjectives
+good = bonus
+bad = malus
+big = magnus
+small = parvus
+happy = laetus
+brave = fortis
 
 ## verbs
 I love = amō
 I see = videō
 I am = sum
+I have = habeō
+I walk = ambulō
+I carry = portō
+I work = labōrō
+I sleep = dormiō
+I hear = audiō
+I say = dīcō
+I write = scrībō
+I run = currō
+I fight = pugnō
+I come = veniō
+I give = dō

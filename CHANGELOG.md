@@ -28,6 +28,10 @@ The first release: every milestone in [PLAN.md](PLAN.md) is done.
   has a loading screen.
 - **Crash reports.** If the game crashes it writes `crash.txt` to the user
   folder, to send with a bug report.
+- **Bigger starter lists.** Each language now has about 100 words (was
+  about 20), in themes: animals, family, home, school, food, the body,
+  numbers, colours, verbs, gods, adjectives and the dungeon. Every word has
+  a riddle, so the riddle bank has grown from 54 to 180.
 - **A balance simulation.** Typing bots of three skills play the dungeon
   with every class; `make balance` prints the tables and tests keep the
   balance within bounds.
@@ -45,5 +49,9 @@ The first release: every milestone in [PLAN.md](PLAN.md) is done.
   - Every class gains DEF on even levels. The Knight starts with DEF 1
     (was 2); the Scribe starts with 30 HP and gains 6 a level (was 28 and
     5); the Rogue starts with DEF 0.
+- Monsters on the first three floors ask for words of difficulty 6 or
+  more, so a quick typist still needs a few words a fight now that the
+  lists hold very short words.
+- `make vet` (and CI) runs staticcheck.
 - The pause menu is a little more compact, to fit Sound & Screen.
 - Quit is not on the title screen in a web browser, where it did nothing.
