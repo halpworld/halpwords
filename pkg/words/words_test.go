@@ -1,6 +1,7 @@
 package words
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestStarterListsParse(t *testing.T) {
 		for _, e := range l.Entries {
 			for _, a := range e.Answers {
 				if r := Grade(a, e, lg, Rules{Accents: Strict, Breathings: Strict, ArticlesRequired: true}, false); r.Tier != Perfect {
-					t.Errorf("%s: %q graded %v against itself", l.Source, a, r.Tier)
+					t.Errorf("%s: %q graded %v against itself", l.File, a, r.Tier)
 				}
 			}
 		}
@@ -212,5 +213,116 @@ func TestFileName(t *testing.T) {
 		if got := FileName(in); got != want {
 			t.Errorf("FileName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Every starter list written by Format parses back to the same List.
+func TestFormatStarterLists(t *testing.T) {
+	lists, err := LoadFS(assets.Words, "words")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range lists {
+		back, err := Parse(strings.NewReader(Format(l)), l.File)
+		if err != nil {
+			t.Fatalf("%s: %v", l.File, err)
+		}
+		if !reflect.DeepEqual(back, l) {
+			t.Errorf("%s changed in a round trip:\n%s", l.File, Format(l))
+		}
+	}
+}
+
+const fullList = `# A list with every kind of line.
+title: French - Unit 3: At home = chez moi
+language: French
+id: 01J9Z6ABCDEF
+version: 7
+level: A1
+source: Dynamo 1, Unit 3 (Pearson)
+licence: CC-BY-4.0
+x-colour: blue
+X-Later: anything: at all = here
+
+house = la maison
+## rooms
+bedroom = la chambre
+kitchen = la cuisine
+friend = l'ami | l'amie
+## sentences
+>> Je dors dans ___. | la chambre
+>> Voici ___ de Paul. | L’AMIE
+##
+yes = oui
+## rooms
+garden = le jardin
+`
+
+func TestHeadersAndCloze(t *testing.T) {
+	l, err := Parse(strings.NewReader(fullList), "home.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &List{
+		Title: "French - Unit 3: At home = chez moi", Language: "fr",
+		ID: "01J9Z6ABCDEF", Version: 7, Level: "A1",
+		Source: "Dynamo 1, Unit 3 (Pearson)", Licence: "CC-BY-4.0",
+		Entries: []Entry{
+			{Prompt: "house", Answers: []string{"la maison"}},
+			{Prompt: "bedroom", Answers: []string{"la chambre"}, Tag: "rooms"},
+			{Prompt: "kitchen", Answers: []string{"la cuisine"}, Tag: "rooms"},
+			{Prompt: "friend", Answers: []string{"l'ami", "l'amie"}, Tag: "rooms"},
+			{Prompt: "yes", Answers: []string{"oui"}},
+			{Prompt: "garden", Answers: []string{"le jardin"}, Tag: "rooms"},
+		},
+		Cloze: []ClozeLine{
+			{Sentence: "Je dors dans ___.", Answer: "la chambre", Tag: "sentences"},
+			{Sentence: "Voici ___ de Paul.", Answer: "L’AMIE", Tag: "sentences"},
+		},
+		File: "home.txt",
+	}
+	if !reflect.DeepEqual(l, want) {
+		t.Fatalf("got  %+v\nwant %+v", l, want)
+	}
+	if a, ok := l.Cloze[1].Match(l.Entries[3]); !ok || a != "l'amie" {
+		t.Errorf("Match = %q, %v", a, ok)
+	}
+	if l.Cloze[0].Fits(l.Entries[3]) {
+		t.Error("la chambre fits friend")
+	}
+	back, err := Parse(strings.NewReader(Format(l)), "home.txt")
+	if err != nil || !reflect.DeepEqual(back, l) {
+		t.Fatalf("round trip: %v\n%s", err, Format(l))
+	}
+	// A list without the new lines is written as before.
+	if got := Format(&List{Title: "T", Language: "la", Entries: []Entry{{Prompt: "water", Answers: []string{"aqua"}}}}); got != "title: T\nlanguage: la\n\nwater = aqua\n" {
+		t.Errorf("Format wrote %q", got)
+	}
+}
+
+func TestListErrors(t *testing.T) {
+	for name, src := range map[string]string{
+		"unknown key":        "language: fr\nlevle: A1\ndog = le chien",
+		"bad version":        "language: fr\nversion: seven\ndog = le chien",
+		"negative version":   "language: fr\nversion: -1\ndog = le chien",
+		"cloze answer":       "language: fr\ndog = le chien\n>> Le ___ dort. | chat",
+		"cloze without gap":  "language: fr\ndog = le chien\n>> Le chien dort. | le chien",
+		"cloze two gaps":     "language: fr\ndog = le chien\n>> ___ et ___. | le chien",
+		"cloze long gap":     "language: fr\ndog = le chien\n>> Le ____ dort. | le chien",
+		"cloze no answer":    "language: fr\ndog = le chien\n>> Le ___ dort.",
+		"cloze empty answer": "language: fr\ndog = le chien\n>> Le ___ dort. | ",
+	} {
+		_, err := Parse(strings.NewReader(src), "t.txt")
+		if err == nil {
+			t.Errorf("%s: no error", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "line ") {
+			t.Errorf("%s: %v does not name the line", name, err)
+		}
+	}
+	_, err := Parse(strings.NewReader("language: fr\ndog = le chien\n\n>> Le ___ dort. | chat"), "t.txt")
+	if err == nil || !strings.Contains(err.Error(), "t.txt line 4:") {
+		t.Errorf("bad cloze answer: %v", err)
 	}
 }

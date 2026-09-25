@@ -8,6 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -233,7 +234,7 @@ func TestCloze(t *testing.T) {
 	entries := []words.Entry{dog, {Prompt: "cat", Answers: []string{"le chat"}}, {Prompt: "yes", Answers: []string{"oui"}}}
 	deck := words.NewDeck(entries, rng)
 	gen := &Generated{
-		Cloze:   map[string][]ClozeLine{words.Key(dog): {{"Je promène ___ au parc.", "I walk the dog in the park."}}},
+		Cloze:   map[string][]ClozeLine{words.Key(dog): {{Text: "Je promène ___ au parc.", English: "I walk the dog in the park."}}},
 		Riddles: map[string][]string{"yes": {"I am the word that agrees."}},
 	}
 	for n := 0; n < 20; n++ {
@@ -268,5 +269,42 @@ func TestCloze(t *testing.T) {
 	}
 	if !seen {
 		t.Error("NewWith never made a gap fill")
+	}
+}
+
+// A list's own gap-fill sentences make cloze puzzles, with no AI.
+func TestClozeFromLists(t *testing.T) {
+	fr, _ := words.Lookup("fr")
+	starters, err := words.LoadFS(assets.Words, "words")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if FromLists(starters) != nil {
+		t.Error("the starter lists have no gap-fill sentences")
+	}
+	l, err := words.Parse(strings.NewReader("language: fr\ndog = le chien | un chien\ncat = le chat\n>> Je promène ___ au parc. | Un chien"), "t.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gen := FromLists([]*words.List{l})
+	if gen == nil || len(gen.Cloze) != 1 || gen.Cloze[words.Key(l.Entries[0])][0].Answer != "un chien" {
+		t.Fatalf("got %+v", gen)
+	}
+	rng := rand.New(rand.NewPCG(4, 4))
+	p := MakeWith(Cloze, Chest, 1, words.NewDeck(l.Entries, rng), fr, fr.Defaults, rng, gen)
+	if p.Kind() != Cloze || p.Clue() != "Je promène _____ au parc.  (dog)" {
+		t.Fatalf("made %s %q", p.Kind(), p.Clue())
+	}
+	r := p.Check(Attempt{Text: "un chien"})
+	if r.Tier != words.Perfect || !slices.Equal(r.Solution, []string{"dog = un chien", "Je promène un chien au parc."}) {
+		t.Errorf("right answer: %v %q", r.Tier, r.Solution)
+	}
+	if p.Check(Attempt{Text: "le chat"}).Passed() {
+		t.Error("a wrong answer passed")
+	}
+	// The AI's sentences add to the lists'.
+	both := gen.Add(&Generated{Cloze: map[string][]ClozeLine{words.Key(l.Entries[1]): {{Text: "Le ___ dort.", English: "The cat sleeps."}}}})
+	if len(both.Cloze) != 2 {
+		t.Errorf("Add: %+v", both)
 	}
 }

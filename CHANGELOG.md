@@ -5,6 +5,20 @@ version as its release notes.
 
 ## Unreleased
 
+### Added
+
+- **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
+  line gives a list its own cloze puzzles, used with or without the AI
+  helper (not on scored runs). The answer must be one of the list's
+  answers.
+- **New list header lines**: `id:`, `version:`, `level:`, `source:` and
+  `licence:`. Lines whose key starts with `x-` are ignored, so later lists
+  won't break this version. Other unknown keys are still an error.
+- `pkg/words`: `List` gains `ID`, `Version`, `Level`, `Source`, `Licence`
+  and `Cloze []ClozeLine`; `words.Format(list)` writes a list back in the
+  text format, so that it parses to the same `List`. `pkg/puzzle`:
+  `FromLists`, `Generated.Add`, and `ClozeLine.Answer`.
+
 ### Changed
 
 - **Shared packages.** `words`, `compete`, `puzzle` and `proc` moved from
@@ -12,6 +26,9 @@ version as its release notes.
   `Clean`) moved from `internal/llm` to `pkg/safety`, so halpwords-server
   can import them. They are now a public API: changes to them are noted
   here. No change to how the game plays.
+- `pkg/words`: `List.Source` (the file name) is now `List.File`; `Source`
+  is the new `source:` header. `List.Format` (still grouped by tag)
+  writes the new lines too.
 
 ## v1.0.0
 

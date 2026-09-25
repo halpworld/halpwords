@@ -37,14 +37,14 @@ type shelf struct {
 func newShelf(starters, user []*words.List) *shelf {
 	s := &shelf{remove: map[string]bool{}}
 	for _, l := range starters {
-		s.rows = append(s.rows, &shelfRow{file: l.Source, list: l, starter: l})
+		s.rows = append(s.rows, &shelfRow{file: l.File, list: l, starter: l})
 	}
 	for _, l := range user {
-		if r := s.find(l.Source); r != nil {
+		if r := s.find(l.File); r != nil {
 			r.list, r.own, r.onDisk = l, true, true
 			continue
 		}
-		s.rows = append(s.rows, &shelfRow{file: l.Source, list: l, own: true, onDisk: true})
+		s.rows = append(s.rows, &shelfRow{file: l.File, list: l, own: true, onDisk: true})
 	}
 	return s
 }
@@ -82,7 +82,7 @@ func (s *shelf) create(l *words.List) int {
 		file = base + "-" + strconv.Itoa(n) + ".txt"
 	}
 	nl := cloneList(l)
-	nl.Source = file
+	nl.File = file
 	s.rows = append(s.rows, &shelfRow{file: file, list: nl, own: true, dirty: true})
 	return len(s.rows) - 1
 }

@@ -194,11 +194,11 @@ func (c *Context) LoadLists() error {
 	user, errs := UserLists()
 	own := map[string]bool{}
 	for _, l := range user {
-		own[l.Source] = true
+		own[l.File] = true
 	}
 	c.Lists = nil
 	for _, l := range starters {
-		if !own[l.Source] {
+		if !own[l.File] {
 			c.Lists = append(c.Lists, l)
 		}
 	}

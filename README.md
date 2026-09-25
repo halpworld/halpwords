@@ -671,6 +671,9 @@ language: fr
 ## animals
 dog = le chien
 friend = l'ami | l'amie
+
+## sentences
+>> Mon ___ aboie. | chien
 ```
 
 - Put one word per line: `english = answer`. Put any other accepted answers
@@ -679,6 +682,16 @@ friend = l'ami | l'amie
   and `ga` (Irish).
 - `## name` starts a group of related words. Groups are used for odd-one-out
   puzzles, so give each group at least three words.
+- `>>` lines are gap-fill sentences: a sentence in the language you're
+  learning with `___` for the gap, then `|` and the word that goes in it,
+  which must be one of the list's answers. Doors and chests then ask you to
+  fill the gap (not in Hardcore or the Daily Dungeon, which use the same
+  puzzles for everyone).
+- Optional header lines: `level:` (such as `A1`), `source:` (where the
+  words come from, such as a textbook unit) and `licence:` (such as
+  `CC-BY-4.0`). `id:` and `version:` are set by the Halpwords website. Lines
+  whose name starts with `x-` are ignored, and any other `name:` line is an
+  error, as it's usually a typo.
 - Riddle puzzles use the English riddles in
   [`assets/puzzles/riddles.txt`](assets/puzzles/riddles.txt), so they work
   for any language. Words without a riddle there just get other puzzles.

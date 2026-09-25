@@ -71,11 +71,16 @@ func (a *runAI) bank(r *run) *llm.Bank {
 	return a.svc.Bank(r.lang.Code)
 }
 
-// generated returns the AI-written puzzles for the run, or nil. Scored runs
-// use the fixed puzzles only, so their scores compare.
+// generated returns the puzzles beyond the word lists' own words for the
+// run: the lists' gap-fill sentences, and what the AI wrote when it is on.
+// It is nil when there are none. Scored runs use the fixed puzzles only, so
+// their scores compare.
 func (a *runAI) generated(r *run) *puzzle.Generated {
-	if a == nil || r.hardcore() || !a.svc.Ready() {
+	if r.hardcore() {
 		return nil
+	}
+	if a == nil || !a.svc.Ready() {
+		return r.cloze
 	}
 	if a.gen == nil {
 		b := a.bank(r)
@@ -85,7 +90,7 @@ func (a *runAI) generated(r *run) *puzzle.Generated {
 				g.Cloze[k] = append(g.Cloze[k], puzzle.ClozeLine{Text: c.Text, English: c.English})
 			}
 		}
-		a.gen = g
+		a.gen = g.Add(r.cloze)
 	}
 	return a.gen
 }
