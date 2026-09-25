@@ -56,6 +56,12 @@ type Context struct {
 	notice  string // a short message in the corner, like "Sound off"
 	noticeT int
 	opts    profile.Options // the game settings in use
+
+	// Full screen changes wait for the one before to finish: on macOS,
+	// changing again during the animation crashes the app.
+	fullWant    bool // whether full screen is wanted
+	fullPending bool // fullWant is not yet put into effect
+	fullWait    int  // ticks until full screen may change again
 }
 
 // ApplyOptions puts the game settings in the profile into effect: the
@@ -65,9 +71,36 @@ func (c *Context) ApplyOptions() {
 	c.Sound.Music = float64(c.opts.Music) / profile.MaxVolume
 	c.Sound.Effects = float64(c.opts.Effects) / profile.MaxVolume
 	c.Sound.music.volume(c.Sound)
-	if ebiten.IsFullscreen() != c.opts.Fullscreen {
-		ebiten.SetFullscreen(c.opts.Fullscreen)
+	c.fullWant, c.fullPending = c.opts.Fullscreen, true
+	c.syncFullscreen()
+}
+
+// syncFullscreen switches full screen to what is wanted, once the last
+// switch has had time to finish. Quick changes in a row become one.
+func (c *Context) syncFullscreen() {
+	if c.fullWait > 0 {
+		if c.fullWait--; c.fullWait == 0 {
+			input.ForgetHeld() // keys released during the switch may be lost
+		}
+		return
 	}
+	if !c.fullPending {
+		return
+	}
+	c.fullPending = false
+	if ebiten.IsFullscreen() != c.fullWant {
+		input.ForgetHeld()
+		ebiten.SetFullscreen(c.fullWant)
+		c.fullWait = ebiten.TPS() // the macOS animation takes about half a second
+	}
+}
+
+// isFullscreen reports whether full screen is on, or soon will be.
+func (c *Context) isFullscreen() bool {
+	if c.fullPending || c.fullWait > 0 {
+		return c.fullWant
+	}
+	return ebiten.IsFullscreen()
 }
 
 // Shake reports whether the view may shake. Some players turn it off.
@@ -76,7 +109,7 @@ func (c *Context) Shake() bool { return c.opts.Shake }
 // toggleFullscreen switches full screen on or off and remembers it.
 func (c *Context) toggleFullscreen() {
 	o := c.Profile.Settings.Options()
-	o.Fullscreen = !ebiten.IsFullscreen()
+	o.Fullscreen = !c.isFullscreen()
 	c.Profile.Settings.SetOptions(o)
 	c.Profile.SaveSettings()
 	c.ApplyOptions()
@@ -224,6 +257,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 func (g *Game) Update() error {
 	defer guard()
 	g.ctx.Tick++
+	g.ctx.syncFullscreen()
 	g.ctx.Input.Update()
 	g.ctx.Sound.update(g.ctx.Tick)
 	if g.ctx.noticeT > 0 {
@@ -241,8 +275,8 @@ func (g *Game) Update() error {
 		return g.ctx.scenes.update(g.ctx)
 	}
 	if input.Pressed(ebiten.KeyF11) ||
-		(input.Pressed(ebiten.KeyEnter) && ebiten.IsKeyPressed(ebiten.KeyAlt)) ||
-		(input.Pressed(ebiten.KeyF) && ebiten.IsKeyPressed(ebiten.KeyMeta) && ebiten.IsKeyPressed(ebiten.KeyControl)) {
+		(input.Pressed(ebiten.KeyEnter) && input.Held(ebiten.KeyAlt)) ||
+		(input.Pressed(ebiten.KeyF) && input.Held(ebiten.KeyMeta) && input.Held(ebiten.KeyControl)) {
 		g.ctx.toggleFullscreen()
 		g.ctx.Input.Chars = g.ctx.Input.Chars[:0]
 		return nil
