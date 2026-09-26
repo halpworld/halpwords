@@ -161,8 +161,8 @@ func (c *Client) FindClass(ctx context.Context, code, learnerID, username string
 	return &cl, nil
 }
 
-// Way is how the linked game signed in: WayPairing, WayCard or WayClass;
-// "" when it isn't linked, or was linked before games said.
+// Way is how the linked game signed in: WayPairing, WayCard, WayClass or
+// WaySSO; "" when it isn't linked, or was linked before games said.
 func (c *Client) Way() string {
 	if c == nil {
 		return ""
@@ -185,5 +185,5 @@ func (c *Client) KeepOnSignOut() bool {
 	if m := c.st.Me; m != nil && m.KeepOnSignOut != nil {
 		return *m.KeepOnSignOut
 	}
-	return c.st.Way != WayCard && c.st.Way != WayClass
+	return c.st.Way != WayCard && c.st.Way != WayClass && c.st.Way != WaySSO
 }

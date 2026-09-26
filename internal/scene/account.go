@@ -39,11 +39,12 @@ const (
 
 var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school"}
 
-// school reports whether the game signed in at school, with a login card
-// or the class code: it signs out rather than unlinks (W2.5).
+// school reports whether the game signed in at school, with a login card,
+// the class code or a school account: it signs out rather than unlinks
+// (W2.5, W5.4).
 func school(ctx *game.Context) bool {
 	w := ctx.Link.Way()
-	return w == link.WayCard || w == link.WayClass
+	return w == link.WayCard || w == link.WayClass || w == link.WaySSO
 }
 
 // Account links the game to a grown-up's account on the website, shows who

@@ -264,6 +264,7 @@ const (
 	siPictures               // tapping 3 pictures
 	siPlayName               // typing a name, to play without signing in
 	siWaiting                // waiting for the server
+	siSSO                    // signing in with a school account on the website
 )
 
 // siWay is a way to sign in, on the first step.
@@ -274,9 +275,11 @@ const (
 	siWayClass
 	siWayPairing
 	siWayJustPlay
+	siWaySSO
 )
 
-var siWayLabels = [...]string{"I have a login card", "I have a class code", "A grown-up gave me a code", "Just play, without signing in"}
+var siWayLabels = [...]string{"I have a login card", "I have a class code", "A grown-up gave me a code",
+	"Just play, without signing in", "I have a school Google or Microsoft account"}
 
 // SignIn signs the learner playing in: at school with a login card or
 // the class code and pictures, or at home with a grown-up's pairing code.
@@ -308,10 +311,16 @@ type SignIn struct {
 	linking bool          // a sign-in on its way
 	msg     string
 	msgCol  color.RGBA
+
+	// Signing in with a school account.
+	sso      *link.SSOCode
+	polling  chan error // a poll on its way
+	nextPoll uint64     // the tick of the next poll
 }
 
 type siResult struct {
 	class *link.Class
+	sso   *link.SSOCode
 	err   error
 }
 
@@ -335,7 +344,7 @@ func newUnlock(ctx *game.Context, l *profile.Learner) *SignIn {
 func (s *SignIn) say(msg string, c color.RGBA) { s.msg, s.msgCol = msg, c }
 
 func (s *SignIn) ways() []siWay {
-	ws := []siWay{siWayCard, siWayClass, siWayPairing}
+	ws := []siWay{siWayCard, siWayClass, siWaySSO, siWayPairing}
 	if s.prev != "" {
 		ws = append(ws, siWayJustPlay)
 	}
@@ -355,6 +364,10 @@ func (s *SignIn) codeLen() int {
 
 // Update implements game.Scene.
 func (s *SignIn) Update(ctx *game.Context) error {
+	if s.step == siSSO {
+		s.updateSSO(ctx)
+		return nil
+	}
 	if s.pending != nil {
 		select {
 		case r := <-s.pending:
@@ -445,6 +458,10 @@ func (s *SignIn) updateChoose(ctx *game.Context) {
 		ctx.Sound.Play(audio.Select)
 		s.text = s.text[:0]
 		s.say("", pal.Steel)
+		if ws[s.sel] == siWaySSO {
+			s.startSSO(ctx)
+			return
+		}
 		s.step = map[siWay]siStep{siWayCard: siCard, siWayClass: siClass, siWayPairing: siPairing, siWayJustPlay: siPlayName}[ws[s.sel]]
 	}
 }
@@ -514,6 +531,10 @@ func (s *SignIn) answer(ctx *game.Context, r siResult) {
 	if r.err != nil {
 		ctx.Sound.Play(audio.Wrong)
 		s.say(upperFirst(explainSignIn(r.err))+".", pal.Rose)
+		return
+	}
+	if r.sso != nil {
+		s.showSSO(ctx, r.sso)
 		return
 	}
 	s.say("", pal.Steel)
@@ -781,6 +802,8 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 	y := 56
 	hint := "Enter next   Esc back"
 	switch s.step {
+	case siSSO:
+		hint = s.drawSSO(dst, ctx, x, y, w)
 	case siChoose:
 		gfx.Window(dst, x, y, w, 30+len(s.ways())*24)
 		for i, wy := range s.ways() {
@@ -794,8 +817,8 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 			}
 			f.DrawShadow(dst, siWayLabels[wy], x+36, ry, 1, c)
 		}
-		f.DrawCentered(dst, "At school, your teacher gives you a card or a class code.", cx, y+150, 1, pal.Ice)
-		f.DrawCentered(dst, "At home, a grown-up gets a code on the Halpwords website.", cx, y+168, 1, pal.Ice)
+		f.DrawCentered(dst, "At school, your teacher gives you a card or a class code.", cx, y+174, 1, pal.Ice)
+		f.DrawCentered(dst, "At home, a grown-up gets a code on the Halpwords website.", cx, y+192, 1, pal.Ice)
 		hint = "↑/↓ choose   Enter select   Esc back"
 	case siCard, siPairing, siClass:
 		gfx.Window(dst, x, y, w, 150)

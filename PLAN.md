@@ -862,6 +862,21 @@ the folder stays only when the server's `me.keep_on_sign_out` says so (by
 default kept for a grown-up's pairing code, deleted for a card or class
 sign-in). Still to do: reading a login card's QR code with a camera.
 
+*Now (server W5.4, done):* **signing in with a school Google or
+Microsoft account.** The sign-in screen's *I have a school Google or
+Microsoft account* asks the server for a code (`POST /api/v1/sso/start`,
+`link.StartSSO`), opens the website's page (package `browser`: the
+system's browser on a computer; the web game leaves for it and passes its
+own address as `return_to`, so the website sends the pupil back), and
+shows the address and the code. The game polls `POST /api/v1/sso/token`
+at the server's interval (`link.PollSSO`) until the pupil has signed in,
+the code runs out or the account is refused. The code waits in
+`link.json`, so the web game coming back goes straight to the waiting
+screen. A school-account sign-in counts as signing in at school (signs
+out rather than unlinks; the folder is deleted at sign-out unless the
+school says otherwise). Still to do: a local lock on the folder of a
+learner signed in this way (the server's Q79).
+
 *Now (W1.9, done):* assignments show as **assignment quests** (`link.Quest`
 methods in `internal/link/quest.go` turn the server's goal, dates and
 progress into "Master 20 words", "8/20 words", "due tomorrow"). The title
