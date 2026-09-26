@@ -811,10 +811,13 @@ them. Title → **Account** links, syncs and unlinks (progress and lists stay;
 licensed lists go). Hardcore runs keep the standard settings. The web build
 uses the same client (Go's `net/http` runs on `fetch` there) with the files
 in local storage, a queue of at most 10,000 events for its ~5 MB, and saves
-the queue when the page is hidden or closed. A web game on another origin
-than the server needs CORS on the game API, and browsers don't let a page
-set `User-Agent`, so the server can't tell a web game's version: both are
-server follow-ups. Still to do:
+the queue when the page is hidden or closed. The server allows the web
+game's origin on the game API (CORS, halpwords-server W1.7d), and since a
+browser won't let a page set `User-Agent`, the web build sends its version
+as `X-Halpwords-Client: halpwords/1.2.0 (js; wasm)` instead. Unlinking
+also tells the server (`POST /api/v1/unlink`, in the background, after
+refreshing an old access token), so the game leaves the child's page on
+the website; offline, the family removes it there. Still to do:
 checking it all against staging (W1.8's "Done when"), quests (W1.9),
 per-assignment settings, and the accommodations the game doesn't have yet
 (cheaper hints, larger text, no timed dodges).

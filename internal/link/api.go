@@ -143,7 +143,13 @@ func (c *Client) once(ctx context.Context, method, path, token string, hdr http.
 	for k, v := range hdr {
 		req.Header[k] = v
 	}
-	req.Header.Set("User-Agent", c.userAgent())
+	if inBrowser {
+		// A browser won't let a page set User-Agent (and one that does
+		// makes every request need a CORS preflight for it).
+		req.Header.Set(clientHeader, c.clientVersion())
+	} else {
+		req.Header.Set("User-Agent", c.userAgent())
+	}
 	req.Header.Set("Accept", "application/json")
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
