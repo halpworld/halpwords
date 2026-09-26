@@ -7,6 +7,12 @@ version as its release notes.
 
 ### Added
 
+- **Report from the pause menu.** "Report" sends a bug report (game
+  version, system, seed, and crash.txt only if you tick the box) or an
+  "I was upset by..." report, with an optional note, to the Halpwords
+  team. Reports wait in a small queue while offline and are sent
+  anonymously unless the game is linked. Set `HALPWORDS_SERVER` to use
+  another server.
 - **Race** (Play Together): in a race room, the host starts a race and
   every racer plays the same dungeon, from the same seed and word list, to
   floor 3. Hardcore rules, one class, nothing saved. The other racers show

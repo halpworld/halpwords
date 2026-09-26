@@ -4,6 +4,7 @@ package game
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image/color"
 	"math"
@@ -19,6 +20,7 @@ import (
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
+	"github.com/halpworld/halpwords/internal/report"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -55,6 +57,9 @@ type Context struct {
 	// Link is the link to a grown-up's account on the website. It is
 	// never nil, and does nothing until the game is linked.
 	Link *link.Client
+	// Reports queues the pause menu's reports and sends them to
+	// Halpwords when the game is online. It may be nil (in tests).
+	Reports *report.Outbox
 
 	scenes  *manager
 	notice  string // a short message in the corner, like "Sound off"
@@ -223,6 +228,17 @@ func (saveStore) Read(name string) ([]byte, error)            { return save.Read
 func (saveStore) Write(name string, data []byte) error        { return save.Write(name, data) }
 func (saveStore) WritePrivate(name string, data []byte) error { return save.WritePrivate(name, data) }
 
+// NewOutbox returns the report queue in the user's folder, sending to
+// report.ServerURL(). Reports are anonymous: the game isn't linked to an
+// account yet. The link client (W1.8) sets Sender.Token to its access
+// token, "" when unlinked.
+func NewOutbox() *report.Outbox {
+	return &report.Outbox{
+		Queue:  report.NewQueue(saveStore{}),
+		Sender: &report.Sender{Server: report.ServerURL(), UserAgent: UserAgent()},
+	}
+}
+
 // UserDir is where saves, settings and the user's own word lists live, e.g.
 // ~/Library/Application Support/halpwords on macOS.
 func UserDir() (string, error) { return save.Dir() }
@@ -261,6 +277,8 @@ func New(first func(*Context) Scene) (*Game, error) {
 	if p := ctx.AI.Provider(); p != nil {
 		ctx.AI.Check(p.ID) // free: it lists the models the key can use
 	}
+	ctx.Reports = NewOutbox()
+	go ctx.Reports.Flush(context.Background()) // reports left from last time
 	ctx.scenes.stack = []Scene{first(ctx)}
 	return &Game{ctx: ctx}, nil
 }
