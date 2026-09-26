@@ -26,7 +26,7 @@ const (
 
 // ErrNoAI is a request to Halpwords AI from a game that can't use it:
 // not linked, or the server doesn't offer the task.
-var ErrNoAI = errors.New("Halpwords AI isn't available to this game")
+var ErrNoAI = errors.New("link: Halpwords AI isn't available to this game")
 
 // AIAvailable reports whether the game can use Halpwords AI: it is linked
 // and the server last said the account's plan includes it. It doesn't

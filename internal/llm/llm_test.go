@@ -355,7 +355,6 @@ func TestKeys(t *testing.T) {
 }
 
 func french() *words.Language { l, _ := words.Lookup("fr"); return l }
-func greek() *words.Language  { l, _ := words.Lookup("grc"); return l }
 
 func TestFillWordsAndTips(t *testing.T) {
 	f := newFake(t)

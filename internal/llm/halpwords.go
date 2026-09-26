@@ -33,7 +33,7 @@ type HalpwordsAI interface {
 var (
 	// ErrNoHalpwords is Halpwords AI chosen for a game that isn't linked,
 	// or whose account's plan doesn't include it.
-	ErrNoHalpwords = errors.New("Halpwords AI needs a game linked to an account whose plan includes it")
+	ErrNoHalpwords = errors.New("the game needs linking to an account whose plan includes Halpwords AI")
 	// ErrAllowance is Halpwords AI's allowance for the month, used up.
 	ErrAllowance = errors.New("this month's Halpwords AI is used up")
 	// ErrNeedsKey is a request only a model with the player's own key
