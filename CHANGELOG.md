@@ -7,6 +7,12 @@ version as its release notes.
 
 ### Added
 
+- `pkg/race`: the rules of a Race in halpwords-server's play rooms
+  (`Goal`, `TimeLimit`, `Report`), the `Judge` the server checks each
+  racer's reports with (floors in order and not sooner than walking there
+  takes, monsters no faster than they fall, cells on the floor, no
+  running faster than the hero walks), and the `Reporter` that decides
+  when a game reports.
 - **Account: link the game to a grown-up's account** on the Halpwords
   website (title screen → Account). A linked game sends answers and play
   sessions in the background, gets assigned word lists (read-only, in Word
