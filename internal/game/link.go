@@ -1,11 +1,13 @@
 package game
 
 import (
+	"slices"
 	"time"
 
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/save"
+	"github.com/halpworld/halpwords/pkg/settings"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -45,21 +47,59 @@ func (c *Context) lockSettings() {
 	}
 	s := &c.Profile.Settings
 	s.Locked, s.LockNote = nil, ""
+	var roles []string
 	for _, lang := range words.Languages {
-		if ls, ok := c.Link.Locked(lang, s.Own(lang)); ok {
+		if ls, d := c.Link.Decide(lang, s.Own(lang), nil); d.Locked() {
 			if s.Locked == nil {
 				s.Locked = map[string]profile.LangSettings{}
 			}
 			s.Locked[lang.Code] = ls
+			for _, r := range d.Roles() {
+				if !slices.Contains(roles, r) {
+					roles = append(roles, r)
+				}
+			}
 		}
 	}
 	if s.Locked != nil {
-		var roles []string
-		if me := c.Link.Me(); me != nil {
-			roles = me.SeenBy
+		if len(roles) == 0 {
+			if me := c.Link.Me(); me != nil {
+				roles = me.SeenBy
+			}
 		}
 		s.LockNote = link.SetByText(roles)
 	}
+}
+
+// SettingsFor returns the settings to play lang with: the player's own,
+// or what grown-ups set (Profile.Settings.For); for a quest, with its
+// settings for its list too (link.Client.Decide). note says who set a
+// quest's settings when they changed anything, such as "Set on the
+// website by your teacher.", and is empty otherwise.
+func (c *Context) SettingsFor(lang *words.Language, q *link.Quest) (ls profile.LangSettings, note string) {
+	if c.Profile == nil {
+		return profile.Preset(lang), ""
+	}
+	ls = c.Profile.Settings.For(lang)
+	if q == nil {
+		return ls, ""
+	}
+	got, d := c.Link.Decide(lang, c.Profile.Settings.Own(lang), q)
+	if d.Accents.Source != settings.Assignment && d.Timer.Source != settings.Assignment {
+		return ls, ""
+	}
+	return got, link.SetByText(d.Roles())
+}
+
+// QuestByID returns the quest with the id, as the server last sent it,
+// or nil.
+func (c *Context) QuestByID(id string) *link.Quest {
+	for _, q := range c.Link.Quests() {
+		if q.ID == id {
+			return &q
+		}
+	}
+	return nil
 }
 
 // session is the play session going on, sent to the grown-up's account

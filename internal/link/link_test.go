@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/internal/profile"
+	"github.com/halpworld/halpwords/pkg/settings"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -1163,6 +1164,64 @@ func TestLocked(t *testing.T) {
 	c.Unlink()
 	if _, locked := c.Locked(fr, own); locked {
 		t.Error("locked after unlinking")
+	}
+}
+
+// TestDecide: a class's strict accents reach the game and say who set
+// them; an assignment beats the class for its list; an accommodation
+// beats both; and the player's own settings apply when nobody set
+// anything (settings.Resolve).
+func TestDecide(t *testing.T) {
+	f, c, _, _ := linked(t)
+	fr, _ := words.Lookup("fr")
+	own := profile.LangSettings{Rules: fr.Defaults, Timer: profile.Fast}
+	if ls, d := c.Decide(fr, own, nil); d.Locked() || ls != own {
+		t.Errorf("nothing set: %+v %+v", ls, d)
+	}
+	f.mu.Lock()
+	f.me["set_by"] = "teacher"
+	f.me["presets"] = []any{map[string]any{"source": "class", "role": "teacher", "language": "fr", "accents": 2}}
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ls, d := c.Decide(fr, own, nil)
+	if !d.Locked() || ls.Rules.Accents != words.Strict || ls.Timer != profile.Fast ||
+		d.Accents != (settings.Decider{Source: settings.Class, Role: "teacher"}) || d.Timer.Source != settings.Own {
+		t.Errorf("class: %+v %+v", ls, d)
+	}
+	if got, _ := c.Locked(fr, own); got.Rules.Accents != words.Strict {
+		t.Errorf("Locked: %+v", got)
+	}
+	if SetByText(d.Roles()) != "Set on the website by your teacher." {
+		t.Errorf("roles %v", d.Roles())
+	}
+	la, _ := words.Lookup("la")
+	if _, d := c.Decide(la, own, nil); d.Locked() {
+		t.Error("the French class's preset locked Latin")
+	}
+
+	zero, relaxed := 0, 1
+	q := &Quest{Settings: QuestSettings{Accents: &zero, Timer: &relaxed, SetBy: "guardian"}}
+	ls, d = c.Decide(fr, own, q)
+	if ls.Rules.Accents != words.Ignore || ls.Timer != profile.Relaxed || d.Accents.Source != settings.Assignment ||
+		d.Accents.Role != "guardian" {
+		t.Errorf("assignment: %+v %+v", ls, d)
+	}
+
+	f.mu.Lock()
+	f.me["accommodations"] = map[string]any{"ignore_accents": true}
+	f.me["presets"] = []any{map[string]any{"source": "class", "role": "teacher", "language": "fr", "accents": 2, "timer": 2}}
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	strict := 2
+	q.Settings.Accents = &strict
+	ls, d = c.Decide(fr, own, q)
+	if ls.Rules.Accents != words.Ignore || d.Accents.Source != settings.Accommodation || ls.Timer != profile.Relaxed ||
+		d.Timer.Source != settings.Assignment {
+		t.Errorf("accommodation: %+v %+v", ls, d)
 	}
 }
 
