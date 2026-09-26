@@ -1,0 +1,71 @@
+{
+  "format": "hwquest",
+  "version": 1,
+  "title": "The Scribe's Cellars",
+  "language": "",
+  "intro": "A scribe lost her book of words in the cellars under the old library. Find the way down, break the sealed doors with your words, and bring the book back!",
+  "ending": "At the bottom of the pit lies the scribe's book. Every word in it is one you now know. Well done, hero!",
+  "maps": [
+    {
+      "format": "hwmap",
+      "version": 1,
+      "title": "The Gatehouse",
+      "theme": "The Crypt",
+      "depth": 1,
+      "rows": [
+        "############",
+        "#@...#.....#",
+        "#....+..C..#",
+        "#....#.....#",
+        "##=###T##=##",
+        "#.....#....#",
+        "#.F...=..>.#",
+        "#.....#....#",
+        "############"
+      ],
+      "monsters": [
+        {"x": 8, "y": 1, "kind": "Green Slime"},
+        {"x": 3, "y": 6, "kind": "Cave Bat"}
+      ],
+      "locks": [
+        {"x": 2, "y": 4, "puzzle": "anagram"},
+        {"x": 9, "y": 4, "puzzle": "reverse"},
+        {"x": 8, "y": 2, "puzzle": "missing"}
+      ],
+      "notes": [
+        {"x": 6, "y": 4, "text": "Two sealed doors lead on. Either will do."}
+      ]
+    },
+    {
+      "format": "hwmap",
+      "version": 1,
+      "title": "The Slime Pit",
+      "theme": "Mossy Cellars",
+      "depth": 3,
+      "rows": [
+        "##############",
+        "#@..#........#",
+        "#...=..C..##.#",
+        "#...#.....#..#",
+        "###+#######=##",
+        "#......#.....#",
+        "#..S...+..>..#",
+        "#......#.....#",
+        "##############"
+      ],
+      "monsters": [
+        {"x": 6, "y": 1, "kind": "Grumpy Rat"},
+        {"x": 2, "y": 6, "kind": "Wisp"},
+        {"x": 9, "y": 6, "kind": "Slime King"}
+      ],
+      "locks": [
+        {"x": 4, "y": 2, "puzzle": "pairs"},
+        {"x": 11, "y": 4, "puzzle": "odd-one-out"},
+        {"x": 7, "y": 2, "puzzle": "tumbler"}
+      ],
+      "notes": [
+        {"x": 4, "y": 3, "text": "The king of the slimes guards the stairs."}
+      ]
+    }
+  ]
+}

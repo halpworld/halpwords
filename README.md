@@ -423,6 +423,9 @@ wrong.
   6-character seed code shown in their pause menu or at the end of their
   run (such as `7K3QZP`), or paste their whole share code.
 
+- **Quest:** hand-made floors played one after another, with a story
+  before and after. See [Quests and hand-made maps](#quests-and-hand-made-maps).
+
 At the end of a Hardcore run you get a **share code** such as
 `HW-FR-0924-F12-18450-K7QX`: the language, the date (or seed), the floor,
 the score and a checksum. Send it to your friends: they can check it under
@@ -718,10 +721,97 @@ friend = l'ami | l'amie
 
 The built-in lists are in [`assets/words/`](assets/words).
 
+## Quests and hand-made maps
+
+Every floor of an Adventure is made by the game. A **quest** is made by
+hand instead: 1 to 10 floors in order, with an introduction and an ending,
+such as a teacher's escape room around this week's words. The game comes
+with one, *The Scribe's Cellars*, under **New Adventure → Quest**. To add
+another, drop a `.hwquest` file (a quest) or a `.hwmap` file (one floor)
+on the window. The game checks it and keeps it in the `quests` folder (see
+[Where your files are](#where-your-files-are)).
+
+On a quest floor, monsters, puzzles and loot work as on any other floor.
+Taking the stairs on the last floor ends the quest. Quests have Save
+Shrines only where their maker put them.
+
+**Play-testing.** The map editor on a Halpwords server can open the web
+game with a quest to try out: the page's address ends in
+`?quest=<address of the .hwquest file>`. The game fetches the file only
+from its own website (the same address up to the path; anything else is
+refused), checks it, and starts it. Nothing is saved during a play-test,
+and your own saves in that browser are left alone.
+
+Both files are JSON. A map is a grid of up to 40×40 cells, one character
+each, with the monsters, the puzzles on sealed doors and chests, and notes
+on walls listed by cell:
+
+```json
+{
+  "format": "hwmap", "version": 1,
+  "title": "Escape Room", "language": "fr",
+  "theme": "Ice Halls", "depth": 2,
+  "rows": [
+    "#######",
+    "#@..C.#",
+    "#.###=#",
+    "#.#M..#",
+    "#.+..>#",
+    "###T###"
+  ],
+  "monsters": [{"x": 4, "y": 4, "kind": "Cave Bat", "trait": "swift"}],
+  "locks": [{"x": 5, "y": 2, "puzzle": "anagram", "word": "le chat"},
+            {"x": 4, "y": 1, "puzzle": "tumbler", "mimic": true}],
+  "notes": [{"x": 3, "y": 5, "text": "Two ways down."}]
+}
+```
+
+| Cell | Is | Cell | Is |
+|---|---|---|---|
+| `#` | wall | `T` | wall with a torch |
+| `.` | floor | `@` | the start |
+| `+` | door | `=` | sealed door |
+| `C` | chest | `>` | stairs down |
+| `S` | Save Shrine | `F` | campfire |
+| `M` | merchant | | |
+
+- `language` is the language's code; leave it out and the player chooses.
+  `depth` is the generated floor the map plays like (how strong monsters
+  are, which puzzles, what chests hold). `theme` is one of the floor looks,
+  such as `The Crypt`. `facing` (`N`, `E`, `S` or `W`) is the way the hero
+  faces at the start.
+- A monster's `kind` is a monster's or boss's name, such as `Grumpy Rat` or
+  `Slime King`; `level` scales it (it defaults to the map's depth) and
+  `trait` gives it an extra power: `armored`, `ghostly`, `mirrored` or
+  `swift`. A boss holds the stairs shut until it's beaten.
+- A lock's `puzzle` is one of `reverse`, `anagram`, `odd-one-out`, `pairs`,
+  `riddle`, `spell` or `gap-fill` for sealed doors, and `missing`,
+  `anagram`, `tumbler`, `spell`, `crossword` or `gap-fill` for chests.
+  `word` picks the word it asks for (an answer or its English); a word
+  your lists don't have gets another word instead.
+- The map must have a wall all around, one start and one stairs, doors
+  between two walls, and a way from the start to the stairs and everything
+  else. The start must have a way out that isn't a sealed door.
+
+A quest holds its maps:
+
+```json
+{
+  "format": "hwquest", "version": 1,
+  "title": "Week 5", "language": "fr",
+  "intro": "Find the way out of the vault!",
+  "ending": "You made it. Well done!",
+  "maps": [{"format": "hwmap", "version": 1, "title": "The Vault", "rows": ["..."]}]
+}
+```
+
+The rules and checks are in [`pkg/maps`](pkg/maps), which the Halpwords
+website's map editor uses too.
+
 ## Where your files are
 
-Saves, settings, progress, the Hall of Fame and your own word lists are in
-your user folder:
+Saves, settings, progress, the Hall of Fame, your own word lists and the
+quests you've added are in your user folder:
 
 | System | Folder |
 |---|---|
