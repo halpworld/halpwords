@@ -12,8 +12,9 @@ version as its release notes.
   sessions in the background, gets assigned word lists (read-only, in Word
   Lists), progress from the grown-up's other games, and settings a grown-up
   set, which Settings then shows locked. It works the same offline, and
-  unlinking keeps your progress. The web version links too, keeping
-  everything in the browser's local storage.
+  unlinking keeps your progress and removes the game from the website's
+  list too. The web version links too, keeping everything in the
+  browser's local storage.
 - **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
   line gives a list its own cloze puzzles, used with or without the AI
   helper (not on scored runs). The answer must be one of the list's

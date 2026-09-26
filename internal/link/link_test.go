@@ -111,6 +111,8 @@ type fake struct {
 	refuse   map[int64]string
 	tooLarge int // answer 413 to batches bigger than this; 0 never
 	agents   []string
+	clients  []string // X-Halpwords-Client headers
+	unlinked int      // devices unlinked by the game
 }
 
 func newFake(t *testing.T) *fake {
@@ -176,6 +178,7 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	f.calls[path]++
 	f.agents = append(f.agents, r.Header.Get("User-Agent"))
+	f.clients = append(f.clients, r.Header.Get("X-Halpwords-Client"))
 	if q := f.fail[path]; len(q) > 0 {
 		f.fail[path] = q[1:]
 		if q[0] == http.StatusTooManyRequests {
@@ -218,6 +221,12 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		default:
 			f.used[req.RefreshToken] = true
 			writeJSON(w, 200, f.tokens())
+		}
+	case r.Method == "POST" && path == "/api/v1/unlink":
+		if auth() {
+			f.access, f.refresh = "", ""
+			f.unlinked++
+			w.WriteHeader(http.StatusNoContent)
 		}
 	case r.Method == "GET" && path == "/api/v1/me":
 		if auth() {
@@ -1000,6 +1009,73 @@ func TestUnlink(t *testing.T) {
 	c.Unlink()
 	if st.has("words/animals-2.txt") {
 		t.Error("the same list kept twice")
+	}
+}
+
+// TestUnlinkTellsTheServer: unlinking asks the server to unlink the
+// device too, refreshing an access token that ran out first.
+func TestUnlinkTellsTheServer(t *testing.T) {
+	f, c, _, clk := linked(t)
+	c.Unlink()
+	c.bg.Wait()
+	if f.count("/api/v1/unlink") != 1 || f.unlinked != 1 {
+		t.Errorf("unlink calls %d, unlinked %d", f.count("/api/v1/unlink"), f.unlinked)
+	}
+	// Not linked: nothing to tell.
+	c.Unlink()
+	c.bg.Wait()
+	if f.count("/api/v1/unlink") != 1 {
+		t.Error("told the server twice")
+	}
+
+	f.mu.Lock()
+	f.code = "QRST-VWXY"
+	f.mu.Unlock()
+	if err := c.LinkNow(context.Background(), "QRSTVWXY"); err != nil {
+		t.Fatal(err)
+	}
+	clk.add(2 * 24 * time.Hour)
+	before := f.count("/api/v1/token")
+	c.Unlink()
+	c.bg.Wait()
+	if f.count("/api/v1/token") != before+1 || f.unlinked != 2 {
+		t.Errorf("with an old access token: token calls %d, unlinked %d", f.count("/api/v1/token")-before, f.unlinked)
+	}
+	if c.Linked() {
+		t.Error("the refresh relinked the game")
+	}
+}
+
+// TestUnlinkOffline: the game unlinks itself even when the server can't
+// be told.
+func TestUnlinkOffline(t *testing.T) {
+	f, c, _, _ := linked(t)
+	f.srv.Close()
+	c.Unlink()
+	if c.Linked() || c.AccessToken() != "" {
+		t.Error("still linked")
+	}
+	c.bg.Wait()
+}
+
+// TestWebBuildSendsClientHeader: in a browser the game sends its version
+// in X-Halpwords-Client, not User-Agent.
+func TestWebBuildSendsClientHeader(t *testing.T) {
+	inBrowser = true
+	t.Cleanup(func() { inBrowser = false })
+	f, _, _, _ := linked(t)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.clients) == 0 {
+		t.Fatal("no requests")
+	}
+	for i, h := range f.clients {
+		if !strings.HasPrefix(h, "halpwords/") || !uaRE.MatchString("Halpwords/"+strings.TrimPrefix(h, "halpwords/")) {
+			t.Errorf("X-Halpwords-Client %q", h)
+		}
+		if strings.HasPrefix(f.agents[i], "Halpwords/") {
+			t.Errorf("User-Agent %q set in a browser", f.agents[i])
+		}
 	}
 }
 
