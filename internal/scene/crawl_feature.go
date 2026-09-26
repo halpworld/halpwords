@@ -10,6 +10,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/raycast"
 	"github.com/halpworld/halpwords/pkg/proc"
@@ -192,28 +193,62 @@ func (c *Crawl) drawCampfire(view *ebiten.Image, ctx *game.Context) {
 		}
 		tips = append(tips, lines...)
 	}
-	h := 60 + 18*max(1, len(c.weakest)) + 30
-	if len(tips) > 0 {
-		h += 22 + 16*len(tips)
+	weak := c.weakest
+	quest, hasQuest := c.campfireQuest(ctx)
+	height := func() int {
+		h := 60 + 18*max(1, len(weak)) + 30
+		if len(tips) > 0 {
+			h += 22 + 16*len(tips)
+		}
+		if hasQuest {
+			h += 42
+		}
+		return h
 	}
+	// A quest takes the place of the last words, or tips, to fit the view.
+	for height() > vh-22 && len(weak) > 1 {
+		weak = weak[:len(weak)-1]
+	}
+	for height() > vh-22 && len(tips) > 0 {
+		tips = tips[:len(tips)-1]
+	}
+	h := height()
 	x, y := viewX+20, viewY+max(0, (vh-22-h)/2)
 	gfx.Window(view, x, y, w, h)
 	f.DrawCentered(view, "You rest by the fire", x+w/2, y+10, 1, pal.Yellow)
 	f.DrawCentered(view, "HP and MP restored.", x+w/2, y+28, 1, pal.Lime)
-	if len(c.weakest) == 0 {
+	if len(weak) == 0 {
 		f.DrawCentered(view, "No weak words to practise. Well done!", x+w/2, y+54, 1, pal.Ice)
 	} else {
 		f.DrawCentered(view, "The flames show your weakest words:", x+w/2, y+50, 1, pal.Tan)
-		for i, l := range c.weakest {
+		for i, l := range weak {
 			f.DrawCentered(view, l.text, x+w/2, y+70+i*18, 1, l.col)
 		}
 	}
 	if len(tips) > 0 {
-		ty := y + 70 + 18*len(c.weakest) + 4
+		ty := y + 70 + 18*len(weak) + 4
 		f.DrawCentered(view, "✦ Scroll of Insight ✦", x+w/2, ty, 1, pal.Cyan)
 		for i, t := range tips {
 			f.DrawCentered(view, t, x+w/2, ty+20+i*16, 1, pal.Sky)
 		}
 	}
-	c.drawHint(view, ctx, "Enter continue · G Grimoire")
+	if hasQuest {
+		qy := y + h - 58
+		gfx.FillRect(view, x+12, qy-4, w-24, 1, pal.Granite)
+		drawQuest(view, ctx, quest, x+16, qy, w-32, questNow(), true, "")
+	}
+	hint := "Enter continue · G Grimoire"
+	if len(ctx.Link.Quests()) > 0 {
+		hint += " · Q Quests"
+	}
+	c.drawHint(view, ctx, hint)
+}
+
+// campfireQuest is the quest a campfire shows: the run's own, or else the
+// quest to do next.
+func (c *Crawl) campfireQuest(ctx *game.Context) (link.Quest, bool) {
+	if q := c.run.quest; q != nil {
+		return questFor(ctx, q.ID)
+	}
+	return link.Current(ctx.Link.Quests(), questNow())
 }

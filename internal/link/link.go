@@ -153,7 +153,8 @@ type ListInfo struct {
 	Licensed bool `json:",omitempty"`
 }
 
-// Quest is an assignment as a quest, from GET /api/v1/assignments.
+// Quest is an assignment as a quest, from GET /api/v1/assignments. Its
+// methods (quest.go) say it in words for the game's screens.
 type Quest struct {
 	ID   string `json:"id"`
 	List struct {
@@ -165,9 +166,12 @@ type Quest struct {
 		Kind string `json:"kind"`
 		N    int    `json:"n,omitempty"`
 	} `json:"goal"`
-	Mode     string `json:"mode"`
-	StartsAt string `json:"starts_at"`
-	DueAt    string `json:"due_at,omitempty"`
+	// Mode is where the quest's answers count: ModeAny, ModePractice
+	// or ModeAdventure.
+	Mode     string        `json:"mode"`
+	Settings QuestSettings `json:"settings"`
+	StartsAt string        `json:"starts_at"`
+	DueAt    string        `json:"due_at,omitempty"`
 	Progress struct {
 		Answers  int  `json:"answers"`
 		Done     int  `json:"done"`

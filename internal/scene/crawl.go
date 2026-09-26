@@ -260,6 +260,9 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		case input.Pressed(ebiten.KeyG):
 			c.play(audio.Select)
 			ctx.Push(NewGrimoire(ctx, c.run.lang))
+		case input.Pressed(ebiten.KeyQ) && len(ctx.Link.Quests()) > 0:
+			c.play(audio.Select)
+			ctx.Push(NewQuestsLook(ctx))
 		case input.Confirm() || input.Back() || input.Pressed(ebiten.KeySpace):
 			c.mode = modeExplore
 		}

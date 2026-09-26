@@ -788,9 +788,23 @@ the queue when the page is hidden or closed. A web game on another origin
 than the server needs CORS on the game API, and browsers don't let a page
 set `User-Agent`, so the server can't tell a web game's version: both are
 server follow-ups. Still to do:
-checking it all against staging (W1.8's "Done when"), quests (W1.9),
+checking it all against staging (W1.8's "Done when"),
 per-assignment settings, and the accommodations the game doesn't have yet
 (cheaper hints, larger text, no timed dodges).
+
+*Now (W1.9, done):* assignments show as **quests** (`link.Quest` methods
+in `internal/link/quest.go` turn the server's goal, dates and progress into
+"Master 20 words", "8/20 words", "due tomorrow"). The title screen shows the
+quest to do next in a banner and gains **Quests**, which lists them (to do
+by due date, then not started, then complete) with a bar and a due date;
+Enter plays one in Practice (only its list) or in an Adventure (only its
+words, kept in the save), from where its answers count (←/→ when both
+do). Campfires show the current quest, and Q there opens the list to look
+at. With the AI helper on, the Dungeon Director is told the quest's name,
+and in other Adventures in that language up to 8 of its words, weakest
+first. Progress is the server's as of the last sync; per-assignment
+settings are read but not applied yet, and goal kinds or modes the game
+doesn't know are shown as just practise, anywhere.
 
 ## 11. Cross-platform build and distribution
 

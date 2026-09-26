@@ -88,6 +88,9 @@ type run struct {
 	ai *runAI
 	// cloze are the gap-fill sentences written in the word lists, or nil.
 	cloze *puzzle.Generated
+	// quest is the quest the adventure was started for, or nil: its
+	// words are the quest list's only.
+	quest *questRun
 }
 
 // runSetup is what the New Adventure screens choose before the class.
@@ -98,6 +101,8 @@ type runSetup struct {
 	seed   uint64
 	seeded bool
 	day    string // the Daily Dungeon's date
+	// quest, when not nil, plays a quest's list only.
+	quest *questRun
 }
 
 // dailySetup is today's Daily Dungeon in lang.
@@ -108,11 +113,28 @@ func dailySetup(ctx *game.Context, lang *words.Language) runSetup {
 
 // entriesFor returns every word in the lists for lang.
 func entriesFor(ctx *game.Context, lang *words.Language) []words.Entry {
+	return entriesOf(ctx.ListsFor(lang.Code))
+}
+
+func entriesOf(lists []*words.List) []words.Entry {
 	var entries []words.Entry
-	for _, l := range ctx.ListsFor(lang.Code) {
+	for _, l := range lists {
 		entries = append(entries, l.Entries...)
 	}
 	return entries
+}
+
+// runLists are the lists a run in lang plays: a quest's list, or every
+// list for the language. ok is false when the quest's list is gone.
+func runLists(ctx *game.Context, lang *words.Language, q *questRun) (lists []*words.List, ok bool) {
+	if q == nil {
+		return ctx.ListsFor(lang.Code), true
+	}
+	l := questList(ctx, q.List)
+	if l == nil || l.Language != lang.Code || len(l.Entries) == 0 {
+		return nil, false
+	}
+	return []*words.List{l}, true
 }
 
 func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runSetup) *run {
@@ -124,9 +146,12 @@ func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runS
 			seed = v
 		}
 	}
-	r := startRun(ctx, lang, class, seed)
+	r := beginRun(ctx, lang, class, seed, setup.quest)
 	r.setMode(ctx, setup.mode)
 	r.day = setup.day
+	if r.quest != nil {
+		r.say("Quest: "+r.quest.Title+". Its words fill this dungeon.", pal.Yellow)
+	}
 	return r
 }
 
@@ -142,7 +167,17 @@ func (r *run) setMode(ctx *game.Context, m compete.Mode) {
 // startRun begins an Adventure in lang as a hero of class through the
 // dungeon made from seed.
 func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64) *run {
-	entries := entriesFor(ctx, lang)
+	return beginRun(ctx, lang, class, seed, nil)
+}
+
+// beginRun is startRun for a quest's list when q is not nil. A quest
+// whose list is gone plays every list of the language.
+func beginRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, q *questRun) *run {
+	lists, ok := runLists(ctx, lang, q)
+	if !ok {
+		lists, q = ctx.ListsFor(lang.Code), nil
+	}
+	entries := entriesOf(lists)
 	src := proc.NewPCG(seed)
 	rng := rand.New(src)
 	r := &run{
@@ -159,7 +194,8 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 		prof:    ctx.Profile,
 		link:    ctx.Link,
 		ai:      newRunAI(ctx),
-		cloze:   puzzle.FromLists(ctx.ListsFor(lang.Code)),
+		cloze:   puzzle.FromLists(lists),
+		quest:   q,
 	}
 	if r.prof != nil {
 		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))

@@ -3,6 +3,7 @@ package scene
 import (
 	"math"
 	"runtime"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 )
 
@@ -20,6 +22,9 @@ type Title struct {
 	sel     int
 	items   []titleItem
 	saved   string // describes the saved adventure, if there is one
+	hasSave bool
+	// quests are the quests a grown-up set, when the game is linked.
+	quests []link.Quest
 }
 
 // titleItem is an entry in the main menu.
@@ -36,9 +41,10 @@ const (
 	titleAI
 	titleAccount
 	titleQuit
+	titleQuests
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit", "Quests"}
 
 // NewTitle creates the title screen.
 func NewTitle(ctx *game.Context) game.Scene {
@@ -46,16 +52,37 @@ func NewTitle(ctx *game.Context) game.Scene {
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount},
 	}
+	t.saved, t.hasSave = saveSummary()
+	t.build(ctx)
+	return t
+}
+
+// build makes the menu: Quests comes first when there are quests,
+// after Continue. The same entry stays chosen.
+func (t *Title) build(ctx *game.Context) {
+	var was titleItem = -1
+	if t.sel < len(t.items) {
+		was = t.items[t.sel]
+	}
+	t.quests = ctx.Link.Quests()
+	t.items = t.items[:0]
+	if t.hasSave {
+		t.items = append(t.items, titleContinue)
+	}
+	if len(t.quests) > 0 {
+		t.items = append(t.items, titleQuests)
+	}
+	t.items = append(t.items, titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount)
 	if runtime.GOOS != "js" {
 		t.items = append(t.items, titleQuit) // a web page is closed, not quit
 	}
-	if s, ok := saveSummary(); ok {
-		t.saved = s
-		t.items = append([]titleItem{titleContinue}, t.items...)
+	t.sel = 0
+	for i, it := range t.items {
+		if it == was {
+			t.sel = i
+		}
 	}
-	return t
 }
 
 // rows is how many items are in each of the menu's two columns.
@@ -65,6 +92,9 @@ func (t *Title) rows() int { return (len(t.items) + 1) / 2 }
 func (t *Title) Update(ctx *game.Context) error {
 	for _, tr := range t.torches {
 		tr.Update()
+	}
+	if qs := ctx.Link.Quests(); !slices.EqualFunc(qs, t.quests, func(a, b link.Quest) bool { return a == b }) {
+		t.build(ctx) // a sync brought new quests
 	}
 	n := len(t.items)
 	switch {
@@ -110,6 +140,7 @@ func (t *Title) Update(ctx *game.Context) error {
 			titleSettings:  NewSettings,
 			titleAI:        NewAISetup,
 			titleAccount:   NewAccount,
+			titleQuests:    NewQuests,
 		}[it](ctx))
 	}
 	return nil
@@ -138,7 +169,10 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 	// Menu, in two columns. Five rows sit a little closer and higher.
 	rows := t.rows()
 	step, my, savedY := 26, 196, 172
-	if rows > 4 {
+	switch {
+	case rows > 5:
+		step, my, savedY = 22, 184, 166
+	case rows > 4:
 		step, my, savedY = 24, 186, 166
 	}
 	if t.saved != "" {
@@ -163,6 +197,8 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 		f.DrawShadow(dst, titleLabels[it], x+36, y, 2, c)
 	}
+
+	drawQuestBanner(dst, ctx, t.quests)
 
 	f.DrawShadow(dst, "Arrows choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
 	v := game.VersionText()

@@ -14,6 +14,12 @@ version as its release notes.
   set, which Settings then shows locked. It works the same offline, and
   unlinking keeps your progress. The web version links too, keeping
   everything in the browser's local storage.
+- **Quests.** Word lists a grown-up assigns show as quests on the title
+  screen (the next one in a banner, all of them under Quests) and at
+  campfires, with a progress bar and a due date. Choosing one practises
+  its list, or starts an Adventure with only its words, as the grown-up
+  chose. With the AI helper on, the Dungeon Director weaves the quest's
+  words into its floors.
 - **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
   line gives a list its own cloze puzzles, used with or without the AI
   helper (not on scored runs). The answer must be one of the list's

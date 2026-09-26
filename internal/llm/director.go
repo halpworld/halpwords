@@ -22,6 +22,11 @@ type Floor struct {
 	Monsters []string
 	// Boss is the boss guarding the stairs, if there is one.
 	Boss string
+	// Quest is the title of a quest (an assignment from a grown-up) to
+	// build the floor around, or "". QuestWords are its words; when they
+	// are left out, Words are the quest's words.
+	Quest      string
+	QuestWords []words.Entry
 }
 
 // Script is the Dungeon Director's plan for a floor: names and words that
@@ -57,7 +62,7 @@ func (s *Service) Direct(ctx context.Context, f Floor) (*Script, error) {
 	}
 	prompt := fmt.Sprintf(`You are the Dungeon Director. Plan floor %d of a dungeon for a student learning %s.
 The student will practise these words on this floor:
-%sWord groups: %s
+%sWord groups: %s%s
 Monsters on this floor: %s.%s
 
 Themes to choose from:
@@ -70,7 +75,7 @@ Reply with JSON only:
  "lore": ["three short notes scratched on the walls, each at most 90 characters, in English, which may mention a %s word from the list"],
  "monsters": {"monster name from the list": "a new fun name tied to the words, at most 22 characters"},
  "boss": ""}`,
-		f.Depth, f.Lang.Name, wordLines(f.Words[:min(len(f.Words), 12)]), strings.Join(tags, ", "),
+		f.Depth, f.Lang.Name, wordLines(f.Words[:min(len(f.Words), 12)]), strings.Join(tags, ", "), questLines(f),
 		strings.Join(f.Monsters, ", "), boss, themes.String(), f.Lang.Name)
 	text, err := s.Ask(ctx, false, safety.Policy, prompt, 700)
 	if err != nil {
@@ -88,6 +93,39 @@ Reply with JSON only:
 		return nil, err
 	}
 	return CheckScript(out.Name, out.Theme, out.Intro, out.Lore, out.Monsters, out.Boss, f)
+}
+
+// maxQuestWords is how many of a quest's words the Director is told.
+const maxQuestWords = 8
+
+// questLines tell the Director about the player's quest, if there is one.
+func questLines(f Floor) string {
+	title := questTitle(f.Quest)
+	if title == "" {
+		return ""
+	}
+	if len(f.QuestWords) == 0 {
+		return fmt.Sprintf("\nThese words are the student's quest %q, set by their teacher or parent. Make the floor feel like part of that quest.", title)
+	}
+	return fmt.Sprintf("\nThe student is on a quest %q, set by their teacher or parent. Weave its words into the floor too:\n%s",
+		title, strings.TrimRight(wordLines(f.QuestWords[:min(len(f.QuestWords), maxQuestWords)]), "\n"))
+}
+
+// questTitle tidies a quest's title for a prompt: one line of letters,
+// digits, spaces and a few marks, at most 60 characters.
+func questTitle(s string) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range strings.Join(strings.Fields(s), " ") {
+		if n == 60 {
+			break
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune(" '-’.,:()&/", r) {
+			b.WriteRune(r)
+			n++
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // nameLike reports whether s is fit to be a name: letters, spaces and a
