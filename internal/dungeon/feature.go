@@ -72,11 +72,18 @@ func (f *Level) placeFeatures(rng *rand.Rand) {
 	}
 	if f.Depth == 2 || (f.Depth > 2 && rng.IntN(2) == 0) {
 		if m := put(Merchant); m != nil {
-			for i := 0; i < StockSize; i++ {
-				m.Stock = append(m.Stock, rpg.RandomGear(f.Depth+1, rng))
-			}
+			m.Stock = f.stock(rng)
 		}
 	}
+}
+
+// stock is the gear a merchant on the floor sells.
+func (f *Level) stock(rng *rand.Rand) []rpg.Gear {
+	var out []rpg.Gear
+	for i := 0; i < StockSize; i++ {
+		out = append(out, rpg.RandomGear(f.Depth+1, rng))
+	}
+	return out
 }
 
 // roomHasBlocker reports whether a chest or feature stands in room r.
