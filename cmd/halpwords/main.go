@@ -47,7 +47,7 @@ func main() {
 func firstScene() func(*game.Context) game.Scene {
 	page := playtest.Page()
 	if page == "" {
-		return scene.NewTitle
+		return scene.NewStart
 	}
 	u, err := playtest.FromPage(page)
 	switch {
@@ -58,5 +58,5 @@ func firstScene() func(*game.Context) game.Scene {
 		save.UseMemory()
 		return scene.NewPlaytest(http.DefaultClient, u)
 	}
-	return scene.NewTitle
+	return scene.NewStart
 }

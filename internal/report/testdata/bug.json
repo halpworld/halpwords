@@ -1,0 +1,11 @@
+{
+  "id": "0b6f6f0e-3c1a-4c1e-9d55-2a7c3e1f9a10",
+  "kind": "bug",
+  "text": "The dungeon froze after the third door.",
+  "game": {
+    "version": "1.2.0",
+    "platform": "linux/amd64"
+  },
+  "seed": "81234",
+  "crash": "Halpwords 1.2.0 crashed.\npanic: runtime error: index out of range [3] with length 3\n\ngoroutine 1 [running]:\nmain.main()\n"
+}

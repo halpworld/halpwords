@@ -26,9 +26,10 @@ const (
 	pauseQuit
 	pauseGiveUp
 	pauseOptions
+	pauseReport
 )
 
-var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend and quit", "Quit to title", "Give up the run", "Sound & screen"}
+var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend and quit", "Quit to title", "Give up the run", "Sound & screen", "Report"}
 
 // pause stops the game and opens the pause menu. Everything stands still,
 // including the battle clock.
@@ -54,9 +55,9 @@ func (c *Crawl) unpause(ctx *game.Context) {
 // pauseItems lists the pause menu. Fleeing is only for battles, and a
 // Hardcore run can't be left without saving: it can only be given up.
 func (c *Crawl) pauseItems() []pauseItem {
-	items := []pauseItem{pauseResume, pauseItems, pauseGrimoire, pauseOptions, pauseSuspend, pauseQuit}
+	items := []pauseItem{pauseResume, pauseItems, pauseGrimoire, pauseOptions, pauseReport, pauseSuspend, pauseQuit}
 	if c.resume == modeBattle {
-		items = []pauseItem{pauseResume, pauseFlee, pauseItems, pauseGrimoire, pauseOptions, pauseSuspend, pauseQuit}
+		items = []pauseItem{pauseResume, pauseFlee, pauseItems, pauseGrimoire, pauseOptions, pauseReport, pauseSuspend, pauseQuit}
 	}
 	if c.run.hardcore() {
 		items[len(items)-1] = pauseGiveUp
@@ -124,6 +125,9 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 	case pauseOptions:
 		c.play(audio.Select)
 		ctx.Push(newOptions(ctx))
+	case pauseReport:
+		c.play(audio.Select)
+		ctx.Push(newReport(ctx, c.run.seedCode()))
 	case pauseGiveUp:
 		c.mode = modeQuit
 	case pauseSuspend:
@@ -179,7 +183,11 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Black, 0.5))
 
 	items := c.pauseItems()
-	w, h := 360, 92+len(items)*18
+	rowH := 18
+	if len(items) > 7 {
+		rowH = 16 // eight items fit the view in a battle
+	}
+	w, h := 360, 92+len(items)*rowH
 	x, y := viewX+vw/2-w/2, viewY+(vh-22)/2-h/2
 	gfx.Window(view, x, y, w, h)
 	f.DrawCentered(view, "PAUSED", x+w/2, y+10, 2, pal.Yellow)
@@ -191,7 +199,7 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	}
 	f.DrawCentered(view, about, x+w/2, y+42, 1, pal.Tan)
 	for i, it := range items {
-		iy := y + 62 + i*18
+		iy := y + 62 + i*rowH
 		col := pal.Steel
 		switch {
 		case !c.canChoose(it):
