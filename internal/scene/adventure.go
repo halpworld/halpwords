@@ -44,6 +44,9 @@ func NewAdventure(ctx *game.Context, setup runSetup) game.Scene {
 // Update implements game.Scene.
 func (a *Adventure) Update(ctx *game.Context) error {
 	switch {
+	case input.Back() && a.setup.quest != nil:
+		ctx.Sound.Play(audio.Back)
+		ctx.Replace(NewQuests(ctx))
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
 		ctx.Replace(NewNewGame(ctx))
@@ -102,6 +105,8 @@ func (a *Adventure) Draw(dst *ebiten.Image, ctx *game.Context) {
 // seed 7K3QZP".
 func setupText(s runSetup) string {
 	switch {
+	case s.quest != nil:
+		return "Quest · " + s.quest.Title
 	case s.mode == compete.Daily && s.day != "":
 		return "Daily Dungeon · " + s.day
 	case s.mode == compete.Daily:
