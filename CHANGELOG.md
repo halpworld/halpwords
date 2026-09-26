@@ -7,6 +7,11 @@ version as its release notes.
 
 ### Added
 
+- **Race** (Play Together): in a race room, the host starts a race and
+  every racer plays the same dungeon, from the same seed and word list, to
+  floor 3. Hardcore rules, one class, nothing saved. The other racers show
+  as small dots on the map, and the race ends with a results screen.
+  `link.Play` gets `Race`, `Results` and `Report`.
 - `pkg/race`: the rules of a Race in halpwords-server's play rooms
   (`Goal`, `TimeLimit`, `Report`), the `Judge` the server checks each
   racer's reports with (floors in order and not sooner than walking there

@@ -11,13 +11,17 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/halpworld/halpwords/pkg/race"
 )
 
 // Playing together (halpwords-server's docs/api/play.md): a linked game
 // joins a room by its code over one WebSocket, sees who is in it, and
 // sends preset phrases and emotes. There is no free text: the game can
 // only send the few messages below, with values from the lists the
-// server sent. Boss Raid (W7.5) and Race (W7.6) add their modes later.
+// server sent. In a race room (W7.6) the host starts races: the game gets
+// the dungeon's seed and word list, and reports how far the hero has got
+// (Report). Boss Raid (W7.5) adds its mode later.
 //
 // Like the rest of the link, nothing here blocks the game loop: the
 // connection runs in goroutines, and the game reads State each frame.
@@ -59,6 +63,74 @@ type Member struct {
 	Away bool   `json:"away,omitempty"`
 }
 
+// The room modes the game knows.
+const (
+	ModeLobby = "lobby"
+	ModeRace  = "race"
+)
+
+// A racer's status (Racer.Status and Result.Status).
+const (
+	RacerRacing   = "racing"
+	RacerFinished = "finished"
+	RacerFell     = "fell"
+	RacerLeft     = "left"
+	// RacerNotCounted is a racer the server left out of the results: it
+	// got a report the game can't have made.
+	RacerNotCounted = "not-counted"
+)
+
+// Racer is someone in a race, and how far they have got.
+type Racer struct {
+	ID       string `json:"id"`
+	Floor    int    `json:"floor"`
+	Monsters int    `json:"monsters"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+	Status   string `json:"status"`
+}
+
+// Race is a race in the room: every racer's game builds the same dungeon
+// from Seed and List.
+type Race struct {
+	// Number counts the races the game has seen, so the game can tell a
+	// new race from the one it is running.
+	Number int
+	Seed   uint64
+	// Goal is the floor that wins.
+	Goal int
+	// List is the word list in the game's text format.
+	List string
+	// StartsAt is when the race clock starts, by the game's clock;
+	// EndsAt is the time limit.
+	StartsAt, EndsAt time.Time
+	Racers           []Racer
+}
+
+// Racer returns the racer with the member ID, and whether there is one.
+func (r *Race) Racer(id string) (Racer, bool) {
+	if r == nil {
+		return Racer{}, false
+	}
+	i := slices.IndexFunc(r.Racers, func(x Racer) bool { return x.ID == id })
+	if i < 0 {
+		return Racer{}, false
+	}
+	return r.Racers[i], true
+}
+
+// Result is a racer's place in a race that has ended. Place is 0 for a
+// racer who left or wasn't counted.
+type Result struct {
+	ID       string        `json:"id"`
+	Name     string        `json:"name"`
+	Place    int           `json:"place"`
+	Floor    int           `json:"floor"`
+	Monsters int           `json:"monsters"`
+	Time     time.Duration `json:"-"`
+	Status   string        `json:"status"`
+}
+
 // Room is the room the game is in.
 type Room struct {
 	Code string
@@ -95,6 +167,10 @@ type PlayState struct {
 	Problem string
 	// Notice is a notice from the server, such as that it will restart.
 	Notice string
+	// Race is the race under way in the room, or nil; Results are the
+	// last race's.
+	Race    *Race
+	Results []Result
 	// Changes counts changes, so the game can tell something happened.
 	Changes int
 }
@@ -131,11 +207,13 @@ type Play struct {
 	// nothing.
 	run    int
 	cancel context.CancelFunc
-	out    chan []byte // the messages to send on this run's connection
-	code   string      // the code of the room being joined or in
-	seq    int64       // the room's last event
-	resync bool        // waiting for a new room after a gap
-	chat   time.Time   // when the last preset or emote went
+	out    chan []byte   // the messages to send on this run's connection
+	code   string        // the code of the room being joined or in
+	seq    int64         // the room's last event
+	resync bool          // waiting for a new room after a gap
+	chat   time.Time     // when the last preset or emote went
+	races  int           // the races seen, for Race.Number
+	report race.Reporter // when to send the race's next progress
 
 	wg sync.WaitGroup // the runs' goroutines
 }
@@ -165,6 +243,12 @@ func (p *Play) State() PlayState {
 	s.Events = slices.Clone(s.Events)
 	s.Presets = slices.Clone(s.Presets)
 	s.Emotes = slices.Clone(s.Emotes)
+	s.Results = slices.Clone(s.Results)
+	if s.Race != nil {
+		r := *s.Race
+		r.Racers = slices.Clone(r.Racers)
+		s.Race = &r
+	}
 	return s
 }
 
@@ -238,6 +322,7 @@ func (p *Play) Leave() {
 	p.st.Room = Room{}
 	p.st.Events = nil
 	p.st.Problem = ""
+	p.st.Race, p.st.Results = nil, nil
 	p.st.Changes++
 }
 
@@ -296,6 +381,42 @@ func (p *Play) chatSend(t, field, value string, allowed func(*PlayState) []strin
 	}
 }
 
+// Report tells the room how far the hero has got in the race. Call it
+// every frame while racing: it sends r only when it changed, at most every
+// race.ReportEvery, and at once for a new floor or a fall
+// (race.Reporter). It reports whether r went. Nothing goes before the
+// race starts, after it ends, or when the player isn't racing in it.
+func (p *Play) Report(r race.Report) bool {
+	if p == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	rc := p.st.Race
+	if p.st.Phase != PlayInRoom || p.out == nil || rc == nil || now.Before(rc.StartsAt) {
+		return false
+	}
+	if me, ok := rc.Racer(p.st.Room.You); !ok || me.Status != RacerRacing {
+		return false
+	}
+	if !p.report.Due(r, now) {
+		return false
+	}
+	msg, _ := json.Marshal(struct {
+		T string `json:"t"`
+		race.Report
+	}{"progress", r})
+	select {
+	case p.out <- msg:
+		return true
+	default:
+		// Try again next frame.
+		p.report = race.Reporter{}
+		return false
+	}
+}
+
 // playEnd ends a run: the game is back in the lobby, with a problem to
 // show (or none, when the player left).
 type playEnd struct{ problem string }
@@ -341,6 +462,7 @@ func (p *Play) loop(ctx context.Context, run int) {
 			p.st.Phase = PlayOff
 			p.st.Room = Room{}
 			p.st.Problem = problem
+			p.st.Race, p.st.Results = nil, nil
 			p.st.Changes++
 		}
 		p.mu.Unlock()
@@ -554,6 +676,22 @@ func (p *Play) write(sock socket, out chan []byte, beat chan time.Duration, hear
 	}
 }
 
+// raceMessage is a race as the server sends it.
+type raceMessage struct {
+	Seed     uint64  `json:"seed"`
+	Goal     int     `json:"goal"`
+	List     string  `json:"list"`
+	StartsIn int64   `json:"starts_in"`
+	EndsIn   int64   `json:"ends_in"`
+	Racers   []Racer `json:"racers"`
+}
+
+// resultMessage is a result as the server sends it.
+type resultMessage struct {
+	Result
+	Time int64 `json:"time"`
+}
+
 // inMessage is every field of a server message the game reads.
 type inMessage struct {
 	T         string   `json:"t"`
@@ -562,20 +700,25 @@ type inMessage struct {
 	Presets   []string `json:"presets"`
 	Emotes    []string `json:"emotes"`
 	Room      *struct {
-		Code    string   `json:"code"`
-		Mode    string   `json:"mode"`
-		You     string   `json:"you"`
-		EndsAt  int64    `json:"ends_at"`
-		Members []Member `json:"members"`
+		Code    string          `json:"code"`
+		Mode    string          `json:"mode"`
+		You     string          `json:"you"`
+		EndsAt  int64           `json:"ends_at"`
+		Members []Member        `json:"members"`
+		Race    *raceMessage    `json:"race"`
+		Results []resultMessage `json:"results"`
 	} `json:"room"`
-	Member *Member `json:"member"`
-	ID     string  `json:"id"`
-	Reason string  `json:"reason"`
-	Preset string  `json:"preset"`
-	Emote  string  `json:"emote"`
-	Notice string  `json:"notice"`
-	In     int     `json:"in"`
-	Code   string  `json:"code"`
+	Race     *raceMessage    `json:"race"`
+	Progress *Racer          `json:"progress"`
+	Results  []resultMessage `json:"results"`
+	Member   *Member         `json:"member"`
+	ID       string          `json:"id"`
+	Reason   string          `json:"reason"`
+	Preset   string          `json:"preset"`
+	Emote    string          `json:"emote"`
+	Notice   string          `json:"notice"`
+	In       int             `json:"in"`
+	Code     string          `json:"code"`
 }
 
 // The words for why a room ended, and for refused requests.
@@ -611,6 +754,10 @@ func (p *Play) handle(m inMessage, out chan []byte, inRoom *bool) error {
 		p.st.Problem = ""
 		p.seq, p.resync = m.Seq, false
 		*inRoom = true
+		p.setRace(m.Room.Race)
+		p.st.Results = results(m.Room.Results)
+		// Say where the hero is again, in case a report was lost.
+		p.report = race.Reporter{}
 		return nil
 	case "notice":
 		if m.Notice == "shutdown" {
@@ -642,10 +789,15 @@ func (p *Play) handle(m inMessage, out chan []byte, inRoom *bool) error {
 			t = "The room ended."
 		}
 		return playEnd{t}
-	case "joined", "left", "away", "back", "said", "emoted":
+	case "joined", "left", "away", "back", "said", "emoted", "race", "progress", "results":
 	default:
-		// pong, and messages of later versions the game doesn't know.
-		return nil
+		if m.Seq == 0 {
+			// pong, and messages of later versions the game doesn't
+			// know.
+			return nil
+		}
+		// A room event of a later version: it still counts in the
+		// sequence.
 	}
 	if !*inRoom || p.resync || m.Seq <= p.seq {
 		return nil
@@ -662,6 +814,28 @@ func (p *Play) handle(m inMessage, out chan []byte, inRoom *bool) error {
 		return nil
 	}
 	p.seq = m.Seq
+	switch m.T {
+	case "race":
+		p.setRace(m.Race)
+		p.st.Results = nil
+		return nil
+	case "progress":
+		if rc := p.st.Race; rc != nil && m.Progress != nil {
+			if i := slices.IndexFunc(rc.Racers, func(x Racer) bool { return x.ID == m.ID }); i >= 0 {
+				pr := *m.Progress
+				pr.ID = m.ID
+				rc.Racers[i] = pr
+			}
+		}
+		return nil
+	case "results":
+		p.st.Race = nil
+		p.st.Results = results(m.Results)
+		return nil
+	case "joined", "left", "away", "back", "said", "emoted":
+	default:
+		return nil
+	}
 	r := &p.st.Room
 	id := m.ID
 	if m.Member != nil {
@@ -706,4 +880,45 @@ func (p *Play) handle(m inMessage, out chan []byte, inRoom *bool) error {
 		p.st.Events = slices.Delete(p.st.Events, 0, n)
 	}
 	return nil
+}
+
+// setRace takes a race from the server (nil for none). The same race
+// again, in a room sent whole after a rejoin, keeps its number. p.mu is
+// held.
+func (p *Play) setRace(m *raceMessage) {
+	if m == nil {
+		p.st.Race = nil
+		return
+	}
+	now := time.Now()
+	goal := m.Goal
+	if goal < 1 {
+		goal = race.Goal
+	}
+	rc := &Race{Seed: m.Seed, Goal: goal, List: m.List,
+		StartsAt: now.Add(time.Duration(m.StartsIn) * time.Millisecond),
+		EndsAt:   now.Add(time.Duration(m.EndsIn) * time.Millisecond),
+		Racers:   m.Racers}
+	if old := p.st.Race; old != nil && old.Seed == rc.Seed && old.List == rc.List {
+		rc.Number = old.Number
+		rc.StartsAt = old.StartsAt // a rejoin doesn't move the start
+	} else {
+		p.races++
+		rc.Number = p.races
+		p.report = race.Reporter{}
+	}
+	p.st.Race = rc
+}
+
+// results turns the server's results into the game's.
+func results(ms []resultMessage) []Result {
+	if len(ms) == 0 {
+		return nil
+	}
+	out := make([]Result, len(ms))
+	for i, m := range ms {
+		out[i] = m.Result
+		out[i].Time = time.Duration(m.Time) * time.Millisecond
+	}
+	return out
 }
