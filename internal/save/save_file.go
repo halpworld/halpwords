@@ -3,6 +3,7 @@
 package save
 
 import (
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -99,6 +100,37 @@ func diskList(dir string) ([]string, error) {
 		if e.Type().IsRegular() {
 			names = append(names, e.Name())
 		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// All returns the names of every file, in every folder, sorted, with
+// forward slashes. A missing user folder is empty.
+func All() ([]string, error) {
+	root, err := Dir()
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if p == root && os.IsNotExist(err) {
+				return fs.SkipAll
+			}
+			return err
+		}
+		if d.Type().IsRegular() {
+			rel, err := filepath.Rel(root, p)
+			if err != nil {
+				return err
+			}
+			names = append(names, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	sort.Strings(names)
 	return names, nil

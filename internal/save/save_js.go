@@ -82,3 +82,26 @@ func diskList(dir string) ([]string, error) {
 	sort.Strings(names)
 	return names, nil
 }
+
+// All returns the names of every file, in every folder, sorted.
+func All() ([]string, error) {
+	ls, err := storage("valueOf")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for i := 0; i < ls.Get("length").Int(); i++ {
+		k, err := storage("key", i)
+		if err != nil {
+			return nil, err
+		}
+		if k.IsNull() {
+			continue
+		}
+		if name, ok := strings.CutPrefix(k.String(), prefix); ok && name != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}

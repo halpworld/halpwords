@@ -1,6 +1,10 @@
 package game
 
-import "runtime/debug"
+import (
+	"runtime"
+	"runtime/debug"
+	"strings"
+)
 
 // Version is the game's version. Release builds set it with
 //
@@ -37,3 +41,17 @@ func VersionText() string {
 	}
 	return Version + " " + rev
 }
+
+// UserAgent is the game's User-Agent for requests to Halpwords, such as
+// "Halpwords/1.2.0 (linux; amd64)" or "Halpwords/dev (js; wasm)".
+func UserAgent() string {
+	v := strings.TrimPrefix(Version, "v")
+	if v == "" || strings.ContainsAny(v, " ()/;") {
+		v = "dev"
+	}
+	return "Halpwords/" + v + " (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
+}
+
+// Platform is the operating system and processor, "linux/amd64", for bug
+// reports.
+func Platform() string { return runtime.GOOS + "/" + runtime.GOARCH }
