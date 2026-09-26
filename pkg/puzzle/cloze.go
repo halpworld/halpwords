@@ -80,7 +80,7 @@ func (g *Generated) Add(o *Generated) *Generated {
 
 // newCloze asks for the word missing from a sentence. It returns nil if no
 // word in the deck has a sentence.
-func newCloze(deck *words.Deck, lang *words.Language, gen *Generated, rng *rand.Rand) *typed {
+func newCloze(deck dealer, lang *words.Language, gen *Generated, rng *rand.Rand) *typed {
 	if gen == nil || len(gen.Cloze) == 0 {
 		return nil
 	}

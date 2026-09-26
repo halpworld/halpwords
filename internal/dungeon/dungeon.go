@@ -106,6 +106,13 @@ type Level struct {
 	Chests   map[Point]*Chest
 	Features map[Point]*Feature
 	Monsters []*Monster
+
+	// Locks are the puzzles a hand-made map sets on its sealed doors and
+	// chests; the others get random ones. Generated floors have none.
+	Locks map[Point]Lock
+	// Notes are texts written on walls of a hand-made map, read when the
+	// hero faces them.
+	Notes map[Point]string
 }
 
 // In reports whether p is on the map.

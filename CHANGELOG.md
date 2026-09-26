@@ -13,6 +13,41 @@ version as its release notes.
   team. Reports wait in a small queue while offline and are sent
   anonymously unless the game is linked. Set `HALPWORDS_SERVER` to use
   another server.
+- **Race** (Play Together): in a race room, the host starts a race and
+  every racer plays the same dungeon, from the same seed and word list, to
+  floor 3. Hardcore rules, one class, nothing saved. The other racers show
+  as small dots on the map, and the race ends with a results screen.
+  `link.Play` gets `Race`, `Results` and `Report`.
+- `pkg/race`: the rules of a Race in halpwords-server's play rooms
+  (`Goal`, `TimeLimit`, `Report`), the `Judge` the server checks each
+  racer's reports with (floors in order and not sooner than walking there
+  takes, monsters no faster than they fall, cells on the floor, no
+  running faster than the hero walks), and the `Reporter` that decides
+  when a game reports.
+- **Account: link the game to a grown-up's account** on the Halpwords
+  website (title screen → Account). A linked game sends answers and play
+  sessions in the background, gets assigned word lists (read-only, in Word
+  Lists), progress from the grown-up's other games, and settings a grown-up
+  set, which Settings then shows locked. It works the same offline, and
+  unlinking keeps your progress and removes the game from the website's
+  list too. The web version links too, keeping everything in the
+  browser's local storage.
+  unlinking keeps your progress. The web version links too, keeping
+  everything in the browser's local storage.
+  unlinking keeps your progress.
+- **Quests and hand-made maps.** *New Adventure → Quest* plays hand-made
+  floors in order, with an introduction and an ending. A `.hwquest` (a
+  quest) or `.hwmap` (one floor) file dropped on the window is checked and
+  kept in the `quests` folder; one quest comes with the game.
+- **Play-testing quests in the web game.** `?quest=<address>` in the web
+  game's address fetches a quest file from the game's own website and
+  starts it, saving nothing (for halpwords-server's map editor).
+- `pkg/maps` (new): the `.hwmap` and `.hwquest` formats (`Map`, `Quest`,
+  `ParseMap`, `ParseQuest`, `Load`, `Encode`) and their checks
+  (`Map.Check`, `Quest.Check`, returning `[]Problem` with the cell), plus
+  the names a map can use (`MonsterKinds`, `BossKinds`, `Traits`, `Themes`,
+  `PuzzleNames`, `DoorPuzzles`, `ChestPuzzles`) and `FindWord`.
+  `pkg/puzzle`: `OneWord` and `MakeWord`, a puzzle about a chosen word.
 - **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
   line gives a list its own cloze puzzles, used with or without the AI
   helper (not on scored runs). The answer must be one of the list's
@@ -24,6 +59,12 @@ version as its release notes.
   and `Cloze []ClozeLine`; `words.Format(list)` writes a list back in the
   text format, so that it parses to the same `List`. `pkg/puzzle`:
   `FromLists`, `Generated.Add`, and `ClozeLine.Answer`.
+- `internal/link`: the client for halpwords-server's game API (not used
+  by the game yet). It links with a pairing code, keeps its tokens in a
+  private `link.json`, queues answers and sessions on disk (at most about
+  50,000; older answers fold into daily totals), syncs in the background,
+  downloads assigned lists by ETag, merges the server's word memory, and
+  works quietly with the server down.
 
 ### Changed
 

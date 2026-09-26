@@ -129,7 +129,7 @@ func floorWords(r *run, n int) []words.Entry {
 // direct asks the Dungeon Director for the script of floor depth, unless it
 // has one or is working on it.
 func (a *runAI) direct(r *run, depth int) {
-	if !a.on() || a.scripts[depth] != nil || a.directing[depth] != nil || a.tries[depth] >= maxTries {
+	if !a.on() || r.quest != nil || a.scripts[depth] != nil || a.directing[depth] != nil || a.tries[depth] >= maxTries {
 		return
 	}
 	a.tries[depth]++
@@ -289,7 +289,7 @@ func (a *runAI) tipFor(r *run, id int) (string, bool) {
 // script returns the Dungeon Director's script for the floor the run is
 // on, or nil.
 func (r *run) script() *llm.Script {
-	if r.ai == nil {
+	if r.ai == nil || r.quest != nil {
 		return nil
 	}
 	return r.ai.scripts[r.depth]
@@ -298,6 +298,12 @@ func (r *run) script() *llm.Script {
 // themeFor is the look of the run's current floor: the Director's choice,
 // or the usual one for the depth.
 func (r *run) themeFor() *proc.Theme {
+	if m := r.questMap(r.depth); m != nil {
+		if i := m.ThemeIndex(); i >= 0 && i < len(proc.Themes) {
+			return &proc.Themes[i]
+		}
+		return proc.ThemeFor(m.Level())
+	}
 	if sc := r.script(); sc != nil && sc.Theme >= 0 && sc.Theme < len(proc.Themes) {
 		return &proc.Themes[sc.Theme]
 	}
@@ -306,6 +312,9 @@ func (r *run) themeFor() *proc.Theme {
 
 // floorName is the name the floor's banner shows.
 func (c *Crawl) floorName() string {
+	if m := c.run.questMap(c.run.depth); m != nil {
+		return m.Title
+	}
 	if sc := c.run.script(); sc != nil {
 		return sc.Name
 	}
@@ -332,6 +341,12 @@ func dress(l *dungeon.Level, sc *llm.Script) {
 func (c *Crawl) arrive() {
 	r := c.run
 	sc := r.script()
+	if r.quest != nil {
+		r.say(fmt.Sprintf("Floor %d of %d: %s. Find the stairs down!", r.depth, len(r.quest.Maps), c.floorName()), pal.Yellow)
+		c.lore = nil
+		c.readNote()
+		return
+	}
 	r.say(fmt.Sprintf("Floor %d: %s. Find the stairs down!", r.depth, c.floorName()), pal.Yellow)
 	if sc != nil && sc.Intro != "" {
 		r.say(sc.Intro, pal.Cyan)

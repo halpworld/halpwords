@@ -19,6 +19,9 @@ type shelfRow struct {
 	onDisk  bool        // the user's copy is in their words folder
 	dirty   bool        // changed since the last save
 	marked  bool        // picked for deleting
+	// assigned is a list a grown-up assigned on the website: read-only,
+	// and kept by the link, not in the words folder.
+	assigned bool
 }
 
 // deletable reports whether the row can be deleted. A starter list can't,
@@ -49,6 +52,15 @@ func newShelf(starters, user []*words.List) *shelf {
 	return s
 }
 
+// addAssigned puts the assigned lists first, as a group of their own.
+func (s *shelf) addAssigned(lists []*words.List) {
+	var rows []*shelfRow
+	for _, l := range lists {
+		rows = append(rows, &shelfRow{file: l.File, list: l, assigned: true})
+	}
+	s.rows = append(rows, s.rows...)
+}
+
 func (s *shelf) find(file string) *shelfRow {
 	for _, r := range s.rows {
 		if strings.EqualFold(r.file, file) {
@@ -67,7 +79,7 @@ func (s *shelf) unsaved() bool {
 func (s *shelf) targets(lang string) []int {
 	var out []int
 	for i, r := range s.rows {
-		if r.list.Language == lang {
+		if r.list.Language == lang && !r.assigned {
 			out = append(out, i)
 		}
 	}

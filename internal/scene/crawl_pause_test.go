@@ -12,7 +12,7 @@ import (
 func testCrawl(t *testing.T, ctx *game.Context) *Crawl {
 	t.Helper()
 	lang, _ := words.Lookup("fr")
-	r := startRun(ctx, lang, rpg.Knight, 5)
+	r := startRun(ctx, lang, rpg.Knight, 5, nil)
 	r.sound = &game.Sound{Muted: true}
 	l := dungeon.Generate(r.floorSeed(1), 1)
 	return &Crawl{run: r, level: l, pos: l.Start, facing: l.StartDir}

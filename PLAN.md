@@ -78,14 +78,16 @@ halpwords/
 │   ├── profile/                 # settings, word memory and Hall of Fame, kept between runs
 │   ├── llm/                     # provider interface, Anthropic + OpenAI-compatible,
 │   │                            # prompt templates, JSON validation, cache, budget
-│   └── save/                    # profiles, run saves, settings (JSON in user config dir)
+│   ├── playtest/                # the web game's play-test: a quest fetched from its own website
+│   └── save/                    # profiles, run saves, settings (JSON in user config dir, or memory)
 ├── pkg/                         # public API, also used by halpwords-server
 │   ├── words/                   # word packs, answer matching, Unicode normalisation, SRS
 │   ├── puzzle/                  # puzzle interface, generators, fixed puzzle bank
 │   ├── compete/                 # Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
 │   ├── proc/                    # procedural pixel art, the app icon
-│   └── safety/                  # family-safe AI policy and text filter
-├── assets/                      # embedded: font, word packs, puzzle bank, hero template
+│   ├── safety/                  # family-safe AI policy and text filter
+│   └── maps/                    # hand-made maps and quests (.hwmap, .hwquest) and their checks
+├── assets/                      # embedded: font, word packs, puzzle bank, quests, hero template
 │   ├── fonts/                   # Unifont subset (.hex) + OFL licence
 │   ├── words/                   # starter lists: french.txt, latin.txt, greek.txt, irish.txt
 │   └── puzzles/                 # hand-written riddles/cloze templates per pack
@@ -97,9 +99,9 @@ Rules:
   `combat`, `puzzle`, `rpg`, `compete`, `profile`, `llm`). That makes it unit-testable, deterministic
   from a seed, and portable.
 - **`pkg/` is a public API.** halpwords-server imports `pkg/words`,
-  `pkg/compete`, `pkg/puzzle`, `pkg/proc` and `pkg/safety` (list format,
-  grading, word memory, seeds and scores, worksheets, pictures, the AI
-  policy), so the two never disagree. Rules for it:
+  `pkg/compete`, `pkg/puzzle`, `pkg/proc`, `pkg/safety` and `pkg/maps` (list
+  format, grading, word memory, seeds and scores, worksheets, pictures, the
+  AI policy, the map format and its checks), so the two never disagree. Rules for it:
   - No Ebitengine, `internal/game`, `internal/scene` or `internal/gfx`,
     directly or through another package; `pkg/imports_test.go` checks this.
   - Any change to an exported name or to behaviour the server relies on
@@ -309,6 +311,31 @@ quarter turn at a time.
   the full map over the 3D view. A compass shows the facing.
 - **HUD:** level, language, HP and XP bars, ATK, gold, potions and combo, plus
   a four-line message log.
+- **Hand-made floors:** a map (`.hwmap`) is a grid of cells with monsters,
+  the puzzles and words on its locks, and notes on walls; a quest
+  (`.hwquest`) is 1 to 10 maps in order with an introduction and an ending.
+  `pkg/maps` holds the format and its checks (a wall all round, one start
+  and one stairs, doors between walls, everything reachable, a start that
+  isn't sealed in, and, given the word lists, that each lock's word is in
+  them and its puzzle can be made), shared with halpwords-server's map
+  editor. `dungeon.FromMap` builds a floor from a map; loot, stock and
+  monster looks are rolled from the seed as usual, and generated floors
+  turned into maps (`dungeon.ToMap`) pass the same checks. Quests are
+  under *New Adventure → Quest*, or dropped on the window.
+  *Now (W10.1, done):* the formats, the checks, `FromMap`, the Quest
+  picker with a built-in quest, dropped files kept in the `quests` folder,
+  quest saves, and the intro and ending pages. Quests from a linked game
+  and play-testing from the website come with the server (W10.3, W10.4).
+  *Now (server W10.3, done):* **play-testing** in the web game. The
+  server's *Play-test* button opens the web game with
+  `?quest=<address of the quest file>` (a short-lived signed link).
+  `internal/playtest` accepts only an address on the page's own origin
+  (same scheme, host and port, no user name, no backslashes), fetches it
+  with no cookies and no redirects, and checks it with `pkg/maps`; the
+  game then starts the quest (the language picker or the class). A
+  play-test keeps every file in memory (`save.UseMemory`) from before the
+  profile loads: nothing is saved, the player's own saves are neither
+  read nor changed, no AI key is loaded, and nothing is sent anywhere.
 - **Save points:** Save Shrines (§8). Falling wakes the hero at the last
   shrine they prayed at, on a new floor.
 - **Later:** sneaking up on a sleeping monster for a free first strike, and
@@ -763,6 +790,75 @@ boss portraits, NPC portraits.
    pack.
 
 ---
+
+## 10a. The link to a grown-up's account
+
+A family or class can link the game to an account on halpwords-server (its
+`docs/api`), so a grown-up sees progress and assigns word lists. Like the
+AI helper it is optional, never blocks the game loop, and the game plays the
+same with the server down or when it was never linked.
+
+*Now (W1.8, done):* `internal/link` (no Ebitengine dependency) links with a
+pairing code and keeps the device tokens in a private `link.json` (local
+storage on the web). Answers to assigned words, daily totals for the rest,
+and play sessions wait in `link-queue.json` (at most 50,000 events; the
+oldest answers fold into daily totals) and go up every three minutes, when
+asked and on quitting. Assigned lists are downloaded by ETag into
+`assigned/` and shown read-only in Word Lists; the server's word memory is
+merged in (server cards for server words, queued answers replayed on top);
+settings and accommodations from `/me` are locked in Settings with who set
+them. Title → **Account** links, syncs and unlinks (progress and lists stay;
+licensed lists go). Hardcore runs keep the standard settings. The web build
+uses the same client (Go's `net/http` runs on `fetch` there) with the files
+in local storage, a queue of at most 10,000 events for its ~5 MB, and saves
+the queue when the page is hidden or closed. The server allows the web
+game's origin on the game API (CORS, halpwords-server W1.7d), and since a
+browser won't let a page set `User-Agent`, the web build sends its version
+as `X-Halpwords-Client: halpwords/1.2.0 (js; wasm)` instead. Unlinking
+also tells the server (`POST /api/v1/unlink`, in the background, after
+refreshing an old access token), so the game leaves the child's page on
+the website; offline, the family removes it there. Still to do:
+checking it all against staging (W1.8's "Done when"), quests (W1.9),
+per-assignment settings, and the accommodations the game doesn't have yet
+(cheaper hints, larger text, no timed dodges).
+
+*Now (W7.4, done):* Title → **Play Together** joins a room a grown-up
+opened on the website (`/play/host`), by its 6-character code, over
+halpwords-server's `/api/v1/play` WebSocket (its `docs/api/play.md`). Only
+a linked game can: it gets a one-use ticket with its device token. The
+lobby shows who is in the room (learners by pseudonym, grown-ups by role)
+and what happens, and sends the six preset phrases and four emotes the
+server offers, at most one a second; there is no free text and nothing
+else can be sent. `link.Play` gets back into the room after a drop (for up
+to 55 seconds; the server keeps the place for 60), joins again to resync
+after a gap in the room's event numbers, pings every heartbeat, and goes
+back to the lobby with a reason when the room ends, the host removes the
+player or the server restarts. The desktop game speaks the WebSocket
+protocol itself (`internal/link/wsframe.go`: RFC 6455 text frames,
+ping/pong, close and client masking, with a fuzzed frame reader), so the
+game keeps its three dependencies; the web build uses the browser's
+`WebSocket`. Boss Raid (W7.5) and Race (W7.6) start from this lobby.
+
+*Now (W7.6, done):* **Race.** In a race room (`mode` `race`) the host
+starts a race on the website with one of the family's or teacher's word
+lists; the lobby shows a 5-second countdown and then every racer's game
+plays **the same dungeon**, built from the race's seed and list alone
+(`startRunWith`: no player lists, profile, memory or AI touch the floors
+or the deal of words). A race run has Hardcore rules (one life, no
+shrines, so floors never change), the first class, no saves or suspend,
+and sends nothing to the grown-up's account (no answers, no play
+session): only `progress` to the room, through `link.Play.Report`
+(throttled by `pkg/race.Reporter`: floor, monsters beaten, the hero's
+cell, a fall). Other racers on the same floor are small coloured dots on
+the automap and the side map; the side panel shows the floor of the goal
+and the time left. Reaching floor 3, falling or giving up opens the race
+screen, which waits for the others and then shows the results by place
+(a racer the server flagged is "not counted"). `pkg/race` holds the
+rules both sides use; the server's `Judge` checks every report against
+the crawl's own timings (a step is 9 ticks = 150 ms, a monster falls in
+30 ticks = 0.5 s; tests keep them in step). A game that can't read the
+race's list drops out at once. Still to do: a live race between two
+games against staging, and friend-group and class rooms (W7.1, W2.2).
 
 ## 11. Cross-platform build and distribution
 
