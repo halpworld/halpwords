@@ -137,7 +137,10 @@ type floater struct {
 // Crawl is the first-person dungeon. Exploring, battles and puzzles all
 // happen here, so the dungeon stays on screen.
 type Crawl struct {
-	run   *run
+	run *run
+	// kind is the kind of answer being graded, for the grown-up's
+	// account: "attack", "dodge" or "puzzle".
+	kind  string
 	level *dungeon.Level
 	theme *proc.Theme
 	tex   *raycast.Textures
@@ -244,6 +247,7 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
 	c.run.ai.poll(c)
+	ctx.Playing(c.run.linkMode(), c.run.lang.Code, func() int { return c.run.depth })
 	switch {
 	case c.mode == modePause:
 		c.updatePause(ctx)

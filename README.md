@@ -548,6 +548,23 @@ cent, often much less.
   floor details and Word Forge topics, nothing about the player. What was spent is in
   `ai-spend.json`.
 
+### Linking to a grown-up's account (optional)
+
+A parent or teacher with an account on the Halpwords website can link the
+game to it, to see the player's progress and give them word lists. Choose
+**Account** on the title screen, then *Link to a grown-up's account*, and
+type the code the website shows. The Account screen says who can see the
+progress and when the game last synced; *Sync now* sends everything at once,
+and *Unlink* stops it (your progress stays, and assigned lists become your
+own).
+
+Linked games sync every few minutes and when you quit. Assigned lists appear
+in **Word Lists** marked ◆, read-only. Settings a grown-up set are locked in
+**Settings**. Nothing changes when the website can't be reached: answers
+wait (in `link-queue.json`) until it can. The tokens are kept in
+`link.json`, readable only by you. `HALPWORDS_SERVER` points the game at
+another server, such as a test one.
+
 ## Controls
 
 **In the dungeon**

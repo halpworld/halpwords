@@ -791,6 +791,28 @@ boss portraits, NPC portraits.
 
 ---
 
+## 10a. The link to a grown-up's account
+
+A family or class can link the game to an account on halpwords-server (its
+`docs/api`), so a grown-up sees progress and assigns word lists. Like the
+AI helper it is optional, never blocks the game loop, and the game plays the
+same with the server down or when it was never linked.
+
+*Now (W1.8, done):* `internal/link` (no Ebitengine dependency) links with a
+pairing code and keeps the device tokens in a private `link.json` (local
+storage on the web). Answers to assigned words, daily totals for the rest,
+and play sessions wait in `link-queue.json` (at most 50,000 events; the
+oldest answers fold into daily totals) and go up every three minutes, when
+asked and on quitting. Assigned lists are downloaded by ETag into
+`assigned/` and shown read-only in Word Lists; the server's word memory is
+merged in (server cards for server words, queued answers replayed on top);
+settings and accommodations from `/me` are locked in Settings with who set
+them. Title → **Account** links, syncs and unlinks (progress and lists stay;
+licensed lists go). Hardcore runs keep the standard settings. Still to do:
+checking it all against staging (W1.8's "Done when"), quests (W1.9),
+per-assignment settings, and the accommodations the game doesn't have yet
+(cheaper hints, larger text, no timed dodges).
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |

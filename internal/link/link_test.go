@@ -1145,6 +1145,21 @@ func TestHelpers(t *testing.T) {
 			t.Errorf("SeenByText(%v) = %q", r, got)
 		}
 	}
+	for roles, want := range map[string]string{
+		"":                             "Set on the website by a grown-up.",
+		"teaching-assistant":           "Set on the website by a grown-up.",
+		"guardian":                     "Set on the website by your parent.",
+		"guardian,teacher":             "Set on the website by your parent or your teacher.",
+		"guardian,co-guardian,teacher": "Set on the website by your parents or your teacher.",
+	} {
+		var r []string
+		if roles != "" {
+			r = strings.Split(roles, ",")
+		}
+		if got := SetByText(r); got != want {
+			t.Errorf("SetByText(%v) = %q", r, got)
+		}
+	}
 	e := words.Entry{Prompt: "to be", Answers: []string{"être"}}
 	if words.Key(entryFor(words.Key(e))) != words.Key(e) {
 		t.Error("entryFor doesn't round-trip")
