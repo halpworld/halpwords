@@ -25,12 +25,15 @@ const (
 )
 
 // QuestSettings are a quest's overrides of the learner's settings for its
-// list. The game doesn't apply them yet.
+// list, which the game applies while the quest is played (Client.Decide).
 type QuestSettings struct {
 	// Accents is a words.Strictness: 0 ignore, 1 reduced credit, 2 strict.
 	Accents *int `json:"accents,omitempty"`
 	// Timer is 0 normal, 1 relaxed, 2 fast.
 	Timer *int `json:"timer,omitempty"`
+	// SetBy is the role of the grown-up who set the assignment:
+	// "teacher" or "guardian".
+	SetBy string `json:"set_by,omitempty"`
 }
 
 // Starts is when the quest's answers start counting; zero if the server

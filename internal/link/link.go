@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/internal/profile"
+	"github.com/halpworld/halpwords/pkg/settings"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -121,6 +122,11 @@ type Me struct {
 	// Settings are the settings a grown-up set, by language.
 	Settings       profile.Settings `json:"settings"`
 	Accommodations Accommodations   `json:"accommodations"`
+	// SetBy is the role of the grown-ups who set Settings and
+	// Accommodations: "guardian" or "teacher".
+	SetBy string `json:"set_by,omitempty"`
+	// Presets are the presets of the learner's classes.
+	Presets []Preset `json:"presets,omitempty"`
 	// SeenBy are the roles of the adults who can see the learner's
 	// progress.
 	SeenBy []string `json:"seen_by"`
@@ -129,6 +135,16 @@ type Me struct {
 		MinVersion string `json:"min_version"`
 		Supported  bool   `json:"supported"`
 	} `json:"game"`
+}
+
+// Preset is a class's accents and timer for its language, set by its
+// teacher.
+type Preset struct {
+	Source   settings.Source   `json:"source"`
+	Role     string            `json:"role"`
+	Language string            `json:"language"`
+	Accents  *words.Strictness `json:"accents,omitempty"`
+	Timer    *settings.Timer   `json:"timer,omitempty"`
 }
 
 // Accommodations are what the family turned on for the learner.
@@ -500,29 +516,86 @@ func upper(s string) string {
 
 // Locked returns the settings a grown-up set for lang, starting from
 // own, the player's own: the language's settings from the website, then
-// the accommodations (relaxed timers, accents ignored). It reports false
+// the presets of the learner's classes (the strictest), then the
+// accommodations (relaxed timers, accents ignored). It reports false
 // when nothing is set, and the player's own settings apply.
 func (c *Client) Locked(lang *words.Language, own profile.LangSettings) (profile.LangSettings, bool) {
+	ls, by := c.Decide(lang, own, nil)
+	return ls, by.locked
+}
+
+// Decision is who decided the settings Decide returns.
+type Decision struct {
+	settings.Decided
+	// locked is set when a grown-up set anything for the language.
+	locked bool
+}
+
+// Locked reports whether a grown-up set anything for the language.
+func (d Decision) Locked() bool { return d.locked }
+
+// Decide returns the settings to play lang with, starting from own, the
+// player's own, as Locked does; for a quest, its settings for its list
+// apply too, above the classes' presets and below accommodations
+// (settings.Resolve).
+func (c *Client) Decide(lang *words.Language, own profile.LangSettings, q *Quest) (profile.LangSettings, Decision) {
 	if c == nil {
-		return own, false
+		return own, Decision{}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	m := c.st.Me
 	if m == nil || !c.st.linked() {
-		return own, false
+		return own, Decision{}
 	}
-	ls, locked := m.Settings.Langs[lang.Code]
-	if !locked {
+	var d Decision
+	ls, set := m.Settings.Langs[lang.Code]
+	if set {
+		d.locked = true
+		who := settings.Decider{Source: settings.Learner, Role: m.SetBy}
+		d.Decided = settings.Decided{Accents: who, Timer: who}
+	} else {
 		ls = own
 	}
+	var layers []settings.Layer
+	for _, p := range m.Presets {
+		if p.Language == lang.Code && (p.Accents != nil || p.Timer != nil) {
+			src := p.Source
+			if src != settings.Class && src != settings.Learner {
+				src = settings.Class
+			}
+			layers = append(layers, settings.Layer{Source: src, Role: p.Role, Accents: p.Accents, Timer: p.Timer})
+		}
+	}
+	if q != nil && (q.Settings.Accents != nil || q.Settings.Timer != nil) {
+		l := settings.Layer{Source: settings.Assignment, Role: q.Settings.SetBy}
+		if a := q.Settings.Accents; a != nil && *a >= int(words.Ignore) && *a <= int(words.Strict) {
+			l.Accents = new(words.Strictness)
+			*l.Accents = words.Strictness(*a)
+		}
+		if t := q.Settings.Timer; t != nil && *t >= 0 && settings.Timer(*t).Valid() {
+			l.Timer = new(settings.Timer)
+			*l.Timer = settings.Timer(*t)
+		}
+		layers = append(layers, l)
+	}
+	acc := settings.Layer{Source: settings.Accommodation, Role: m.SetBy}
 	if m.Accommodations.RelaxedTimers {
-		ls.Timer, locked = profile.Relaxed, true
+		acc.Timer = new(settings.Timer)
+		*acc.Timer = settings.Relaxed
 	}
 	if m.Accommodations.IgnoreAccents {
-		ls.Rules.Accents, ls.Rules.Breathings, locked = words.Ignore, words.Ignore, true
+		acc.Accents = new(words.Strictness)
+		*acc.Accents = words.Ignore
+		// Breathings too, in any language, as before.
+		ls.Rules.Breathings = words.Ignore
 	}
-	return ls, locked
+	layers = append(layers, acc)
+	ls, d.Decided = settings.Resolve(lang, ls, d.Decided, layers...)
+	if d.Decided.Adult() {
+		d.locked = true
+	}
+	return ls, d
 }
 
 // userAgent is the game's User-Agent: "Halpwords/1.2.0 (darwin; arm64)",

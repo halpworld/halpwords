@@ -171,7 +171,15 @@ func (r *run) setMode(ctx *game.Context, m compete.Mode) {
 	r.mode = m
 	r.settings = profile.Preset(r.lang)
 	if !m.Scored() && ctx.Profile != nil {
-		r.settings = ctx.Profile.Settings.For(r.lang)
+		var q *link.Quest
+		if r.assign != nil {
+			q = ctx.QuestByID(r.assign.ID)
+		}
+		var note string
+		r.settings, note = ctx.SettingsFor(r.lang, q)
+		if note != "" {
+			r.say("The assignment's settings apply. "+note, pal.Tan)
+		}
 	}
 }
 

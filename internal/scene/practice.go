@@ -36,10 +36,12 @@ type Practice struct {
 
 	deck     *words.Deck
 	settings profile.LangSettings
-	word     words.Entry
-	cur      int
-	field    *typing.Field
-	started  uint64 // tick the current word appeared
+	// setBy says who set the assignment's settings, when they apply.
+	setBy   string
+	word    words.Entry
+	cur     int
+	field   *typing.Field
+	started uint64 // tick the current word appeared
 
 	showing bool // showing the result of the last answer
 	result  words.Result
@@ -81,7 +83,7 @@ func (p *Practice) setLanguage(ctx *game.Context, i int) {
 	}
 	p.deck = words.NewDeck(entries, p.rng)
 	p.deck.SetMemory(ctx.Profile.MemoryFor(p.lang().Code))
-	p.settings = ctx.Profile.Settings.For(p.lang())
+	p.settings, p.setBy = ctx.SettingsFor(p.lang(), p.assign)
 	p.field = typing.NewField(p.lang())
 	p.streak = 0
 	p.next(ctx)
@@ -182,6 +184,9 @@ func (p *Practice) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, goal, game.ScreenW-12-f.Width(goal, 1), 12, 1, pal.Ice)
 		prog := q.ProgressText()
 		f.DrawShadow(dst, prog, game.ScreenW-12-f.Width(prog, 1), 30, 1, pal.Steel)
+		if p.setBy != "" {
+			f.DrawCentered(dst, fit(f, "Assignment settings. "+p.setBy, 200, 1), cx, 32, 1, pal.Tan)
+		}
 	} else {
 		f.DrawCentered(dst, "◄ "+p.lang().Name+" ►", cx, 12, 2, pal.Yellow)
 	}
