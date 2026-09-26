@@ -870,7 +870,8 @@ internal/gfx/      drawing: text, windows, torches, sparks
 internal/pal/      the 32-colour palette
 internal/unifont/  bitmap font parser
 pkg/               public API shared with halpwords-server (no Ebitengine dependency):
-pkg/words/         word lists, languages, grading, spaced repetition, mistake kinds
+pkg/words/         word lists, languages, grading, spaced repetition, mistake kinds, the Grimoire's numbers, Greek typing keys
+pkg/settings/      per-language settings (grading rules, highlights, timer) a grown-up can lock
 pkg/compete/       Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
 pkg/puzzle/        door and chest word puzzles
 pkg/proc/          procedural pixel art and the app icon

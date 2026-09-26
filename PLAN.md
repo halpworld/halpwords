@@ -101,9 +101,10 @@ Rules:
   `combat`, `puzzle`, `rpg`, `compete`, `profile`, `llm`). That makes it unit-testable, deterministic
   from a seed, and portable.
 - **`pkg/` is a public API.** halpwords-server imports `pkg/words`,
-  `pkg/compete`, `pkg/puzzle`, `pkg/proc`, `pkg/safety` and `pkg/maps` (list
-  format, grading, word memory, seeds and scores, worksheets, pictures, the
-  AI policy, the map format and its checks), so the two never disagree. Rules for it:
+  `pkg/compete`, `pkg/puzzle`, `pkg/proc`, `pkg/safety`, `pkg/settings`
+  and `pkg/maps` (list format, grading, word memory, seeds and scores,
+  worksheets, pictures, the AI policy, per-language settings, the map
+  format and its checks), so the two never disagree. Rules for it:
   - No Ebitengine, `internal/game`, `internal/scene` or `internal/gfx`,
     directly or through another package; `pkg/imports_test.go` checks this.
   - Any change to an exported name or to behaviour the server relies on
