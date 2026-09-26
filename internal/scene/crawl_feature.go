@@ -194,18 +194,19 @@ func (c *Crawl) drawCampfire(view *ebiten.Image, ctx *game.Context) {
 		tips = append(tips, lines...)
 	}
 	weak := c.weakest
-	quest, hasQuest := c.campfireQuest(ctx)
+	assign, hasAssign := c.campfireAssignment(ctx)
 	height := func() int {
 		h := 60 + 18*max(1, len(weak)) + 30
 		if len(tips) > 0 {
 			h += 22 + 16*len(tips)
 		}
-		if hasQuest {
+		if hasAssign {
 			h += 42
 		}
 		return h
 	}
-	// A quest takes the place of the last words, or tips, to fit the view.
+	// An assignment takes the place of the last words, or tips, to fit the
+	// view.
 	for height() > vh-22 && len(weak) > 1 {
 		weak = weak[:len(weak)-1]
 	}
@@ -232,23 +233,23 @@ func (c *Crawl) drawCampfire(view *ebiten.Image, ctx *game.Context) {
 			f.DrawCentered(view, t, x+w/2, ty+20+i*16, 1, pal.Sky)
 		}
 	}
-	if hasQuest {
+	if hasAssign {
 		qy := y + h - 58
 		gfx.FillRect(view, x+12, qy-4, w-24, 1, pal.Granite)
-		drawQuest(view, ctx, quest, x+16, qy, w-32, questNow(), true, "")
+		drawAssignment(view, ctx, assign, x+16, qy, w-32, assignNow(), true, "")
 	}
 	hint := "Enter continue · G Grimoire"
 	if len(ctx.Link.Quests()) > 0 {
-		hint += " · Q Quests"
+		hint += " · Q Assignments"
 	}
 	c.drawHint(view, ctx, hint)
 }
 
-// campfireQuest is the quest a campfire shows: the run's own, or else the
-// quest to do next.
-func (c *Crawl) campfireQuest(ctx *game.Context) (link.Quest, bool) {
-	if q := c.run.quest; q != nil {
-		return questFor(ctx, q.ID)
+// campfireAssignment is the assignment quest a campfire shows: the run's
+// own, or else the one to do next.
+func (c *Crawl) campfireAssignment(ctx *game.Context) (link.Quest, bool) {
+	if q := c.run.assign; q != nil {
+		return assignFor(ctx, q.ID)
 	}
-	return link.Current(ctx.Link.Quests(), questNow())
+	return link.Current(ctx.Link.Quests(), assignNow())
 }

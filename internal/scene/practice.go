@@ -29,10 +29,10 @@ type Practice struct {
 	rng   *rand.Rand
 	langs []*words.Language // languages that have at least one list
 	li    int
-	// quest is the quest being practised, and list its words; otherwise
-	// every list of the language is practised.
-	quest *link.Quest
-	list  *words.List
+	// assign is the assignment quest being practised, and list its words;
+	// otherwise every list of the language is practised.
+	assign *link.Quest
+	list   *words.List
 
 	deck     *words.Deck
 	settings profile.LangSettings
@@ -62,11 +62,11 @@ func NewPractice(ctx *game.Context) game.Scene {
 	return p
 }
 
-// NewQuestPractice creates the practice screen for a quest: it practises
-// the quest's list l only.
-func NewQuestPractice(ctx *game.Context, q link.Quest, l *words.List) game.Scene {
+// NewAssignPractice creates the practice screen for an assignment quest: it
+// practises the assigned list l only.
+func NewAssignPractice(ctx *game.Context, q link.Quest, l *words.List) game.Scene {
 	lang, _ := words.Lookup(l.Language)
-	p := &Practice{bg: backdrop(7, 1.6), rng: proc.NewRand(ctx.Tick + 1), langs: []*words.Language{lang}, quest: &q, list: l}
+	p := &Practice{bg: backdrop(7, 1.6), rng: proc.NewRand(ctx.Tick + 1), langs: []*words.Language{lang}, assign: &q, list: l}
 	p.setLanguage(ctx, 0)
 	return p
 }
@@ -101,10 +101,10 @@ func (p *Practice) Update(ctx *game.Context) error {
 	}
 	if input.Back() {
 		ctx.Sound.Play(audio.Back)
-		if p.quest != nil {
+		if p.assign != nil {
 			ctx.EndSession()
-			ctx.Link.SyncNow() // for the quest's progress
-			ctx.Replace(NewQuests(ctx))
+			ctx.Link.SyncNow() // for the assignment's progress
+			ctx.Replace(NewAssignments(ctx))
 			return nil
 		}
 		ctx.Replace(NewTitle(ctx))
@@ -118,7 +118,7 @@ func (p *Practice) Update(ctx *game.Context) error {
 		return nil
 	}
 	switch {
-	case p.quest != nil:
+	case p.assign != nil:
 	case input.Pressed(ebiten.KeyArrowLeft):
 		ctx.Sound.Play(audio.Blip)
 		p.setLanguage(ctx, p.li-1)
@@ -175,8 +175,8 @@ func (p *Practice) Draw(dst *ebiten.Image, ctx *game.Context) {
 	gfx.DrawArt(dst, p.bg, 0, 0)
 
 	// Header: language selector and streak.
-	if q := p.quest; q != nil {
-		head := "Quest: " + questName(*q)
+	if q := p.assign; q != nil {
+		head := "Assignment: " + assignName(*q)
 		f.DrawCentered(dst, fit(f, head, 360, 2), cx, 12, 2, pal.Yellow)
 		goal := q.GoalText()
 		f.DrawShadow(dst, goal, game.ScreenW-12-f.Width(goal, 1), 12, 1, pal.Ice)
@@ -275,7 +275,7 @@ func (p *Practice) drawHelp(dst *ebiten.Image, ctx *game.Context) {
 
 // langKeys is the key hint for changing language, when the arrows do.
 func (p *Practice) langKeys() string {
-	if p.quest != nil {
+	if p.assign != nil {
 		return ""
 	}
 	return "←/→: language   "
@@ -283,8 +283,8 @@ func (p *Practice) langKeys() string {
 
 // escTo names where Esc goes.
 func (p *Practice) escTo() string {
-	if p.quest != nil {
-		return "quests"
+	if p.assign != nil {
+		return "assignments"
 	}
 	return "menu"
 }

@@ -2,6 +2,8 @@ package scene
 
 import (
 	"bytes"
+	"fmt"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -58,6 +60,10 @@ func (c *Crawl) pauseItems() []pauseItem {
 	}
 	if c.run.hardcore() {
 		items[len(items)-1] = pauseGiveUp
+	}
+	if c.run.race != nil {
+		// A race can't be saved.
+		items = slices.DeleteFunc(items, func(it pauseItem) bool { return it == pauseSuspend })
 	}
 	return items
 }
@@ -141,6 +147,10 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 // updateQuit asks whether to quit without saving.
 func (c *Crawl) updateQuit(ctx *game.Context) {
 	switch {
+	case (input.Pressed(ebiten.KeyY) || input.Confirm()) && c.run.race != nil:
+		c.play(audio.Fall)
+		c.run.race.fell = true
+		ctx.Replace(newRaceEnd(ctx, c.run, c.pos))
 	case (input.Pressed(ebiten.KeyY) || input.Confirm()) && c.run.hardcore():
 		c.play(audio.Fall)
 		ctx.Replace(newGameOver(ctx, c.run, true))
@@ -174,7 +184,9 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	gfx.Window(view, x, y, w, h)
 	f.DrawCentered(view, "PAUSED", x+w/2, y+10, 2, pal.Yellow)
 	about := c.run.mode.String() + " · seed " + c.run.seedCode()
-	if c.run.hardcore() {
+	if c.run.race != nil {
+		about = fmt.Sprintf("Race to floor %d", c.run.race.goal)
+	} else if c.run.hardcore() {
 		about += " · score " + groupDigits(c.run.score())
 	}
 	f.DrawCentered(view, about, x+w/2, y+42, 1, pal.Tan)
@@ -195,6 +207,8 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 
 	note, ncol := "Your progress is saved.", pal.Lime
 	switch {
+	case c.run.race != nil:
+		note, ncol = "The race goes on while you pause!", pal.Tan
 	case c.resume != modeExplore:
 		note, ncol = "Win or flee the battle to suspend.", pal.Tan
 	case c.run.hardcore():

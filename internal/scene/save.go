@@ -14,6 +14,7 @@ import (
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/maps"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -47,8 +48,13 @@ type saveFile struct {
 	// Scripts are the Dungeon Director's scripts for the floors the save
 	// can go back to, by depth.
 	Scripts map[int]*llm.Script `json:",omitempty"`
-	// Quest is the quest the adventure plays, if it was started for one.
-	Quest *questRun `json:",omitempty"`
+	// Quest is the hand-made quest being played, whole, so the save does
+	// not depend on the quest file staying where it was.
+	Quest *maps.Quest `json:",omitempty"`
+	// Assignment is the assignment quest the adventure plays, if it was
+	// started for one. Its list is not kept: it comes from the lists the
+	// game has.
+	Assignment *assignRun `json:",omitempty"`
 }
 
 type savedLine struct {
@@ -77,6 +83,7 @@ func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir, 
 		Day:        r.day,
 		Tally:      r.tally,
 		Quest:      r.quest,
+		Assignment: r.assign,
 	}
 	if r.ai != nil {
 		for depth, sc := range r.ai.scripts {
@@ -132,10 +139,13 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 		// deleted as it is loaded.
 		return nil, errors.New("that Hardcore run is over")
 	}
-	if _, ok := runLists(ctx, lang, s.Quest); !ok {
-		return nil, fmt.Errorf("the word list for the %s quest is gone", s.Quest.Title)
+	if s.Quest != nil && len(s.Quest.Maps) == 0 {
+		return nil, errDamaged
 	}
-	r := beginRun(ctx, lang, s.Class, s.Seed, s.Quest)
+	if _, ok := runLists(ctx, lang, s.Quest, s.Assignment); !ok {
+		return nil, fmt.Errorf("the word list for the %s assignment is gone", s.Assignment.Title)
+	}
+	r := beginRun(ctx, lang, s.Class, s.Seed, s.Quest, s.Assignment)
 	if err := r.src.UnmarshalBinary(s.RNG); err != nil {
 		return nil, errDamaged
 	}
@@ -180,12 +190,13 @@ func saveSummary() (summary string, ok bool) {
 		return "", false
 	}
 	var s struct {
-		Language string
-		Class    rpg.Class
-		Shrine   struct{ Depth int }
-		Suspend  *struct{ Depth int }
-		Mode     compete.Mode
-		Quest    *questRun
+		Language   string
+		Class      rpg.Class
+		Shrine     struct{ Depth int }
+		Suspend    *struct{ Depth int }
+		Mode       compete.Mode
+		Quest      *struct{ Title string }
+		Assignment *struct{ Title string }
 	}
 	if json.Unmarshal(data, &s) != nil {
 		return "", true // Continue will explain the problem
@@ -203,7 +214,10 @@ func saveSummary() (summary string, ok bool) {
 		summary += " · " + s.Mode.String()
 	}
 	if s.Quest != nil {
-		summary += " · Quest"
+		summary = fmt.Sprintf("%s · %s · %s · Floor %d", s.Quest.Title, name, s.Class, depth)
+	}
+	if s.Assignment != nil {
+		summary += " · Assignment"
 	}
 	return summary, true
 }

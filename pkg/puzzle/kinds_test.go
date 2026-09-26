@@ -308,3 +308,49 @@ func TestClozeFromLists(t *testing.T) {
 		t.Errorf("Add: %+v", both)
 	}
 }
+
+func TestMakeWord(t *testing.T) {
+	fr, _ := words.Lookup("fr")
+	rng := rand.New(rand.NewPCG(5, 5))
+	dog := words.Entry{Prompt: "dog", Answers: []string{"le chien"}}
+	entries := []words.Entry{
+		{Prompt: "cat", Answers: []string{"le chat"}}, dog,
+		{Prompt: "yes", Answers: []string{"oui"}}, {Prompt: "to", Answers: []string{"à"}},
+	}
+	deck := words.NewDeck(entries, rng)
+	gen := &Generated{Cloze: map[string][]ClozeLine{words.Key(dog): {{Text: "Je vois ___."}}}}
+	for _, k := range []Kind{Reverse, Anagram, Missing, Spell, Tumbler, Cloze} {
+		for n := 0; n < 20; n++ {
+			p := MakeWord(k, Chest, 5, deck, 1, fr, fr.Defaults, rng, gen)
+			if p == nil {
+				t.Fatalf("no %s about dog", k)
+			}
+			if p.Kind() != k || p.Word() != 1 {
+				t.Fatalf("%s: made %s about word %d", k, p.Kind(), p.Word())
+			}
+			if !p.Check(solve(p)).Passed() {
+				t.Fatalf("%s: the right answer fails", k)
+			}
+		}
+	}
+	// "à" is one letter: nothing to scramble, hide or put on wheels, and
+	// it has no sentence.
+	for _, k := range []Kind{Anagram, Tumbler, Cloze, OddOneOut, Pairs, Crossword} {
+		if p := MakeWord(k, Chest, 5, deck, 3, fr, fr.Defaults, rng, gen); p != nil {
+			t.Errorf("%s about à: made %s", k, p.Kind())
+		}
+	}
+	if p := MakeWord(Spell, Door, 1, deck, 9, fr, fr.Defaults, rng, nil); p != nil {
+		t.Error("made a puzzle about a word not in the deck")
+	}
+	// A starter word with a riddle makes one.
+	for id, e := range starter(t)[fr] {
+		if len(Riddles()[strings.ToLower(e.Prompt)]) > 0 {
+			d := words.NewDeck(starter(t)[fr], rng)
+			if p := MakeWord(Riddle, Door, 1, d, id, fr, fr.Defaults, rng, nil); p == nil || p.Word() != id {
+				t.Fatalf("no riddle about %q", e.Prompt)
+			}
+			break
+		}
+	}
+}

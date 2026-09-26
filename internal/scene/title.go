@@ -23,8 +23,9 @@ type Title struct {
 	items   []titleItem
 	saved   string // describes the saved adventure, if there is one
 	hasSave bool
-	// quests are the quests a grown-up set, when the game is linked.
-	quests []link.Quest
+	// assigns are the assignment quests a grown-up set, when the game is
+	// linked.
+	assigns []link.Quest
 }
 
 // titleItem is an entry in the main menu.
@@ -34,6 +35,7 @@ const (
 	titleContinue titleItem = iota
 	titleNew
 	titlePractice
+	titleTogether
 	titleGrimoire
 	titleFame
 	titleWordLists
@@ -41,10 +43,10 @@ const (
 	titleAI
 	titleAccount
 	titleQuit
-	titleQuests
+	titleAssignments
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit", "Quests"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Play Together", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit", "Assignments"}
 
 // NewTitle creates the title screen.
 func NewTitle(ctx *game.Context) game.Scene {
@@ -58,22 +60,22 @@ func NewTitle(ctx *game.Context) game.Scene {
 	return t
 }
 
-// build makes the menu: Quests comes first when there are quests,
-// after Continue. The same entry stays chosen.
+// build makes the menu: Assignments comes first when there are
+// assignment quests, after Continue. The same entry stays chosen.
 func (t *Title) build(ctx *game.Context) {
 	var was titleItem = -1
 	if t.sel < len(t.items) {
 		was = t.items[t.sel]
 	}
-	t.quests = ctx.Link.Quests()
+	t.assigns = ctx.Link.Quests()
 	t.items = t.items[:0]
 	if t.hasSave {
 		t.items = append(t.items, titleContinue)
 	}
-	if len(t.quests) > 0 {
-		t.items = append(t.items, titleQuests)
+	if len(t.assigns) > 0 {
+		t.items = append(t.items, titleAssignments)
 	}
-	t.items = append(t.items, titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount)
+	t.items = append(t.items, titleNew, titlePractice, titleTogether, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount)
 	if runtime.GOOS != "js" {
 		t.items = append(t.items, titleQuit) // a web page is closed, not quit
 	}
@@ -93,8 +95,12 @@ func (t *Title) Update(ctx *game.Context) error {
 	for _, tr := range t.torches {
 		tr.Update()
 	}
-	if qs := ctx.Link.Quests(); !slices.EqualFunc(qs, t.quests, func(a, b link.Quest) bool { return a == b }) {
-		t.build(ctx) // a sync brought new quests
+	if d := droppedQuests(); len(d) > 0 {
+		ctx.Replace(NewQuests(ctx, d...))
+		return nil
+	}
+	if qs := ctx.Link.Quests(); !slices.EqualFunc(qs, t.assigns, func(a, b link.Quest) bool { return a == b }) {
+		t.build(ctx) // a sync brought new assignments
 	}
 	n := len(t.items)
 	switch {
@@ -132,15 +138,16 @@ func (t *Title) Update(ctx *game.Context) error {
 		}
 		ctx.Sound.Play(audio.Select)
 		ctx.Replace(map[titleItem]func(*game.Context) game.Scene{
-			titleNew:       NewNewGame,
-			titlePractice:  NewPractice,
-			titleGrimoire:  func(ctx *game.Context) game.Scene { return NewGrimoire(ctx, nil) },
-			titleFame:      NewHallOfFame,
-			titleWordLists: NewWordLists,
-			titleSettings:  NewSettings,
-			titleAI:        NewAISetup,
-			titleAccount:   NewAccount,
-			titleQuests:    NewQuests,
+			titleNew:         NewNewGame,
+			titlePractice:    NewPractice,
+			titleTogether:    NewLobby,
+			titleGrimoire:    func(ctx *game.Context) game.Scene { return NewGrimoire(ctx, nil) },
+			titleFame:        NewHallOfFame,
+			titleWordLists:   NewWordLists,
+			titleSettings:    NewSettings,
+			titleAI:          NewAISetup,
+			titleAccount:     NewAccount,
+			titleAssignments: NewAssignments,
 		}[it](ctx))
 	}
 	return nil
@@ -171,7 +178,7 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 	step, my, savedY := 26, 196, 172
 	switch {
 	case rows > 5:
-		step, my, savedY = 22, 184, 166
+		step, my, savedY = 21, 180, 162
 	case rows > 4:
 		step, my, savedY = 24, 186, 166
 	}
@@ -198,7 +205,7 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, titleLabels[it], x+36, y, 2, c)
 	}
 
-	drawQuestBanner(dst, ctx, t.quests)
+	drawAssignBanner(dst, ctx, t.assigns)
 
 	f.DrawShadow(dst, "Arrows choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
 	v := game.VersionText()
