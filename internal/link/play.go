@@ -21,7 +21,8 @@ import (
 // only send the few messages below, with values from the lists the
 // server sent. In a race room (W7.6) the host starts races: the game gets
 // the dungeon's seed and word list, and reports how far the hero has got
-// (Report). Boss Raid (W7.5) adds its mode later.
+// (Report). In a raid room (W7.5) the class fights a boss together: the
+// server deals words and grades the answers (play_raid.go).
 //
 // Like the rest of the link, nothing here blocks the game loop: the
 // connection runs in goroutines, and the game reads State each frame.
@@ -171,6 +172,11 @@ type PlayState struct {
 	// last race's.
 	Race    *Race
 	Results []Result
+	// Raid is the raid under way in the room, or nil; Finale is how the
+	// last one ended, and Summary what the player did in it.
+	Raid    *Raid
+	Finale  *RaidFinale
+	Summary *RaidTally
 	// Changes counts changes, so the game can tell something happened.
 	Changes int
 }
@@ -213,6 +219,7 @@ type Play struct {
 	resync bool          // waiting for a new room after a gap
 	chat   time.Time     // when the last preset or emote went
 	races  int           // the races seen, for Race.Number
+	raids  int           // the raids seen, for Raid.Number
 	report race.Reporter // when to send the race's next progress
 
 	wg sync.WaitGroup // the runs' goroutines
@@ -248,6 +255,15 @@ func (p *Play) State() PlayState {
 		r := *s.Race
 		r.Racers = slices.Clone(r.Racers)
 		s.Race = &r
+	}
+	s.Raid = s.Raid.clone()
+	if s.Finale != nil {
+		f := *s.Finale
+		s.Finale = &f
+	}
+	if s.Summary != nil {
+		t := *s.Summary
+		s.Summary = &t
 	}
 	return s
 }
@@ -323,6 +339,7 @@ func (p *Play) Leave() {
 	p.st.Events = nil
 	p.st.Problem = ""
 	p.st.Race, p.st.Results = nil, nil
+	p.st.Raid, p.st.Finale, p.st.Summary = nil, nil, nil
 	p.st.Changes++
 }
 
@@ -463,6 +480,7 @@ func (p *Play) loop(ctx context.Context, run int) {
 			p.st.Room = Room{}
 			p.st.Problem = problem
 			p.st.Race, p.st.Results = nil, nil
+			p.st.Raid, p.st.Finale, p.st.Summary = nil, nil, nil
 			p.st.Changes++
 		}
 		p.mu.Unlock()
@@ -707,6 +725,8 @@ type inMessage struct {
 		Members []Member        `json:"members"`
 		Race    *raceMessage    `json:"race"`
 		Results []resultMessage `json:"results"`
+		Raid    *raidMessage    `json:"raid"`
+		Finale  *finaleMessage  `json:"finale"`
 	} `json:"room"`
 	Race     *raceMessage    `json:"race"`
 	Progress *Racer          `json:"progress"`
@@ -719,6 +739,14 @@ type inMessage struct {
 	Notice   string          `json:"notice"`
 	In       int             `json:"in"`
 	Code     string          `json:"code"`
+	Raid     *raidMessage    `json:"raid"`
+	Word     *wordMessage    `json:"word"`
+	Graded   *gradedMessage  `json:"graded"`
+	Damage   int             `json:"damage"`
+	Boss     *bossMessage    `json:"boss"`
+	Attack   *attackMessage  `json:"attack"`
+	Finale   *finaleMessage  `json:"finale"`
+	Summary  *RaidTally      `json:"summary"`
 }
 
 // The words for why a room ended, and for refused requests.
@@ -758,6 +786,8 @@ func (p *Play) handle(m inMessage, out chan []byte, inRoom *bool) error {
 		p.st.Results = results(m.Room.Results)
 		// Say where the hero is again, in case a report was lost.
 		p.report = race.Reporter{}
+		p.setRaid(m.Room.Raid, false)
+		p.st.Finale = m.Room.Finale.finale()
 		return nil
 	case "notice":
 		if m.Notice == "shutdown" {
@@ -789,7 +819,14 @@ func (p *Play) handle(m inMessage, out chan []byte, inRoom *bool) error {
 			t = "The room ended."
 		}
 		return playEnd{t}
-	case "joined", "left", "away", "back", "said", "emoted", "race", "progress", "results":
+	case "word", "graded", "summary":
+		// A raider's own: not room events.
+		if *inRoom {
+			p.handleRaid(m)
+		}
+		return nil
+	case "joined", "left", "away", "back", "said", "emoted", "race", "progress", "results",
+		"raid", "hit", "boss", "attack", "attacked", "finale":
 	default:
 		if m.Seq == 0 {
 			// pong, and messages of later versions the game doesn't
@@ -831,6 +868,9 @@ func (p *Play) handle(m inMessage, out chan []byte, inRoom *bool) error {
 	case "results":
 		p.st.Race = nil
 		p.st.Results = results(m.Results)
+		return nil
+	case "raid", "hit", "boss", "attack", "attacked", "finale":
+		p.raidEvent(m)
 		return nil
 	case "joined", "left", "away", "back", "said", "emoted":
 	default:
