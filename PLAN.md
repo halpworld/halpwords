@@ -880,6 +880,24 @@ the crawl's own timings (a step is 9 ticks = 150 ms, a monster falls in
 race's list drops out at once. Still to do: a live race between two
 games against staging, and friend-group and class rooms (W7.1, W2.2).
 
+*Now (W7.5, done):* **Boss Raid.** A teacher opens a raid room from a
+class page on the website and starts the raid on the classroom's big
+screen; the class's learners join by code in this lobby, and the game
+opens the raid screen as soon as it starts (or at once, for a learner
+who joins during it). The screen shows the boss in the dungeon view (a
+boss floor's largest room, the boss drawn by `pkg/raid.BossFor` and
+flashing when anyone hits it), its health, the time left, the latest
+hits by pseudonym, and a typing panel for the word the server dealt.
+`link.Play.Answer` sends what was typed (cut to `raid.MaxAnswer`, which
+a test keeps equal to the typing field's `typing.MaxLen`) with whether
+Backspace was used; the server grades it with `pkg/raid.Grade` and the
+game only shows the grade, the damage and the next word. When the boss
+attacks, the view shakes and the word becomes a dodge with a timer; a
+late or wrong dodge stuns the raider for a moment. The finale shows the
+class's totals and what the player did. The game never grades a raid
+and keeps nothing of it; the server keeps the answers of learners whose
+progress may be kept (halpwords-server's `internal/bossraid`).
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |
