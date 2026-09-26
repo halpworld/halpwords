@@ -68,7 +68,8 @@ func Explain(err error) string {
 	case err == nil:
 		return ""
 	case errors.Is(err, ErrBadCode), errors.Is(err, ErrNotLinkable), errors.Is(err, ErrUnlinked),
-		errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked):
+		errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked),
+		errors.Is(err, ErrSSOPending), errors.Is(err, ErrSSOExpired), errors.Is(err, ErrSSORefused), errors.Is(err, ErrSSOOff):
 		return err.Error()
 	case errors.Is(err, context.DeadlineExceeded):
 		return "the server took too long to answer"

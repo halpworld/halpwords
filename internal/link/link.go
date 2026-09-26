@@ -211,7 +211,8 @@ type state struct {
 	Refresh    string
 	RefreshExp time.Time
 	LinkedAt   time.Time
-	// Way is how the game signed in: WayPairing, WayCard or WayClass.
+	// Way is how the game signed in: WayPairing, WayCard, WayClass or
+	// WaySSO.
 	Way      string    `json:",omitempty"`
 	LastSync time.Time `json:",omitempty"`
 	// NextSeq is the sequence number of the next event. It only grows,
@@ -221,6 +222,8 @@ type state struct {
 	ListsETag string     `json:",omitempty"`
 	Lists     []ListInfo `json:",omitempty"`
 	Quests    []Quest    `json:",omitempty"`
+	// SSO is a sign-in with a school account on its way.
+	SSO *SSOCode `json:",omitempty"`
 }
 
 func (s *state) linked() bool { return s.Refresh != "" }
@@ -644,7 +647,7 @@ func (c *Client) saveState() error {
 	if c.o.Store == nil {
 		return nil
 	}
-	if !c.st.linked() && c.st.NextSeq <= 1 {
+	if !c.st.linked() && c.st.NextSeq <= 1 && c.st.SSO == nil {
 		return c.o.Store.Remove(stateFile)
 	}
 	data, err := json.MarshalIndent(c.st, "", "  ")

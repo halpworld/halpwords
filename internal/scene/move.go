@@ -16,11 +16,16 @@ import (
 
 // NewStart is the first scene. In a web browser that has just come from
 // the game's old address, it brings the player's progress along first
-// (see package move); otherwise it is the title screen.
+// (see package move); back from signing in with a school account on the
+// website, it is the sign-in screen waiting for the server; otherwise it
+// is the title screen.
 func NewStart(ctx *game.Context) game.Scene {
 	frag := move.Fragment()
 	if strings.HasPrefix(frag, move.Key) {
 		move.ClearFragment() // so a reload doesn't import again
+	} else if s := resumeSSO(ctx); s != nil {
+		// Back from signing in with a school account on the website.
+		return s
 	}
 	return startWith(ctx, move.Saves, frag, move.Go)
 }

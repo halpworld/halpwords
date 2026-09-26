@@ -73,15 +73,21 @@ func (c *Client) link(ctx context.Context, s SignIn) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.signedIn(t, s.Way())
+	return nil
+}
+
+// signedIn keeps the tokens of a new sign-in made the way way. c.mu is
+// held.
+func (c *Client) signedIn(t tokens, way string) {
 	c.gen++
-	c.st = state{NextSeq: c.st.NextSeq, LinkedAt: c.now(), Way: s.Way()}
+	c.st = state{NextSeq: c.st.NextSeq, LinkedAt: c.now(), Way: way}
 	c.q = queue{}
 	c.dirty = true
 	c.keep(t)
 	c.failures, c.note = 0, ""
 	c.loadLists()
 	c.changes++
-	return nil
 }
 
 // Sync sends the queued events and fetches the learner, the assigned
