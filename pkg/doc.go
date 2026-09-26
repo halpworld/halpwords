@@ -12,6 +12,8 @@
 //   - maps: hand-made maps and quests, and the checks they must pass
 //   - race: the rules of a Race, and the checks the server runs on
 //     racers' reports
+//   - raid: the rules of a Boss Raid (health, damage, dodges, grading)
+//     and the boss's sprite
 //
 // None of them may import Ebitengine or the game's screens, so a server
 // can build them without graphics code (see imports_test.go). Changes to
