@@ -839,6 +839,27 @@ ping/pong, close and client masking, with a fuzzed frame reader), so the
 game keeps its three dependencies; the web build uses the browser's
 `WebSocket`. Boss Raid (W7.5) and Race (W7.6) start from this lobby.
 
+*Now (W7.6, done):* **Race.** In a race room (`mode` `race`) the host
+starts a race on the website with one of the family's or teacher's word
+lists; the lobby shows a 5-second countdown and then every racer's game
+plays **the same dungeon**, built from the race's seed and list alone
+(`startRunWith`: no player lists, profile, memory or AI touch the floors
+or the deal of words). A race run has Hardcore rules (one life, no
+shrines, so floors never change), the first class, no saves or suspend,
+and sends nothing to the grown-up's account (no answers, no play
+session): only `progress` to the room, through `link.Play.Report`
+(throttled by `pkg/race.Reporter`: floor, monsters beaten, the hero's
+cell, a fall). Other racers on the same floor are small coloured dots on
+the automap and the side map; the side panel shows the floor of the goal
+and the time left. Reaching floor 3, falling or giving up opens the race
+screen, which waits for the others and then shows the results by place
+(a racer the server flagged is "not counted"). `pkg/race` holds the
+rules both sides use; the server's `Judge` checks every report against
+the crawl's own timings (a step is 9 ticks = 150 ms, a monster falls in
+30 ticks = 0.5 s; tests keep them in step). A game that can't read the
+race's list drops out at once. Still to do: a live race between two
+games against staging, and friend-group and class rooms (W7.1, W2.2).
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |

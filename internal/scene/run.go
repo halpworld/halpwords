@@ -92,6 +92,8 @@ type run struct {
 	ai *runAI
 	// cloze are the gap-fill sentences written in the word lists, or nil.
 	cloze *puzzle.Generated
+	// race is the race this run is part of, or nil (race.go).
+	race *raceRun
 	// quest is the hand-made quest being played, or nil for the usual
 	// dungeon. Its maps are the floors, in order.
 	quest *maps.Quest
@@ -172,7 +174,20 @@ func questLists(ctx *game.Context, lang *words.Language, q *maps.Quest) []*words
 // startRun begins an Adventure in lang as a hero of class through the
 // dungeon made from seed, or through quest when it is not nil.
 func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, quest *maps.Quest) *run {
-	lists := questLists(ctx, lang, quest)
+	r := startRunWith(ctx, lang, class, seed, questLists(ctx, lang, quest))
+	r.quest = quest
+	r.prof, r.link, r.ai = ctx.Profile, ctx.Link, newRunAI(ctx)
+	if r.prof != nil {
+		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))
+	}
+	r.setMode(ctx, compete.Adventure)
+	return r
+}
+
+// startRunWith begins a run with only the words in lists: no profile, no
+// link and no AI. The dungeon and the deal of words come from seed and
+// the lists alone.
+func startRunWith(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, lists []*words.List) *run {
 	var entries []words.Entry
 	for _, l := range lists {
 		entries = append(entries, l.Entries...)
@@ -190,16 +205,10 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 		greek:   lang.Script == words.ScriptGreek,
 		sound:   ctx.Sound,
 		perfect: map[int]bool{},
-		prof:    ctx.Profile,
-		link:    ctx.Link,
-		ai:      newRunAI(ctx),
 		cloze:   puzzle.FromLists(lists),
-		quest:   quest,
 	}
-	if r.prof != nil {
-		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))
-	}
-	r.setMode(ctx, compete.Adventure)
+	r.mode = compete.Adventure
+	r.settings = profile.Preset(lang)
 	r.shrine = checkpoint{Depth: 1, Hero: r.hero.Clone()}
 	return r
 }

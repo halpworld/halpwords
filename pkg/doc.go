@@ -8,6 +8,8 @@
 //   - proc: procedural pixel art
 //   - safety: the family-safe policy and filter for generated text
 //   - maps: hand-made maps and quests, and the checks they must pass
+//   - race: the rules of a Race, and the checks the server runs on
+//     racers' reports
 //
 // None of them may import Ebitengine or the game's screens, so a server
 // can build them without graphics code (see imports_test.go). Changes to

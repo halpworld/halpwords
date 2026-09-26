@@ -533,6 +533,9 @@ func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []log
 	c.fxCoins(gold)
 	lines = append(lines, logLine{fmt.Sprintf("The %s is defeated! +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow})
 	c.run.say(fmt.Sprintf("You defeat the %s. +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow)
+	if rr := c.run.race; rr != nil {
+		rr.monsters++
+	}
 	loot := m.Loot
 	switch {
 	case m.Kind.Boss():

@@ -247,7 +247,14 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
 	c.run.ai.poll(c)
-	ctx.Playing(c.run.linkMode(), c.run.lang.Code, func() int { return c.run.depth })
+	if c.run.race != nil {
+		// A race sends only its progress, to the room.
+		if c.updateRace(ctx) {
+			return nil
+		}
+	} else {
+		ctx.Playing(c.run.linkMode(), c.run.lang.Code, func() int { return c.run.depth })
+	}
 	switch {
 	case c.mode == modePause:
 		c.updatePause(ctx)
@@ -335,6 +342,8 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		}
 	case modeDead:
 		switch {
+		case c.run.race != nil && (input.Confirm() || input.Back()):
+			ctx.Replace(newRaceEnd(ctx, c.run, c.pos))
 		case c.run.hardcore() && (input.Confirm() || input.Back()):
 			ctx.Replace(newGameOver(ctx, c.run, false))
 		case input.Confirm():
@@ -623,6 +632,10 @@ func (c *Crawl) descend(ctx *game.Context) {
 		return
 	}
 	r.depth++
+	if r.race != nil && r.depth >= r.race.goal {
+		c.finishRace(ctx)
+		return
+	}
 	r.remember()
 	c.play(audio.Stairs)
 	ctx.Replace(newCrawl(r))
@@ -634,6 +647,9 @@ func (c *Crawl) die() {
 	c.run.hero.HP = 0
 	c.play(audio.Fall)
 	c.run.say("You have fallen!", pal.Rose)
+	if rr := c.run.race; rr != nil {
+		rr.fell = true
+	}
 	if c.run.hardcore() && c.run.onDisk {
 		save.Remove(saveName) // one life
 		c.run.onDisk = false

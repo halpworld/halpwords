@@ -15,12 +15,14 @@ import (
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/pkg/race"
 )
 
 // Lobby is Play Together: the player types the code of a room a grown-up
 // opened on the website, joins it, and sees who is in it. Players can
 // only send the preset phrases and emotes below: there is no free text.
-// Boss Raid (W7.5) and Race (W7.6) start from here later.
+// In a race room, a race the host starts begins from here after a
+// countdown (race.go). Boss Raid (W7.5) starts from here later.
 type Lobby struct {
 	bg   *ebiten.Image
 	code []rune // the room code being typed
@@ -33,6 +35,12 @@ type Lobby struct {
 	seen int
 	last int
 	msg  string
+	// raced is the number of the last race the player ran (or can't
+	// run), so it doesn't start again; next is the run for the race
+	// about to start, and bad a race whose list the game can't play.
+	raced int
+	next  *run
+	bad   int
 }
 
 // NewLobby creates the Play Together screen.
@@ -249,6 +257,9 @@ func (l *Lobby) updateCode(ctx *game.Context, p *link.Play) {
 }
 
 func (l *Lobby) updateRoom(ctx *game.Context, p *link.Play, st link.PlayState) {
+	if l.updateRace(ctx, p, st) {
+		return
+	}
 	if l.leaving {
 		switch {
 		case input.Pressed(ebiten.KeyY):
@@ -288,6 +299,41 @@ func (l *Lobby) updateRoom(ctx *game.Context, p *link.Play, st link.PlayState) {
 			ctx.Sound.Play(audio.Wrong)
 		}
 	}
+}
+
+// updateRace gets the run ready for a race the player is in, and starts
+// it when the countdown is over. It reports whether the race started.
+func (l *Lobby) updateRace(ctx *game.Context, p *link.Play, st link.PlayState) bool {
+	rc := st.Race
+	if rc == nil || rc.Number == l.raced {
+		l.next = nil
+		return false
+	}
+	if me, ok := rc.Racer(st.Room.You); !ok || me.Status != link.RacerRacing {
+		return false
+	}
+	if l.bad != rc.Number && (l.next == nil || l.next.race.number != rc.Number) {
+		r, err := newRaceRun(ctx, rc, st.Room.You)
+		if err != nil {
+			l.bad, l.next = rc.Number, nil
+		} else {
+			l.next = r
+		}
+	}
+	if time.Now().Before(rc.StartsAt) {
+		return false
+	}
+	if l.bad == rc.Number {
+		// Out of the race at once, so the others needn't wait.
+		if p.Report(race.Report{Floor: 1, Fell: true}) {
+			l.raced = rc.Number
+		}
+		return false
+	}
+	l.raced = rc.Number
+	ctx.Sound.Play(audio.Select)
+	ctx.Replace(startRace(l.next))
+	return true
 }
 
 func (l *Lobby) leave(ctx *game.Context) {
@@ -354,6 +400,37 @@ func (l *Lobby) drawCode(dst *ebiten.Image, ctx *game.Context, st link.PlayState
 	return "Enter join   Esc back"
 }
 
+// drawRace shows the race under way: the countdown, or how far the
+// racers have got.
+func (l *Lobby) drawRace(dst *ebiten.Image, ctx *game.Context, st link.PlayState, x, y, w int) {
+	f := ctx.Font
+	rc := st.Race
+	_, racing := rc.Racer(st.Room.You)
+	switch left := time.Until(rc.StartsAt); {
+	case left > 0 && racing:
+		f.DrawShadow(dst, "Get ready to race!", x, y, 1, pal.Yellow)
+		f.DrawCentered(dst, fmt.Sprint(int(left.Seconds())+1), x+w/2, y+26, 4, pal.White)
+		f.DrawShadow(dst, fmt.Sprintf("First to floor %d wins.", rc.Goal), x, y+80, 1, pal.Ice)
+		if l.bad == rc.Number {
+			f.DrawShadow(dst, fit(f, "This game can't read the race's words.", w, 1), x, y+100, 1, pal.Rose)
+		}
+		return
+	case left > 0:
+		f.DrawShadow(dst, "A race is about to start.", x, y, 1, pal.Yellow)
+	default:
+		f.DrawShadow(dst, fmt.Sprintf("A race to floor %d is on.", rc.Goal), x, y, 1, pal.Yellow)
+	}
+	for i, r := range rc.Racers {
+		ry := y + 24 + i*18
+		name := racerName(st.Room, r.ID)
+		if r.ID == st.Room.You {
+			name += " (you)"
+		}
+		f.DrawShadow(dst, fit(f, name, w/2, 1), x, ry, 1, pal.Ice)
+		f.DrawShadow(dst, fmt.Sprintf("floor %d · %s", r.Floor, statusText(r.Status)), x+w/2, ry, 1, pal.Steel)
+	}
+}
+
 func (l *Lobby) drawRoom(dst *ebiten.Image, ctx *game.Context, st link.PlayState) string {
 	f := ctx.Font
 	r := st.Room
@@ -362,6 +439,9 @@ func (l *Lobby) drawRoom(dst *ebiten.Image, ctx *game.Context, st link.PlayState
 	const mx, my, mw, mh = 8, 40, 300, 244
 	gfx.Window(dst, mx, my, mw, mh)
 	head := "Room " + showRoomCode(r.Code)
+	if r.Mode == link.ModeRace {
+		head = "Race room " + showRoomCode(r.Code)
+	}
 	if left := time.Until(r.EndsAt); !r.EndsAt.IsZero() && left > 0 {
 		head += fmt.Sprintf("  ·  %d min left", int(left.Minutes())+1)
 	}
@@ -397,9 +477,30 @@ func (l *Lobby) drawRoom(dst *ebiten.Image, ctx *game.Context, st link.PlayState
 	// What happened.
 	const ex, ew = 316, game.ScreenW - 316 - 8
 	gfx.Window(dst, ex, my, ew, mh)
-	f.DrawShadow(dst, "What's happening", ex+10, my+8, 1, pal.Yellow)
 	y := my + 30
-	for _, e := range st.Events[max(0, len(st.Events)-11):] {
+	shown = 11
+	switch {
+	case st.Race != nil:
+		l.drawRace(dst, ctx, st, ex+10, my+8, ew-20)
+		shown = 0
+	case r.Mode == link.ModeRace && len(st.Results) > 0:
+		f.DrawShadow(dst, "Last race", ex+10, my+8, 1, pal.Yellow)
+		for _, res := range st.Results {
+			drawRaceResult(dst, ctx, res, res.ID == r.You, ex+10, y, ew-20)
+			y += 18
+		}
+		f.DrawShadow(dst, "What's happening", ex+10, y+6, 1, pal.Yellow)
+		y += 28
+		shown = max(0, 11-len(st.Results)-2)
+	case r.Mode == link.ModeRace:
+		f.DrawShadow(dst, "What's happening", ex+10, my+8, 1, pal.Yellow)
+		f.DrawShadow(dst, "Waiting for the host to start a race.", ex+10, y, 1, pal.Lime)
+		y += 18
+		shown = 10
+	default:
+		f.DrawShadow(dst, "What's happening", ex+10, my+8, 1, pal.Yellow)
+	}
+	for _, e := range st.Events[max(0, len(st.Events)-shown):] {
 		c := pal.Ice
 		if e.Mine {
 			c = pal.White
