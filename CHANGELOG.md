@@ -31,6 +31,12 @@ version as its release notes.
   and `Cloze []ClozeLine`; `words.Format(list)` writes a list back in the
   text format, so that it parses to the same `List`. `pkg/puzzle`:
   `FromLists`, `Generated.Add`, and `ClozeLine.Answer`.
+- `internal/link`: the client for halpwords-server's game API (not used
+  by the game yet). It links with a pairing code, keeps its tokens in a
+  private `link.json`, queues answers and sessions on disk (at most about
+  50,000; older answers fold into daily totals), syncs in the background,
+  downloads assigned lists by ETag, merges the server's word memory, and
+  works quietly with the server down.
 
 ### Changed
 
