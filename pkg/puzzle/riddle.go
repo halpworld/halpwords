@@ -40,7 +40,7 @@ func ParseRiddles(data []byte) map[string][]string {
 // newRiddle asks for a word from a riddle about it, from the riddle bank or
 // the riddles an AI wrote. It returns nil if no word in the deck has a
 // riddle.
-func newRiddle(deck *words.Deck, lang *words.Language, gen *Generated, rng *rand.Rand) *typed {
+func newRiddle(deck dealer, lang *words.Language, gen *Generated, rng *rand.Rand) *typed {
 	bank := Riddles()
 	riddles := func(e words.Entry) []string {
 		k := strings.ToLower(e.Prompt)

@@ -140,7 +140,38 @@ func Make(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, 
 
 // MakeWith is Make with content an AI wrote.
 func MakeWith(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rules words.Rules, rng *rand.Rand, gen *Generated) Puzzle {
-	p := makeKind(k, lock, depth, deck, lang, rng, gen)
+	return withRules(makeKind(k, lock, depth, deck, deck, lang, rng, gen), lang, rules)
+}
+
+// OneWord reports whether puzzles of kind k are about a single word, so a
+// hand-made map can choose the word (see MakeWord). Odd one out, pair
+// matching and crosswords use several words.
+func OneWord(k Kind) bool {
+	switch k {
+	case OddOneOut, Pairs, Crossword:
+		return false
+	}
+	return true
+}
+
+// MakeWord makes a puzzle of kind k about word id of deck, for a lock whose
+// word was chosen by hand. It returns nil when k is not a OneWord kind, when
+// id is not in the deck, or when that word cannot make k: too short to
+// scramble or to put on a tumbler lock, no riddle, or no gap-fill sentence
+// in gen.
+func MakeWord(k Kind, lock Lock, depth int, deck *words.Deck, id int, lang *words.Language, rules words.Rules, rng *rand.Rand, gen *Generated) Puzzle {
+	if !OneWord(k) || id < 0 || id >= deck.Len() {
+		return nil
+	}
+	p := makeKind(k, lock, depth, deck, fixed{deck, id}, lang, rng, gen)
+	if p.Kind() != k {
+		return nil
+	}
+	return withRules(p, lang, rules)
+}
+
+// withRules sets how answers in lang are graded.
+func withRules(p Puzzle, lang *words.Language, rules words.Rules) Puzzle {
 	switch p := p.(type) {
 	case *typed:
 		if p.lang == lang {
@@ -154,11 +185,39 @@ func MakeWith(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Langua
 	return p
 }
 
-func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Language, rng *rand.Rand, gen *Generated) Puzzle {
+// dealer deals the words a puzzle is about: a *words.Deck, or fixed.
+type dealer interface {
+	Next() (words.Entry, int)
+	NextWhere(ok func(words.Entry) bool) (words.Entry, int, bool)
+	Entries() []words.Entry
+}
+
+// fixed deals only word id of a deck, for MakeWord.
+type fixed struct {
+	deck *words.Deck
+	id   int
+}
+
+func (f fixed) Entries() []words.Entry { return f.deck.Entries() }
+
+func (f fixed) Next() (words.Entry, int) { return f.deck.Entries()[f.id], f.id }
+
+func (f fixed) NextWhere(ok func(words.Entry) bool) (words.Entry, int, bool) {
+	e := f.deck.Entries()[f.id]
+	if ok != nil && !ok(e) {
+		return words.Entry{}, -1, false
+	}
+	return e, f.id, true
+}
+
+// makeKind makes a puzzle of kind k. Puzzles about one word take it from
+// one; the others deal from deck. When the words cannot make k, it makes a
+// spelling puzzle (MakeWord then refuses it).
+func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, one dealer, lang *words.Language, rng *rand.Rand, gen *Generated) Puzzle {
 	var p Puzzle
 	switch k {
 	case Cloze:
-		if t := newCloze(deck, lang, gen, rng); t != nil {
+		if t := newCloze(one, lang, gen, rng); t != nil {
 			p = t
 		}
 	case OddOneOut:
@@ -170,11 +229,11 @@ func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Langua
 			p = m
 		}
 	case Riddle:
-		if t := newRiddle(deck, lang, gen, rng); t != nil {
+		if t := newRiddle(one, lang, gen, rng); t != nil {
 			p = t
 		}
 	case Tumbler:
-		if t := newTumbler(deck, depth, lang, rng); t != nil {
+		if t := newTumbler(one, depth, lang, rng); t != nil {
 			p = t
 		}
 	case Crossword:
@@ -185,7 +244,7 @@ func makeKind(k Kind, lock Lock, depth int, deck *words.Deck, lang *words.Langua
 	if p != nil {
 		return p
 	}
-	e, id := deck.Next()
+	e, id := one.Next()
 	var t *typed // not a Puzzle: a nil *typed in an interface is not nil
 	switch k {
 	case Reverse:

@@ -13,6 +13,19 @@ version as its release notes.
   Lists), progress from the grown-up's other games, and settings a grown-up
   set, which Settings then shows locked. It works the same offline, and
   unlinking keeps your progress.
+- **Quests and hand-made maps.** *New Adventure → Quest* plays hand-made
+  floors in order, with an introduction and an ending. A `.hwquest` (a
+  quest) or `.hwmap` (one floor) file dropped on the window is checked and
+  kept in the `quests` folder; one quest comes with the game.
+- **Play-testing quests in the web game.** `?quest=<address>` in the web
+  game's address fetches a quest file from the game's own website and
+  starts it, saving nothing (for halpwords-server's map editor).
+- `pkg/maps` (new): the `.hwmap` and `.hwquest` formats (`Map`, `Quest`,
+  `ParseMap`, `ParseQuest`, `Load`, `Encode`) and their checks
+  (`Map.Check`, `Quest.Check`, returning `[]Problem` with the cell), plus
+  the names a map can use (`MonsterKinds`, `BossKinds`, `Traits`, `Themes`,
+  `PuzzleNames`, `DoorPuzzles`, `ChestPuzzles`) and `FindWord`.
+  `pkg/puzzle`: `OneWord` and `MakeWord`, a puzzle about a chosen word.
 - **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
   line gives a list its own cloze puzzles, used with or without the AI
   helper (not on scored runs). The answer must be one of the list's

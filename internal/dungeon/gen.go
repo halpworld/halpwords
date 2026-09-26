@@ -185,20 +185,26 @@ func (f *Level) placeDoors(rng *rand.Rand) {
 	}
 }
 
-func (f *Level) placeStartAndExit(rng *rand.Rand) {
-	start := f.Rooms[0]
-	f.Start = start.Center()
-	// Face the most open direction.
-	best := -1
+// openest returns the direction from p with the longest run of floor, for
+// the hero to face at the start.
+func (f *Level) openest(p Point) Dir {
+	best, dir := -1, North
 	for d := North; d <= West; d++ {
 		n := 0
-		for p := f.Start.Step(d); f.At(p) == Floor && n < 10; p = p.Step(d) {
+		for q := p.Step(d); f.At(q) == Floor && n < 10; q = q.Step(d) {
 			n++
 		}
 		if n > best {
-			best, f.StartDir = n, d
+			best, dir = n, d
 		}
 	}
+	return dir
+}
+
+func (f *Level) placeStartAndExit(rng *rand.Rand) {
+	start := f.Rooms[0]
+	f.Start = start.Center()
+	f.StartDir = f.openest(f.Start)
 	// The stairs go in the room furthest from the start.
 	dist := f.distances(f.Start, true)
 	far, farD := 1, -1
@@ -278,21 +284,27 @@ func (f *Level) placeChests(rng *rand.Rand) {
 			continue
 		}
 		p := cells[rng.IntN(len(cells))]
-		c := &Chest{Gold: 5 + rng.IntN(10) + f.Depth*4}
-		if rng.IntN(2) == 0 {
-			c.Potions = 1
-		}
-		if rng.IntN(3) == 0 {
-			c.Items = append(c.Items, chestItems[rng.IntN(len(chestItems))])
-		}
-		if rng.Float64() < GearChance(f.Depth) {
-			g := rpg.RandomGear(f.Depth, rng)
-			c.Gear = &g
-		}
+		c := f.newChest(rng)
 		c.Mimic = rng.Float64() < MimicChance(f.Depth)
 		f.Chests[p] = c
 		want--
 	}
+}
+
+// newChest fills a chest with loot for the floor's depth.
+func (f *Level) newChest(rng *rand.Rand) *Chest {
+	c := &Chest{Gold: 5 + rng.IntN(10) + f.Depth*4}
+	if rng.IntN(2) == 0 {
+		c.Potions = 1
+	}
+	if rng.IntN(3) == 0 {
+		c.Items = append(c.Items, chestItems[rng.IntN(len(chestItems))])
+	}
+	if rng.Float64() < GearChance(f.Depth) {
+		g := rpg.RandomGear(f.Depth, rng)
+		c.Gear = &g
+	}
+	return c
 }
 
 // chestItems are the items other than potions that chests can hold.
