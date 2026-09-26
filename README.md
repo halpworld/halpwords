@@ -717,6 +717,13 @@ On a quest floor, monsters, puzzles and loot work as on any other floor.
 Taking the stairs on the last floor ends the quest. Quests have Save
 Shrines only where their maker put them.
 
+**Play-testing.** The map editor on a Halpwords server can open the web
+game with a quest to try out: the page's address ends in
+`?quest=<address of the .hwquest file>`. The game fetches the file only
+from its own website (the same address up to the path; anything else is
+refused), checks it, and starts it. Nothing is saved during a play-test,
+and your own saves in that browser are left alone.
+
 Both files are JSON. A map is a grid of up to 40×40 cells, one character
 each, with the monsters, the puzzles on sealed doors and chests, and notes
 on walls listed by cell:

@@ -11,6 +11,9 @@ version as its release notes.
   floors in order, with an introduction and an ending. A `.hwquest` (a
   quest) or `.hwmap` (one floor) file dropped on the window is checked and
   kept in the `quests` folder; one quest comes with the game.
+- **Play-testing quests in the web game.** `?quest=<address>` in the web
+  game's address fetches a quest file from the game's own website and
+  starts it, saving nothing (for halpwords-server's map editor).
 - `pkg/maps` (new): the `.hwmap` and `.hwquest` formats (`Map`, `Quest`,
   `ParseMap`, `ParseQuest`, `Load`, `Encode`) and their checks
   (`Map.Check`, `Quest.Check`, returning `[]Problem` with the cell), plus

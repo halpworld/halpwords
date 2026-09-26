@@ -178,21 +178,29 @@ func (s *Quests) Update(ctx *game.Context) error {
 // start sets off on the chosen quest: to the language picker when the
 // quest works in any language, or straight to the class.
 func (s *Quests) start(ctx *game.Context) {
-	q := s.list[s.sel].q
-	setup := runSetup{mode: compete.Adventure, quest: q}
-	if q.Language == "" {
-		ctx.Sound.Play(audio.Select)
-		ctx.Replace(NewAdventure(ctx, setup))
-		return
-	}
-	lang, _ := words.Lookup(q.Language)
-	if len(ctx.ListsFor(lang.Code)) == 0 {
+	next, msg := questStart(ctx, s.list[s.sel].q)
+	if next == nil {
 		ctx.Sound.Play(audio.Wrong)
-		s.msg, s.msgCol = "This quest is in "+lang.Name+", and there are no "+lang.Name+" word lists.", pal.Rose
+		s.msg, s.msgCol = msg, pal.Rose
 		return
 	}
 	ctx.Sound.Play(audio.Select)
-	ctx.Replace(NewClassPick(lang, setup))
+	ctx.Replace(next)
+}
+
+// questStart returns the scene that sets off on quest q: the language
+// picker when the quest works in any language, or the class. When the
+// quest can't start, it says why instead.
+func questStart(ctx *game.Context, q *maps.Quest) (game.Scene, string) {
+	setup := runSetup{mode: compete.Adventure, quest: q}
+	if q.Language == "" {
+		return NewAdventure(ctx, setup), ""
+	}
+	lang, _ := words.Lookup(q.Language)
+	if len(ctx.ListsFor(lang.Code)) == 0 {
+		return nil, "This quest is in " + lang.Name + ", and there are no " + lang.Name + " word lists."
+	}
+	return NewClassPick(lang, setup), ""
 }
 
 // questRows is how many quests the picker shows at once.
