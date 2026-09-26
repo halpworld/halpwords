@@ -5,10 +5,13 @@ package main
 import (
 	"image"
 	"log"
+	"net/http"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/playtest"
+	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/internal/scene"
 	"github.com/halpworld/halpwords/pkg/proc"
 )
@@ -24,13 +27,36 @@ func main() {
 	}
 	ebiten.SetWindowIcon(icons) // macOS shows the app's own icon instead
 
-	g, err := game.New(scene.NewStart)
+	g, err := game.New(firstScene())
 	if err != nil {
 		game.Crash(err, nil)
 		log.Fatal(err)
 	}
-	if err := ebiten.RunGame(g); err != nil {
+	err = ebiten.RunGame(g)
+	g.Close() // sends the last answers to a linked account
+	if err != nil {
 		game.Crash(err, nil)
 		log.Fatal(err)
 	}
+}
+
+// firstScene is the title, or in the web game a play-test when the page's
+// address names a quest (internal/playtest). A play-test keeps every file
+// in memory from the start, so the player's own saves are neither read
+// nor changed.
+func firstScene() func(*game.Context) game.Scene {
+	page := playtest.Page()
+	if page == "" {
+		return scene.NewStart
+	}
+	u, err := playtest.FromPage(page)
+	switch {
+	case err != nil:
+		save.UseMemory()
+		return scene.PlaytestError(err)
+	case u != nil:
+		save.UseMemory()
+		return scene.NewPlaytest(http.DefaultClient, u)
+	}
+	return scene.NewStart
 }

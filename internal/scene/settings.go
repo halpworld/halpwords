@@ -262,6 +262,9 @@ func (s *Settings) Update(ctx *game.Context) error {
 		fresh = input.Pressed(ebiten.KeyArrowRight, ebiten.KeyD)
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		if s.sel == n-1 {
+			if s.locked(ctx) {
+				return nil
+			}
 			s.reset(ctx)
 			return nil
 		}
@@ -273,6 +276,7 @@ func (s *Settings) Update(ctx *game.Context) error {
 	switch {
 	case s.sel == 0:
 		s.switchTab(ctx, step)
+	case s.locked(ctx):
 	case s.sel < n-1:
 		l := list[s.sel-1]
 		switch {
@@ -287,6 +291,19 @@ func (s *Settings) Update(ctx *game.Context) error {
 		s.note = ""
 	}
 	return nil
+}
+
+// locked refuses a change to settings a grown-up set on the website, and
+// says so.
+func (s *Settings) locked(ctx *game.Context) bool {
+	lang := s.lang()
+	if lang == nil || !ctx.Profile.Settings.IsLocked(lang) {
+		return false
+	}
+	ctx.Sound.Play(audio.Wrong)
+	s.note = ""
+	ctx.Notify("Locked by a grown-up")
+	return true
 }
 
 // tabs is how many tabs there are.
@@ -457,6 +474,8 @@ func (s *Settings) Draw(dst *ebiten.Image, ctx *game.Context) {
 	switch {
 	case s.note != "":
 		f.DrawCentered(dst, s.note, cx, by+18, 1, pal.Lime)
+	case s.lang() != nil && ctx.Profile.Settings.IsLocked(s.lang()):
+		f.DrawCentered(dst, "Locked. "+ctx.Profile.Settings.LockNote, cx, by+18, 1, pal.Yellow)
 	case s.lang() != nil:
 		f.DrawCentered(dst, "Hardcore runs always use the standard settings, so scores compare.", cx, by+18, 1, pal.Tan)
 	}

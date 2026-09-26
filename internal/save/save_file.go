@@ -10,9 +10,9 @@ import (
 	"sort"
 )
 
-// Dir is where saves, settings and the user's own word lists live, e.g.
+// diskDir is where saves, settings and the user's own word lists live, e.g.
 // ~/Library/Application Support/halpwords on macOS.
-func Dir() (string, error) {
+func diskDir() (string, error) {
 	d, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -20,19 +20,19 @@ func Dir() (string, error) {
 	return filepath.Join(d, "halpwords"), nil
 }
 
-// Read returns the contents of the named file.
-func Read(name string) ([]byte, error) {
-	dir, err := Dir()
+// diskRead returns the contents of the named file.
+func diskRead(name string) ([]byte, error) {
+	dir, err := diskDir()
 	if err != nil {
 		return nil, err
 	}
 	return os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
 }
 
-// Write replaces the named file. It writes a temporary file first, so a
+// diskWrite replaces the named file. It writes a temporary file first, so a
 // crash part way through never leaves half a save.
-func Write(name string, data []byte) error {
-	root, err := Dir()
+func diskWrite(name string, data []byte) error {
+	root, err := diskDir()
 	if err != nil {
 		return err
 	}
@@ -55,23 +55,23 @@ func Write(name string, data []byte) error {
 	return os.Rename(tmp.Name(), filepath.Join(dir, path.Base(name)))
 }
 
-// WritePrivate replaces the named file with one only the user can read, for
+// diskWritePrivate replaces the named file with one only the user can read, for
 // secrets such as API keys.
-func WritePrivate(name string, data []byte) error {
-	if err := Write(name, data); err != nil {
+func diskWritePrivate(name string, data []byte) error {
+	if err := diskWrite(name, data); err != nil {
 		return err
 	}
-	dir, err := Dir()
+	dir, err := diskDir()
 	if err != nil {
 		return err
 	}
 	return os.Chmod(filepath.Join(dir, filepath.FromSlash(name)), 0o600)
 }
 
-// Remove deletes the named file. Removing a file that is not there is not an
+// diskRemove deletes the named file. Removing a file that is not there is not an
 // error.
-func Remove(name string) error {
-	dir, err := Dir()
+func diskRemove(name string) error {
+	dir, err := diskDir()
 	if err != nil {
 		return err
 	}
@@ -81,10 +81,10 @@ func Remove(name string) error {
 	return nil
 }
 
-// List returns the names of the files in the folder dir, sorted. A folder
+// diskList returns the names of the files in the folder dir, sorted. A folder
 // that is not there is empty.
-func List(dir string) ([]string, error) {
-	root, err := Dir()
+func diskList(dir string) ([]string, error) {
+	root, err := diskDir()
 	if err != nil {
 		return nil, err
 	}

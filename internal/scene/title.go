@@ -29,22 +29,25 @@ const (
 	titleContinue titleItem = iota
 	titleNew
 	titlePractice
+	titleTogether
 	titleGrimoire
 	titleFame
 	titleWordLists
 	titleSettings
 	titleAI
+	titleAccount
 	titleQuit
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Quit"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Play Together", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit"}
 
 // NewTitle creates the title screen.
 func NewTitle(ctx *game.Context) game.Scene {
+	ctx.EndSession()
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI},
+		items:   []titleItem{titleNew, titlePractice, titleTogether, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount},
 	}
 	if runtime.GOOS != "js" {
 		t.items = append(t.items, titleQuit) // a web page is closed, not quit
@@ -63,6 +66,10 @@ func (t *Title) rows() int { return (len(t.items) + 1) / 2 }
 func (t *Title) Update(ctx *game.Context) error {
 	for _, tr := range t.torches {
 		tr.Update()
+	}
+	if d := droppedQuests(); len(d) > 0 {
+		ctx.Replace(NewQuests(ctx, d...))
+		return nil
 	}
 	n := len(t.items)
 	switch {
@@ -102,11 +109,13 @@ func (t *Title) Update(ctx *game.Context) error {
 		ctx.Replace(map[titleItem]func(*game.Context) game.Scene{
 			titleNew:       NewNewGame,
 			titlePractice:  NewPractice,
+			titleTogether:  NewLobby,
 			titleGrimoire:  func(ctx *game.Context) game.Scene { return NewGrimoire(ctx, nil) },
 			titleFame:      NewHallOfFame,
 			titleWordLists: NewWordLists,
 			titleSettings:  NewSettings,
 			titleAI:        NewAISetup,
+			titleAccount:   NewAccount,
 		}[it](ctx))
 	}
 	return nil
@@ -135,7 +144,10 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 	// Menu, in two columns. Five rows sit a little closer and higher.
 	rows := t.rows()
 	step, my, savedY := 26, 196, 172
-	if rows > 4 {
+	switch {
+	case rows > 5:
+		step, my, savedY = 21, 180, 162
+	case rows > 4:
 		step, my, savedY = 24, 186, 166
 	}
 	if t.saved != "" {

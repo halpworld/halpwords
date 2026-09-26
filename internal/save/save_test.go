@@ -85,6 +85,54 @@ func TestWritePrivate(t *testing.T) {
 	}
 }
 
+// In memory, files start empty, and nothing reaches the user's folder.
+func TestUseMemory(t *testing.T) {
+	useTempDir(t)
+	if err := Write("hero.json", []byte("on disk")); err != nil {
+		t.Fatal(err)
+	}
+	UseMemory()
+	defer func() { memMu.Lock(); memory = nil; memMu.Unlock() }()
+	if !InMemory() {
+		t.Fatal("not in memory")
+	}
+	if _, err := Dir(); err == nil {
+		t.Error("a folder while in memory")
+	}
+	if _, err := Read("hero.json"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("read the folder's file: %v", err)
+	}
+	for _, n := range []string{"quests/b.hwquest", "quests/a.hwquest", "hero.json", "words/x.txt"} {
+		if err := Write(n, []byte(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := WritePrivate("ai.json", []byte("key")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Read("hero.json"); err != nil || string(got) != "hero.json" {
+		t.Errorf("read %q, %v", got, err)
+	}
+	if names, _ := List("quests/"); len(names) != 2 || names[0] != "a.hwquest" || names[1] != "b.hwquest" {
+		t.Errorf("listed %q", names)
+	}
+	if err := Remove("hero.json"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Read("hero.json"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("read a removed file: %v", err)
+	}
+	memMu.Lock()
+	memory = nil
+	memMu.Unlock()
+	if got, err := Read("hero.json"); err != nil || string(got) != "on disk" {
+		t.Errorf("the folder's file is now %q, %v", got, err)
+	}
+	if _, err := Read("ai.json"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the key reached the folder: %v", err)
+	}
+}
+
 func TestAll(t *testing.T) {
 	useTempDir(t)
 	if names, err := All(); err != nil || len(names) != 0 {

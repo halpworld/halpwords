@@ -121,7 +121,7 @@ func TestAnswersGoInTheGrimoire(t *testing.T) {
 		t.Fatalf("mistakes %v", card.Mistakes)
 	}
 	// Another adventure knows the word.
-	r := startRun(ctx, c.run.lang, rpg.Scribe, 7)
+	r := startRun(ctx, c.run.lang, rpg.Scribe, 7, nil)
 	if r.deck.Memory().Box(e) != 1 {
 		t.Fatal("a new adventure forgot the word")
 	}
@@ -145,7 +145,7 @@ func TestSettingsChangeGrading(t *testing.T) {
 		t.Fatalf("fast timers: time scale %v", got)
 	}
 	// Puzzles are graded by the same rules.
-	c.run.depth = 2
+	c.run.depth, c.level.Depth = 2, 2
 	lp := &lockPuzzle{lock: puzzle.Door}
 	c.puzzle = lp
 	for i := 0; i < 2000; i++ {

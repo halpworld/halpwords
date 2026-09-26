@@ -2,6 +2,8 @@ package scene
 
 import (
 	"bytes"
+	"fmt"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -24,9 +26,10 @@ const (
 	pauseQuit
 	pauseGiveUp
 	pauseOptions
+	pauseReport
 )
 
-var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend and quit", "Quit to title", "Give up the run", "Sound & screen"}
+var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend and quit", "Quit to title", "Give up the run", "Sound & screen", "Report"}
 
 // pause stops the game and opens the pause menu. Everything stands still,
 // including the battle clock.
@@ -52,12 +55,16 @@ func (c *Crawl) unpause(ctx *game.Context) {
 // pauseItems lists the pause menu. Fleeing is only for battles, and a
 // Hardcore run can't be left without saving: it can only be given up.
 func (c *Crawl) pauseItems() []pauseItem {
-	items := []pauseItem{pauseResume, pauseItems, pauseGrimoire, pauseOptions, pauseSuspend, pauseQuit}
+	items := []pauseItem{pauseResume, pauseItems, pauseGrimoire, pauseOptions, pauseReport, pauseSuspend, pauseQuit}
 	if c.resume == modeBattle {
-		items = []pauseItem{pauseResume, pauseFlee, pauseItems, pauseGrimoire, pauseOptions, pauseSuspend, pauseQuit}
+		items = []pauseItem{pauseResume, pauseFlee, pauseItems, pauseGrimoire, pauseOptions, pauseReport, pauseSuspend, pauseQuit}
 	}
 	if c.run.hardcore() {
 		items[len(items)-1] = pauseGiveUp
+	}
+	if c.run.race != nil {
+		// A race can't be saved.
+		items = slices.DeleteFunc(items, func(it pauseItem) bool { return it == pauseSuspend })
 	}
 	return items
 }
@@ -118,6 +125,9 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 	case pauseOptions:
 		c.play(audio.Select)
 		ctx.Push(newOptions(ctx))
+	case pauseReport:
+		c.play(audio.Select)
+		ctx.Push(newReport(ctx, c.run.seedCode()))
 	case pauseGiveUp:
 		c.mode = modeQuit
 	case pauseSuspend:
@@ -141,6 +151,10 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 // updateQuit asks whether to quit without saving.
 func (c *Crawl) updateQuit(ctx *game.Context) {
 	switch {
+	case (input.Pressed(ebiten.KeyY) || input.Confirm()) && c.run.race != nil:
+		c.play(audio.Fall)
+		c.run.race.fell = true
+		ctx.Replace(newRaceEnd(ctx, c.run, c.pos))
 	case (input.Pressed(ebiten.KeyY) || input.Confirm()) && c.run.hardcore():
 		c.play(audio.Fall)
 		ctx.Replace(newGameOver(ctx, c.run, true))
@@ -169,17 +183,23 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Black, 0.5))
 
 	items := c.pauseItems()
-	w, h := 360, 92+len(items)*18
+	rowH := 18
+	if len(items) > 7 {
+		rowH = 16 // eight items fit the view in a battle
+	}
+	w, h := 360, 92+len(items)*rowH
 	x, y := viewX+vw/2-w/2, viewY+(vh-22)/2-h/2
 	gfx.Window(view, x, y, w, h)
 	f.DrawCentered(view, "PAUSED", x+w/2, y+10, 2, pal.Yellow)
 	about := c.run.mode.String() + " · seed " + c.run.seedCode()
-	if c.run.hardcore() {
+	if c.run.race != nil {
+		about = fmt.Sprintf("Race to floor %d", c.run.race.goal)
+	} else if c.run.hardcore() {
 		about += " · score " + groupDigits(c.run.score())
 	}
 	f.DrawCentered(view, about, x+w/2, y+42, 1, pal.Tan)
 	for i, it := range items {
-		iy := y + 62 + i*18
+		iy := y + 62 + i*rowH
 		col := pal.Steel
 		switch {
 		case !c.canChoose(it):
@@ -195,6 +215,8 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 
 	note, ncol := "Your progress is saved.", pal.Lime
 	switch {
+	case c.run.race != nil:
+		note, ncol = "The race goes on while you pause!", pal.Tan
 	case c.resume != modeExplore:
 		note, ncol = "Win or flee the battle to suspend.", pal.Tan
 	case c.run.hardcore():

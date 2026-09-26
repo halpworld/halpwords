@@ -13,8 +13,8 @@ import (
 
 const prefix = "halpwords/"
 
-// Dir fails in a browser: there is no folder, only local storage.
-func Dir() (string, error) { return "", errors.New("no user folder in a web browser") }
+// diskDir fails in a browser: there is no folder, only local storage.
+func diskDir() (string, error) { return "", errors.New("no user folder in a web browser") }
 
 // storage calls a local storage method. Browsers throw when storage is off or
 // full, which syscall/js turns into a panic.
@@ -31,8 +31,8 @@ func storage(method string, args ...any) (v js.Value, err error) {
 	return ls.Call(method, args...), nil
 }
 
-// Read returns the contents of the named file.
-func Read(name string) ([]byte, error) {
+// diskRead returns the contents of the named file.
+func diskRead(name string) ([]byte, error) {
 	v, err := storage("getItem", prefix+name)
 	if err != nil {
 		return nil, err
@@ -43,24 +43,24 @@ func Read(name string) ([]byte, error) {
 	return []byte(v.String()), nil
 }
 
-// Write replaces the named file.
-func Write(name string, data []byte) error {
+// diskWrite replaces the named file.
+func diskWrite(name string, data []byte) error {
 	_, err := storage("setItem", prefix+name, string(data))
 	return err
 }
 
-// WritePrivate replaces the named file. Local storage belongs to the page,
+// diskWritePrivate replaces the named file. Local storage belongs to the page,
 // so it is as private as a browser allows.
-func WritePrivate(name string, data []byte) error { return Write(name, data) }
+func diskWritePrivate(name string, data []byte) error { return diskWrite(name, data) }
 
-// Remove deletes the named file.
-func Remove(name string) error {
+// diskRemove deletes the named file.
+func diskRemove(name string) error {
 	_, err := storage("removeItem", prefix+name)
 	return err
 }
 
-// List returns the names of the files in the folder dir, sorted.
-func List(dir string) ([]string, error) {
+// diskList returns the names of the files in the folder dir, sorted.
+func diskList(dir string) ([]string, error) {
 	ls, err := storage("valueOf") // the storage itself, or an error when it is off
 	if err != nil {
 		return nil, err

@@ -137,7 +137,10 @@ type floater struct {
 // Crawl is the first-person dungeon. Exploring, battles and puzzles all
 // happen here, so the dungeon stays on screen.
 type Crawl struct {
-	run   *run
+	run *run
+	// kind is the kind of answer being graded, for the grown-up's
+	// account: "attack", "dodge" or "puzzle".
+	kind  string
 	level *dungeon.Level
 	theme *proc.Theme
 	tex   *raycast.Textures
@@ -174,6 +177,9 @@ type Crawl struct {
 
 	lore  []string // notes from the Dungeon Director still to find
 	steps int      // steps taken on this floor
+	// noted is the wall whose note was read last, so it is read once
+	// while the hero faces it.
+	noted *dungeon.Point
 
 	shake, hurt int         // ticks of screen shake and red flash left
 	freeze      int         // ticks the action stops for, after a critical hit
@@ -241,6 +247,14 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
 	c.run.ai.poll(c)
+	if c.run.race != nil {
+		// A race sends only its progress, to the room.
+		if c.updateRace(ctx) {
+			return nil
+		}
+	} else {
+		ctx.Playing(c.run.linkMode(), c.run.lang.Code, func() int { return c.run.depth })
+	}
 	switch {
 	case c.mode == modePause:
 		c.updatePause(ctx)
@@ -328,6 +342,8 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		}
 	case modeDead:
 		switch {
+		case c.run.race != nil && (input.Confirm() || input.Back()):
+			ctx.Replace(newRaceEnd(ctx, c.run, c.pos))
 		case c.run.hardcore() && (input.Confirm() || input.Back()):
 			ctx.Replace(newGameOver(ctx, c.run, false))
 		case input.Confirm():
@@ -523,6 +539,7 @@ func (c *Crawl) monstersTurn(hero dungeon.Point) {
 func (c *Crawl) arrived() {
 	a := c.anim
 	c.prev = nil
+	c.readNote()
 	if !a.bump && (a.x0 != a.x1 || a.y0 != a.y1) && c.level.At(c.pos) == dungeon.Stairs {
 		if b := c.level.Boss(); b != nil {
 			c.run.say(fmt.Sprintf("The %s's dark power holds the stairs shut!", b.Name()), pal.Orange)
@@ -530,6 +547,22 @@ func (c *Crawl) arrived() {
 			c.run.say("Stairs lead down! Press Enter to descend.", pal.Lime)
 		}
 	}
+}
+
+// readNote reads out the note on the wall the hero faces, on a hand-made
+// map, unless it was just read.
+func (c *Crawl) readNote() {
+	ahead := c.pos.Step(c.facing)
+	text, ok := c.level.Notes[ahead]
+	if !ok {
+		c.noted = nil
+		return
+	}
+	if c.noted != nil && *c.noted == ahead {
+		return
+	}
+	c.noted = &ahead
+	c.run.sayLong("Written on the wall: “"+text+"”", pal.Tan)
 }
 
 // interact uses whatever is in front of the hero, or waits a turn.
@@ -594,7 +627,15 @@ func (c *Crawl) descend(ctx *game.Context) {
 		return
 	}
 	r := c.run
+	if r.lastFloor() {
+		c.finishQuest(ctx)
+		return
+	}
 	r.depth++
+	if r.race != nil && r.depth >= r.race.goal {
+		c.finishRace(ctx)
+		return
+	}
 	r.remember()
 	c.play(audio.Stairs)
 	ctx.Replace(newCrawl(r))
@@ -606,6 +647,9 @@ func (c *Crawl) die() {
 	c.run.hero.HP = 0
 	c.play(audio.Fall)
 	c.run.say("You have fallen!", pal.Rose)
+	if rr := c.run.race; rr != nil {
+		rr.fell = true
+	}
 	if c.run.hardcore() && c.run.onDisk {
 		save.Remove(saveName) // one life
 		c.run.onDisk = false

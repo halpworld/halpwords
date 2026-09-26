@@ -92,3 +92,26 @@ func TestInMemoryProfileNeverWrites(t *testing.T) {
 		t.Fatal("an in-memory profile wrote a file")
 	}
 }
+
+func TestLockedSettings(t *testing.T) {
+	useTempDir(t)
+	fr, _ := words.Lookup("fr")
+	p, _ := Load()
+	p.disk = true
+	own := Preset(fr)
+	own.Highlight = true
+	p.Settings.Set(fr, own)
+	locked := Preset(fr)
+	locked.Timer = Relaxed
+	p.Settings.Locked = map[string]LangSettings{"fr": locked}
+	if p.Settings.For(fr) != locked || !p.Settings.IsLocked(fr) || p.Settings.Own(fr) != own {
+		t.Fatal("the lock doesn't apply")
+	}
+	if err := p.SaveSettings(); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := Load()
+	if q.Settings.IsLocked(fr) || q.Settings.For(fr) != own {
+		t.Fatal("the lock was saved")
+	}
+}

@@ -19,13 +19,15 @@ type modeChoice struct {
 	about [2]string
 	mode  compete.Mode
 	seed  bool // asks for a seed code
+	quest bool // goes to the quest picker
 }
 
 var modeChoices = []modeChoice{
-	{"Adventure", [2]string{"Save Shrines keep your progress.", "If you fall, you wake at the last one."}, compete.Adventure, false},
-	{"Hardcore", [2]string{"One life, no shrines, and a score.", "Your best runs go in the Hall of Fame."}, compete.Hardcore, false},
-	{"Daily Dungeon", [2]string{"Today's Hardcore dungeon: everyone with", "the same word lists gets the same one."}, compete.Daily, false},
-	{"Seed Challenge", [2]string{"Play a friend's Hardcore dungeon:", "type its seed code or share code."}, compete.Hardcore, true},
+	{"Adventure", [2]string{"Save Shrines keep your progress.", "If you fall, you wake at the last one."}, compete.Adventure, false, false},
+	{"Hardcore", [2]string{"One life, no shrines, and a score.", "Your best runs go in the Hall of Fame."}, compete.Hardcore, false, false},
+	{"Daily Dungeon", [2]string{"Today's Hardcore dungeon: everyone with", "the same word lists gets the same one."}, compete.Daily, false, false},
+	{"Seed Challenge", [2]string{"Play a friend's Hardcore dungeon:", "type its seed code or share code."}, compete.Hardcore, true, false},
+	{"Quest", [2]string{"Hand-made floors, one after another,", "from a teacher, a friend or you."}, compete.Adventure, false, true},
 }
 
 // NewGame chooses how to play a new adventure.
@@ -46,6 +48,10 @@ const maxCodeLen = 32
 
 // Update implements game.Scene.
 func (n *NewGame) Update(ctx *game.Context) error {
+	if d := droppedQuests(); len(d) > 0 {
+		ctx.Replace(NewQuests(ctx, d...))
+		return nil
+	}
 	if n.entering {
 		n.updateCode(ctx)
 		return nil
@@ -63,6 +69,10 @@ func (n *NewGame) Update(ctx *game.Context) error {
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		ctx.Sound.Play(audio.Select)
 		mc := modeChoices[n.sel]
+		if mc.quest {
+			ctx.Replace(NewQuests(ctx))
+			return nil
+		}
 		if mc.seed {
 			n.entering, n.err = true, ""
 			ctx.Input.Chars = ctx.Input.Chars[:0]

@@ -14,7 +14,7 @@ import (
 // dealKind puts a puzzle of kind k on a lock in front of the hero.
 func dealKind(t *testing.T, c *Crawl, lock puzzle.Lock, k puzzle.Kind) *lockPuzzle {
 	t.Helper()
-	c.run.depth = 7
+	c.run.depth, c.level.Depth = 7, 7
 	c.startPuzzle(c.pos, lock)
 	for n := 0; c.puzzle.p.Kind() != k; n++ {
 		if n == 500 {
