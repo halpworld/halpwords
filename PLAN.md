@@ -78,7 +78,8 @@ halpwords/
 │   ├── profile/                 # settings, word memory and Hall of Fame, kept between runs
 │   ├── llm/                     # provider interface, Anthropic + OpenAI-compatible,
 │   │                            # prompt templates, JSON validation, cache, budget
-│   └── save/                    # profiles, run saves, settings (JSON in user config dir)
+│   ├── playtest/                # the web game's play-test: a quest fetched from its own website
+│   └── save/                    # profiles, run saves, settings (JSON in user config dir, or memory)
 ├── pkg/                         # public API, also used by halpwords-server
 │   ├── words/                   # word packs, answer matching, Unicode normalisation, SRS
 │   ├── puzzle/                  # puzzle interface, generators, fixed puzzle bank
@@ -325,6 +326,16 @@ quarter turn at a time.
   picker with a built-in quest, dropped files kept in the `quests` folder,
   quest saves, and the intro and ending pages. Quests from a linked game
   and play-testing from the website come with the server (W10.3, W10.4).
+  *Now (server W10.3, done):* **play-testing** in the web game. The
+  server's *Play-test* button opens the web game with
+  `?quest=<address of the quest file>` (a short-lived signed link).
+  `internal/playtest` accepts only an address on the page's own origin
+  (same scheme, host and port, no user name, no backslashes), fetches it
+  with no cookies and no redirects, and checks it with `pkg/maps`; the
+  game then starts the quest (the language picker or the class). A
+  play-test keeps every file in memory (`save.UseMemory`) from before the
+  profile loads: nothing is saved, the player's own saves are neither
+  read nor changed, no AI key is loaded, and nothing is sent anywhere.
 - **Save points:** Save Shrines (§8). Falling wakes the hero at the last
   shrine they prayed at, on a new floor.
 - **Later:** sneaking up on a sleeping monster for a free first strike, and
