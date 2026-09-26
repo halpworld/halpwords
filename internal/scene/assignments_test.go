@@ -43,7 +43,8 @@ func assignContext(t *testing.T) *game.Context {
 				"access_token": "hwd_1", "expires_in": 86400, "refresh_token": "hwr_1", "refresh_expires_in": 86400})
 		case "/api/v1/lists":
 			json.NewEncoder(w).Encode(map[string]any{"lists": []any{map[string]any{
-				"id": "lst_animals", "version": 3, "title": "Animals", "language": "fr", "words": 3, "text": petsList}}})
+				"id": "lst_animals", "version": 3, "title": "Animals", "language": "fr", "words": 3, "text": petsList,
+				"riddles": []any{map[string]any{"english": "dog", "riddle": "I wag my tail at the postman."}}}}})
 		case "/api/v1/me":
 			json.NewEncoder(w).Encode(map[string]any{"learner": map[string]any{"id": "lrn_1", "display_name": "Aoife"},
 				"settings": map[string]any{}, "accommodations": map[string]any{}, "seen_by": []string{"guardian"},
@@ -210,24 +211,34 @@ func TestSaveWithQuestAndAssignment(t *testing.T) {
 	}
 }
 
+func TestAssignedListRiddles(t *testing.T) {
+	ctx := assignContext(t)
+	fr, _ := words.Lookup("fr")
+	r := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Adventure})
+	g := r.ai.generated(r)
+	if g == nil || len(g.Riddles["dog"]) != 1 {
+		t.Fatalf("the list's riddles are not in the run: %+v", g)
+	}
+}
+
 func TestDirectorIsToldTheAssignment(t *testing.T) {
 	ctx := assignContext(t)
 	fr, _ := words.Lookup("fr")
 	// A quest run: the run's words are the quest's.
 	r := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Adventure, assign: &assignRun{ID: "asg_right", List: "lst_animals", Title: "Animals"}})
-	if name, ws := r.directorAssignment(); name != "Animals" || ws != nil {
-		t.Fatalf("quest run: %q %v", name, ws)
+	if name, id, ws := r.directorAssignment(); name != "Animals" || id != "asg_right" || ws != nil {
+		t.Fatalf("quest run: %q %q %v", name, id, ws)
 	}
 	// Another Adventure in French hears about the next quest that counts
 	// in an Adventure, with its words.
 	r = newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Adventure})
-	name, ws := r.directorAssignment()
-	if name != "Animals" || len(ws) != 3 {
+	name, id, ws := r.directorAssignment()
+	if name != "Animals" || id == "" || len(ws) != 3 {
 		t.Fatalf("adventure: %q %v", name, ws)
 	}
 	// Not in another language.
 	la, _ := words.Lookup("la")
-	if name, _ := newRun(ctx, la, rpg.Knight, runSetup{mode: compete.Adventure}).directorAssignment(); name != "" {
+	if name, _, _ := newRun(ctx, la, rpg.Knight, runSetup{mode: compete.Adventure}).directorAssignment(); name != "" {
 		t.Fatalf("Latin run told about %q", name)
 	}
 }

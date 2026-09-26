@@ -144,6 +144,7 @@ func (c *Client) syncMe(ctx context.Context, gen int) error {
 	if c.gen != gen {
 		return ErrNotLinked
 	}
+	c.aiOff = false // the learner, as the server says now
 	old, _ := json.Marshal(c.st.Me)
 	now, _ := json.Marshal(&me)
 	if string(old) != string(now) {

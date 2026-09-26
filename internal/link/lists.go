@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/halpworld/halpwords/pkg/gameai"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -23,6 +24,8 @@ type wireList struct {
 	Language string `json:"language"`
 	Words    int    `json:"words"`
 	Text     string `json:"text"`
+	// Riddles came with W4.8; older servers leave them out.
+	Riddles []ListRiddle `json:"riddles,omitempty"`
 }
 
 // Lists returns the assigned lists, read-only: the game plays them like
@@ -125,7 +128,7 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 	}
 	var lists []got
 	for _, w := range body.Lists {
-		li := ListInfo{ID: w.ID, Version: w.Version, Title: w.Title, Language: w.Language, File: fileFor(w.ID)}
+		li := ListInfo{ID: w.ID, Version: w.Version, Title: w.Title, Language: w.Language, File: fileFor(w.ID), Riddles: w.Riddles}
 		l, err := words.Parse(strings.NewReader(w.Text), AssignedDir+"/"+li.File)
 		if err != nil || len(l.Entries) == 0 || !knownLang(l.Language) {
 			continue // a list this game can't read is left out
@@ -217,6 +220,43 @@ func (c *Client) syncQuests(ctx context.Context, gen int) error {
 	}
 	c.st.Quests = body.Assignments
 	return c.saveState()
+}
+
+// Riddles returns the riddles that came with those of lists that are
+// assigned, by English word in lower case, as puzzle.Generated keeps
+// them. Each is checked again as the game checks an AI's riddle.
+func (c *Client) Riddles(lists []*words.List) map[string][]string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out map[string][]string
+	for _, l := range lists {
+		if !IsAssigned(l) {
+			continue
+		}
+		i := slices.IndexFunc(c.st.Lists, func(li ListInfo) bool { return AssignedDir+"/"+li.File == l.File })
+		if i < 0 {
+			continue
+		}
+		for _, r := range c.st.Lists[i].Riddles {
+			k := strings.ToLower(strings.TrimSpace(r.English))
+			j := slices.IndexFunc(l.Entries, func(e words.Entry) bool { return strings.ToLower(e.Prompt) == k })
+			if j < 0 {
+				continue
+			}
+			rd, ok := gameai.CheckRiddle(r.Riddle, l.Entries[j])
+			if !ok || slices.Contains(out[k], rd) {
+				continue
+			}
+			if out == nil {
+				out = map[string][]string{}
+			}
+			out[k] = append(out[k], rd)
+		}
+	}
+	return out
 }
 
 func knownLang(code string) bool { _, ok := words.Lookup(code); return ok }

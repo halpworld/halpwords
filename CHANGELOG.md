@@ -7,6 +7,19 @@ version as its release notes.
 
 ### Added
 
+- **Halpwords AI.** A game linked to an account whose plan includes AI in
+  the game gets floor stories, gap-fill sentences, riddles, monster taunts
+  and memory tips from the Halpwords server, with no API key. It is on by
+  itself when available; AI Helper offers it as a provider and Off turns
+  it off. Only the words being learned are sent. Riddles a grown-up adds
+  to an assigned list come with the list.
+- `pkg/gameai`: the game's AI content shared with halpwords-server: the
+  task names (`Tasks`), the prompts (`DirectorPrompt`, `WordsPrompt`,
+  `ClozePrompt`, `RiddlesPrompt`, `TauntsPrompt`, `TipsPrompt`), the request
+  and reply shapes of `POST /api/v1/ai/{task}` (`DirectorRequest`,
+  `WordsRequest`, `ScriptReply`, `WordsReply`, `TauntsReply`, `TipsReply`),
+  and the checks every reply passes (`CheckScript`, `CheckCloze`,
+  `CheckRiddle`, `CheckTaunt`, `CheckTip`, and `Keep*` for whole replies).
 - **The web game can move house.** Ready for the move from
   `halpworld.github.io/halpwords` to `play.halpwords.com` (not live yet): a
   *We've moved* page for the old address (`web/moved`, `make build-moved`)

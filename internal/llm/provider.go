@@ -1,5 +1,6 @@
 // Package llm connects the game to a large language model, when a parent or
-// teacher has set one up: Anthropic (Claude), OpenAI, Meta or DeepSeek. It
+// teacher has set one up: Anthropic (Claude), OpenAI, Meta or DeepSeek, or
+// Halpwords AI through a linked account (halpwords.go). It
 // keeps the API key, counts what is spent against a budget, and makes the
 // dungeon's generated content: floor scripts, cloze sentences, riddles,
 // monster taunts, memory tips and new word lists. Everything it makes is

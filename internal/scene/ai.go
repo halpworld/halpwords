@@ -149,7 +149,7 @@ func (a *runAI) direct(r *run, depth int) {
 	if b := l.Boss(); b != nil {
 		f.Boss = b.Kind.Name
 	}
-	f.Quest, f.QuestWords = r.directorAssignment()
+	f.Quest, f.QuestID, f.QuestWords = r.directorAssignment()
 	svc := a.svc
 	a.directing[depth] = llm.Start(func() (*llm.Script, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -161,10 +161,11 @@ func (a *runAI) direct(r *run, depth int) {
 // directorAssignment is the assignment quest the Dungeon Director builds
 // floors around: the run's own (its words are the run's), or else the
 // one to do next in the run's language that counts in an Adventure, with
-// its words the player knows least first. It is "" when there is none.
-func (r *run) directorAssignment() (string, []words.Entry) {
+// its words the player knows least first. It returns the quest's name
+// and assignment ID, "" when there is none.
+func (r *run) directorAssignment() (string, string, []words.Entry) {
 	if r.assign != nil {
-		return r.assign.Title, nil
+		return r.assign.Title, r.assign.ID, nil
 	}
 	now := assignNow()
 	for _, q := range link.SortQuests(r.link.Quests(), now) {
@@ -175,10 +176,10 @@ func (r *run) directorAssignment() (string, []words.Entry) {
 			if l.ID != q.List.ID || l.Language != r.lang.Code || len(l.Entries) == 0 {
 				continue
 			}
-			return assignName(q), weakestFirst(r.deck.Memory(), l.Entries, maxAssignWords)
+			return assignName(q), q.ID, weakestFirst(r.deck.Memory(), l.Entries, maxAssignWords)
 		}
 	}
-	return "", nil
+	return "", "", nil
 }
 
 // maxAssignWords is how many of an assignment's words the Director is told.

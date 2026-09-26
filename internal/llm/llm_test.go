@@ -357,57 +357,6 @@ func TestKeys(t *testing.T) {
 func french() *words.Language { l, _ := words.Lookup("fr"); return l }
 func greek() *words.Language  { l, _ := words.Lookup("grc"); return l }
 
-func TestCheckCloze(t *testing.T) {
-	dog := words.Entry{Prompt: "dog", Answers: []string{"le chien"}}
-	for _, c := range []struct {
-		text, en string
-		want     string // "" when rejected
-	}{
-		{"Je promène ___ au parc.", "I walk the dog in the park.", "Je promène ___ au parc."},
-		{"Je promène le ____ au parc.", "I walk the dog in the park.", "Je promène ___ au parc."},
-		{"Le ___ aboie.", "The dog barks.", "___ aboie."},
-		{"Le chien et ___ jouent.", "The dog and the dog play.", ""}, // gives it away
-		{"Je promène le chien.", "I walk the dog.", ""},              // no gap
-		{"___ et ___", "x", ""},                      // two gaps
-		{"Je promène ___ au parc, putain.", "x", ""}, // not clean
-		{"I walk ___ in the park.", "I walk the dog in the park.", "I walk ___ in the park."},
-	} {
-		got, ok := CheckCloze(c.text, c.en, dog, french())
-		if (c.want == "") == ok || (ok && got.Text != c.want) {
-			t.Errorf("CheckCloze(%q) = %q, %v; want %q", c.text, got.Text, ok, c.want)
-		}
-	}
-	horse := words.Entry{Prompt: "horse", Answers: []string{"ὁ ἵππος"}}
-	if _, ok := CheckCloze("The ___ runs.", "The horse runs.", horse, greek()); ok {
-		t.Error("a Greek cloze needs Greek")
-	}
-	if _, ok := CheckCloze("τρέχει ___.", "The horse runs.", horse, greek()); !ok {
-		t.Error("a Greek cloze was refused")
-	}
-}
-
-func TestCheckRiddleAndTaunt(t *testing.T) {
-	cat := words.Entry{Prompt: "cat", Answers: []string{"le chat"}}
-	if _, ok := CheckRiddle("I purr on your lap and chase mice.", cat); !ok {
-		t.Error("good riddle refused")
-	}
-	if _, ok := CheckRiddle("I am a cat.", cat); ok {
-		t.Error("riddle naming the word accepted")
-	}
-	if _, ok := CheckTaunt("«Ton pain est à moi !»", "Your bread is mine!", french()); !ok {
-		t.Error("good taunt refused")
-	}
-	if tt, _ := CheckTaunt("«Ton pain est à moi !»", "Your bread is mine!", french()); tt.Text != "Ton pain est à moi !" {
-		t.Errorf("quotes not trimmed: %q", tt.Text)
-	}
-	if _, ok := CheckTaunt("I will eat you", "I will eat you", french()); ok {
-		t.Error("untranslated taunt accepted")
-	}
-	if tidy("Hi 🐉  there\nfriend") != "Hi there friend" {
-		t.Errorf("tidy: %q", tidy("Hi 🐉  there\nfriend"))
-	}
-}
-
 func TestFillWordsAndTips(t *testing.T) {
 	f := newFake(t)
 	s, store := f.service(Anthropic)

@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"io/fs"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,8 +44,9 @@ const (
 )
 
 // AISetup is where a parent or teacher connects a language model: they
-// choose a provider, give its API key, and can then pick the models, set a
-// budget and see what has been spent.
+// choose Halpwords AI, which comes with a linked account's plan and needs
+// no key, or a provider, give its API key, and can then pick the models,
+// set a budget and see what has been spent.
 type AISetup struct {
 	bg   *ebiten.Image
 	sel  int
@@ -73,8 +75,15 @@ func NewAISetup(ctx *game.Context) game.Scene {
 	return a
 }
 
-// providerChoices are the choices on the Provider row: off, then each one.
-func providerChoices() []*llm.Provider { return append([]*llm.Provider{nil}, llm.Providers...) }
+// providerChoices are the choices on the Provider row: off, Halpwords AI,
+// then each provider.
+func providerChoices() []llm.ProviderID {
+	ids := []llm.ProviderID{llm.Off, llm.Halpwords}
+	for _, p := range llm.Providers {
+		ids = append(ids, p.ID)
+	}
+	return ids
+}
 
 func (a *AISetup) rows(ctx *game.Context) int {
 	if ctx.AI.Provider() == nil {
@@ -145,16 +154,9 @@ func (a *AISetup) change(ctx *game.Context, step int) {
 	switch a.sel {
 	case aiRowProvider:
 		choices := providerChoices()
-		i := 0
-		for k, c := range choices {
-			if c == p {
-				i = k
-			}
-		}
-		next := choices[(i+step+len(choices))%len(choices)]
-		id := llm.Off
-		if next != nil {
-			id = next.ID
+		i := max(0, slices.Index(choices, ai.Chosen()))
+		id := choices[(i+step+len(choices))%len(choices)]
+		if llm.ProviderFor(id) != nil {
 			ai.Check(id)
 		}
 		a.saved(ctx, ai.SetProvider(id))
@@ -471,8 +473,11 @@ func (a *AISetup) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 	}
 	pname := "Off: play without AI"
-	if p != nil {
+	switch {
+	case p != nil:
 		pname = p.Name
+	case ai.Chosen() == llm.Halpwords:
+		pname = "Halpwords AI: no key needed"
 	}
 	row(aiRowProvider, "Provider", "◄ "+pname+" ►", pal.Ice, "", pal.Ash)
 	if p != nil {
@@ -511,6 +516,8 @@ func (a *AISetup) Draw(dst *ebiten.Image, ctx *game.Context) {
 		row(aiRowTry, "Try it", tv, pal.Ice, "", pal.Ash)
 		row(aiRowReset, "Spending", "Reset the counter to $0", pal.Ice, "", pal.Ash)
 		a.drawSpending(dst, ctx, p, x, y+rowH*n+20, w)
+	} else if ai.Chosen() == llm.Halpwords {
+		a.drawHalpwords(dst, ctx, x, y+rowH+26, w)
 	} else {
 		a.drawIntro(dst, ctx, x, y+rowH+26, w)
 	}
@@ -522,9 +529,11 @@ func (a *AISetup) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawCentered(dst, fit(f, a.about(ctx), game.ScreenW-24, 1), cx, by, 1, pal.Ice)
 	}
 	status, scol := "AI is off. The game plays the same, with its built-in puzzles.", pal.Ash
-	if ai.Ready() {
+	if ai.UsingHalpwords() {
+		status, scol = "✦ Halpwords AI is ON: floor stories, gap-fill puzzles, riddles, taunts, tips", pal.Lime
+	} else if ai.Ready() {
 		status, scol = "✦ AI is ON: floor stories, gap-fill puzzles, taunts, tips, Word Forge", pal.Lime
-	} else if p != nil {
+	} else if p != nil || ai.Chosen() == llm.Halpwords {
 		status, scol = "AI is not working yet: "+ai.Problem(), pal.Orange
 	}
 	f.DrawCentered(dst, fit(f, status, game.ScreenW-24, 1), cx, by+18, 1, scol)
@@ -548,7 +557,7 @@ func (a *AISetup) about(ctx *game.Context) string {
 	p := ctx.AI.Provider()
 	switch a.sel {
 	case aiRowProvider:
-		return "Choose who runs the AI with ←/→. Off plays the game without it."
+		return "Choose who runs the AI with ←/→. Off plays the game without it, and without Halpwords AI."
 	case aiRowKey:
 		return "Get a key at " + p.KeyPage + ". It stays on this computer."
 	case aiRowGame:
@@ -565,6 +574,31 @@ func (a *AISetup) about(ctx *game.Context) string {
 	return ""
 }
 
+// drawHalpwords explains Halpwords AI, when it is chosen.
+func (a *AISetup) drawHalpwords(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
+	f := ctx.Font
+	lines := []string{
+		"Halpwords AI comes with some plans on the Halpwords website.",
+		"It needs no key: it works when this game is linked to a learner",
+		"whose family or school plan includes it, within the plan's monthly allowance.",
+		"• floors get names and stories built around your words",
+		"• gap-fill sentences, riddles, monster taunts and memory tips",
+		"It only sees the words being learned: never names or anything typed.",
+		"The Word Forge needs a provider with its own key.",
+	}
+	if !ctx.AI.HalpwordsAvailable() {
+		lines[len(lines)-1] = "Not available now: link this game in Account, on a plan that includes it."
+	}
+	gfx.Window(dst, x, y, w, len(lines)*17+16)
+	for i, l := range lines {
+		col := pal.Steel
+		if i == 0 || i == len(lines)-1 {
+			col = pal.Ice
+		}
+		f.DrawShadow(dst, fit(f, l, w-32, 1), x+16, y+9+i*17, 1, col)
+	}
+}
+
 // drawIntro explains what the AI does, when none is chosen.
 func (a *AISetup) drawIntro(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
 	f := ctx.Font
@@ -575,7 +609,7 @@ func (a *AISetup) drawIntro(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
 		"• monsters shout taunts in the language you learn",
 		"• a Scroll of Insight at campfires with memory tips for tricky words",
 		"• the Word Forge makes new word lists on any topic",
-		"Choose Anthropic, OpenAI, Meta or DeepSeek, then paste an API key.",
+		"Choose Halpwords AI (linked games), or Anthropic, OpenAI, Meta or DeepSeek and a key.",
 	}
 	gfx.Window(dst, x, y, w, len(lines)*17+16)
 	for i, l := range lines {

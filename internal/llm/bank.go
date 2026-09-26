@@ -6,24 +6,19 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/halpworld/halpwords/pkg/gameai"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Cloze is a sentence in the language being learned with a gap where a word
 // goes.
-type Cloze struct {
-	Text    string // the sentence, with ___ for the word
-	English string // the whole sentence in English
-}
+type Cloze = gameai.ClozeLine
 
 // Gap marks the missing word in a Cloze.
-const Gap = "___"
+const Gap = gameai.Gap
 
 // Taunt is a monster's battle cry in the language being learned.
-type Taunt struct {
-	Text    string
-	English string
-}
+type Taunt = gameai.Taunt
 
 // Bank is the generated content for one language, kept between games so it
 // is only paid for once. Words are identified by words.Key.

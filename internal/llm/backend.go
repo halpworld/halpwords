@@ -73,6 +73,12 @@ func Explain(err error) string {
 		return "The service is busy. The game will try again later."
 	case errors.Is(err, ErrModel):
 		return "This key can't use that model. Pick another."
+	case errors.Is(err, ErrNoHalpwords):
+		return "Halpwords AI needs a linked game on a plan that includes it."
+	case errors.Is(err, ErrAllowance):
+		return "This month's Halpwords AI is used up. It comes back next month."
+	case errors.Is(err, ErrNeedsKey):
+		return "This needs an AI with your own key: set one up in AI Helper."
 	case errors.Is(err, ErrRefused):
 		return "The model declined that request."
 	case errors.Is(err, context.DeadlineExceeded):

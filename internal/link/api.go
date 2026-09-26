@@ -130,7 +130,12 @@ func (c *Client) call(ctx context.Context, method, path, token string, hdr http.
 
 // once makes one request.
 func (c *Client) once(ctx context.Context, method, path, token string, hdr http.Header, payload []byte, out any) (int, http.Header, error) {
-	rctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	return c.onceWith(ctx, c.hc, requestTimeout, method, path, token, hdr, payload, out)
+}
+
+// onceWith is once with an HTTP client and a time limit.
+func (c *Client) onceWith(ctx context.Context, hc *http.Client, limit time.Duration, method, path, token string, hdr http.Header, payload []byte, out any) (int, http.Header, error) {
+	rctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	var body io.Reader
 	if payload != nil {
@@ -157,7 +162,7 @@ func (c *Client) once(ctx context.Context, method, path, token string, hdr http.
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := c.hc.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}

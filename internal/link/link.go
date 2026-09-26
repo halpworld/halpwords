@@ -135,6 +135,16 @@ type Me struct {
 		MinVersion string `json:"min_version"`
 		Supported  bool   `json:"supported"`
 	} `json:"game"`
+	// AI is Halpwords AI in the game, when the server offers it (older
+	// servers leave it out).
+	AI *MeAI `json:"ai,omitempty"`
+}
+
+// MeAI says whether the learner's account can use Halpwords AI in the
+// game, and for which tasks (POST /api/v1/ai/{task}).
+type MeAI struct {
+	Available bool     `json:"available"`
+	Tasks     []string `json:"tasks,omitempty"`
 }
 
 // Preset is a class's accents and timer for its language, set by its
@@ -167,6 +177,15 @@ type ListInfo struct {
 	// Licensed lists are a publisher's: they can't be kept after
 	// unlinking.
 	Licensed bool `json:",omitempty"`
+	// Riddles are riddles for the list's words that its grown-up added
+	// with the list's AI sentences.
+	Riddles []ListRiddle `json:",omitempty"`
+}
+
+// ListRiddle is a riddle for one of a list's words, by its English.
+type ListRiddle struct {
+	English string `json:"english"`
+	Riddle  string `json:"riddle"`
 }
 
 // Quest is an assignment as a quest, from GET /api/v1/assignments. Its
@@ -294,6 +313,10 @@ type Client struct {
 	bg sync.WaitGroup // telling the server about an unlink
 
 	play *Play // playing together, once used
+
+	// aiOff is set when the server said Halpwords AI is off for this
+	// account, until the next sync reads the learner again.
+	aiOff bool
 }
 
 // listRef is the list an answer names.

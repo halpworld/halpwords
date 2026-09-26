@@ -763,6 +763,20 @@ boss portraits, NPC portraits.
 - **Set up by a parent or teacher:** the LLM settings (key, provider, budget)
   sit in a separate "Parent/Teacher" settings page. Students never have to
   handle API keys.
+- **Halpwords AI:** a game linked to an account whose plan includes AI in
+  the game uses halpwords-server's AI instead, with no key.
+  *Now (W4.8, done):* `pkg/gameai` holds the prompts, the JSON replies and
+  the checks for floor scripts, gap-fill sentences, riddles, taunts and
+  memory tips, so the game and halpwords-server ask and check the same way.
+  `llm.Halpwords` is a provider in the AI Helper screen ("no key needed");
+  with nothing else chosen, a linked game uses it whenever `/me` says
+  `ai.available`, and choosing Off turns it off. It sends only the words
+  being learned (and an assignment's ID for the Director) to
+  `POST /api/v1/ai/{task}` through `link.AskAI`, checks every answer as it
+  checks a model's, and waits after `ai_busy` or `ai_budget`. The Word
+  Forge still needs a provider with a key. Riddles a grown-up added with
+  an assigned list's AI sentences come with `GET /api/v1/lists` and join
+  the run's puzzles, with or without Halpwords AI.
 
 ### Ideas for a more dynamic game (ordered by value)
 1. **Dungeon Director:** before each floor, the LLM gets the words that are due,

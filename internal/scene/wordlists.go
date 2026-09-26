@@ -245,9 +245,9 @@ func undeletable(r *shelfRow) string {
 
 // openForge opens the Word Forge, when an AI is set up.
 func (w *WordLists) openForge(ctx *game.Context) {
-	if !ctx.AI.Ready() {
+	if !ctx.AI.ForgeReady() {
 		ctx.Sound.Play(audio.Wrong)
-		w.say("The Word Forge needs an AI: set one up in AI Helper on the title screen.", pal.Tan)
+		w.say("The Word Forge needs an AI with its own key: set one up in AI Helper on the title screen.", pal.Tan)
 		return
 	}
 	ctx.Sound.Play(audio.Select)

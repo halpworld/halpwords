@@ -222,6 +222,10 @@ func beginRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 	r := startRunWith(ctx, lang, class, seed, lists)
 	r.quest, r.assign = quest, a
 	r.prof, r.link, r.ai = ctx.Profile, ctx.Link, newRunAI(ctx)
+	if rd := ctx.Link.Riddles(lists); len(rd) > 0 {
+		// The riddles a grown-up added to an assigned list (W4.4).
+		r.cloze = r.cloze.Add(&puzzle.Generated{Riddles: rd})
+	}
 	if r.prof != nil {
 		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))
 	}

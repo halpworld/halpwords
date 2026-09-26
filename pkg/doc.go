@@ -14,6 +14,9 @@
 //     racers' reports
 //   - raid: the rules of a Boss Raid (health, damage, dodges, grading)
 //     and the boss's sprite
+//   - gameai: the prompts, replies and checks of the game's AI content
+//     (floor scripts, gap-fill sentences, riddles, taunts, memory tips),
+//     which halpwords-server's Halpwords AI uses too
 //
 // None of them may import Ebitengine or the game's screens, so a server
 // can build them without graphics code (see imports_test.go). Changes to

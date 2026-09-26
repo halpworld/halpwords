@@ -49,6 +49,9 @@ type Config struct {
 	Keys     map[ProviderID]string  `json:",omitempty"`
 	Models   map[ProviderID]Models  `json:",omitempty"`
 	Budgets  map[ProviderID]float64 `json:",omitempty"`
+	// NoHalpwords is set when a grown-up chose no AI in the AI Helper
+	// screen: a linked game then doesn't use Halpwords AI either.
+	NoHalpwords bool `json:",omitempty"`
 }
 
 // Tally is what has been spent with a provider since its counter was last
@@ -94,6 +97,7 @@ type Service struct {
 	paused  time.Time     // after a busy reply, wait until then
 	slots   chan struct{} // one for each request in flight
 	banks   map[string]*Bank
+	hw      HalpwordsAI // Halpwords AI, when the game can reach it
 
 	// For tests.
 	hc   *http.Client
@@ -133,7 +137,7 @@ func Load(store Store) *Service {
 			json.Unmarshal(data, &s.spent)
 		}
 	}
-	if ProviderFor(s.cfg.Provider) == nil {
+	if s.cfg.Provider != Halpwords && ProviderFor(s.cfg.Provider) == nil {
 		s.cfg.Provider = Off
 	}
 	return s
@@ -180,7 +184,7 @@ func (s *Service) IgnoreEnvironment() {
 }
 
 // Provider returns the chosen provider, or nil when the game plays without
-// a model.
+// a model or with Halpwords AI.
 func (s *Service) Provider() *Provider {
 	if s == nil {
 		return nil
@@ -190,11 +194,13 @@ func (s *Service) Provider() *Provider {
 	return ProviderFor(s.cfg.Provider)
 }
 
-// SetProvider chooses the provider, or Off.
+// SetProvider chooses the provider, Halpwords, or Off. Off turns
+// Halpwords AI off too.
 func (s *Service) SetProvider(id ProviderID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cfg.Provider = id
+	s.cfg.NoHalpwords = id == Off
 	return s.saveConfig()
 }
 
@@ -408,9 +414,10 @@ func (s *Service) statusFor(p ProviderID) *Status {
 	return st
 }
 
-// Ready reports whether the game can use the model now: a provider is
-// chosen, it has a key that has not been refused, and there is money left.
-// Features that need the model are on exactly when Ready.
+// Ready reports whether the game can use the model now: Halpwords AI is
+// available and not turned off, or a provider is chosen, it has a key that
+// has not been refused, and there is money left. Features that need the
+// model are on exactly when Ready (the Word Forge when ForgeReady).
 func (s *Service) Ready() bool {
 	if s == nil {
 		return false
@@ -429,6 +436,15 @@ func (s *Service) Problem() string {
 
 func (s *Service) ready() error {
 	p := s.cfg.Provider
+	if s.wantsHalpwords() {
+		switch {
+		case s.hwAvailable():
+			return nil
+		case p == Halpwords:
+			return ErrNoHalpwords
+		}
+		return errors.New("no provider is chosen")
+	}
 	if p == Off {
 		return errors.New("no provider is chosen")
 	}
@@ -533,6 +549,10 @@ func (s *Service) Ask(ctx context.Context, forge bool, system, prompt string, ma
 	if err := s.ready(); err != nil {
 		s.mu.Unlock()
 		return "", err
+	}
+	if s.wantsHalpwords() {
+		s.mu.Unlock()
+		return "", ErrNeedsKey
 	}
 	now := s.now()
 	if now.Before(s.paused) {

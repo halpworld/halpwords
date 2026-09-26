@@ -117,6 +117,9 @@ type fake struct {
 	unlinked int             // devices unlinked by the game
 	tickets  map[string]bool // play tickets not used yet
 
+	// ai answers POST /api/v1/ai/{task}: a status and a body.
+	ai func(task string, body []byte) (int, any)
+
 	playMu sync.Mutex
 	playWS http.HandlerFunc // answers /api/v1/play, outside mu
 }
@@ -297,6 +300,16 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.postEvents(w, body)
+	case r.Method == "POST" && strings.HasPrefix(path, "/api/v1/ai/") && f.ai != nil:
+		if !auth() {
+			return
+		}
+		status, v := f.ai(strings.TrimPrefix(path, "/api/v1/ai/"), body)
+		if code, ok := v.(string); ok {
+			writeErr(w, status, code)
+			return
+		}
+		writeJSON(w, status, v)
 	default:
 		writeErr(w, 404, "not_found")
 	}

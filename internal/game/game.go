@@ -234,7 +234,7 @@ func (c *Context) ReloadSaves() error {
 		c.Notify("Some saved progress was damaged")
 	}
 	c.ApplyOptions()
-	c.AI = llm.Load(saveStore{})
+	c.AI = c.loadAI()
 	return nil
 }
 
@@ -290,7 +290,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 	ctx.lockSettings()
 	ctx.linkSeen = ctx.Link.Changes()
 	ctx.ApplyOptions()
-	ctx.AI = llm.Load(saveStore{})
+	ctx.AI = ctx.loadAI()
 	if p := ctx.AI.Provider(); p != nil {
 		ctx.AI.Check(p.ID) // free: it lists the models the key can use
 	}
