@@ -115,3 +115,36 @@ func TestLockedSettings(t *testing.T) {
 		t.Fatal("the lock was saved")
 	}
 }
+
+// oldSettings is settings.json as the game wrote it before LangSettings
+// and Timer moved to pkg/settings.
+const oldSettings = `{"Langs":{"fr":{"Rules":{"Accents":2,"Breathings":0,"ArticlesRequired":true,"CaseSensitive":false},"Highlight":true,"Timer":1},` +
+	`"grc":{"Rules":{"Accents":0,"Breathings":0,"ArticlesRequired":false,"CaseSensitive":false},"Highlight":false,"Timer":2}},` +
+	`"Game":{"Music":6,"Effects":8,"CRT":0,"Fullscreen":false,"Shake":true}}`
+
+func TestOldSettingsStillLoad(t *testing.T) {
+	useTempDir(t)
+	if err := save.Write(settingsFile, []byte(oldSettings)); err != nil {
+		t.Fatal(err)
+	}
+	p, errs := Load()
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	fr, _ := words.Lookup("fr")
+	grc, _ := words.Lookup("grc")
+	want := LangSettings{Rules: words.Rules{Accents: words.Strict, ArticlesRequired: true}, Highlight: true, Timer: Relaxed}
+	if got := p.Settings.For(fr); got != want {
+		t.Errorf("fr = %+v, want %+v", got, want)
+	}
+	if got := p.Settings.For(grc); got.Timer != Fast || got.Timer.Scale() != 0.75 || got.Rules != (words.Rules{}) {
+		t.Errorf("grc = %+v", got)
+	}
+	// And they are written back the same.
+	if err := p.SaveSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := save.Read(settingsFile); err != nil || string(data) != oldSettings {
+		t.Errorf("settings.json = %s, %v; want %s", data, err, oldSettings)
+	}
+}

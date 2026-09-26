@@ -10,6 +10,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/settings"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -20,43 +21,26 @@ const (
 	fameFile     = "halloffame.json"
 )
 
-// Timer is how much time battles give to type.
-type Timer uint8
+// Timer is how much time battles give to type (settings.Timer).
+type Timer = settings.Timer
 
+// The timer settings.
 const (
-	Normal Timer = iota
-	Relaxed
-	Fast
-	numTimers
+	Normal  = settings.Normal
+	Relaxed = settings.Relaxed
+	Fast    = settings.Fast
 )
 
-func (t Timer) String() string {
-	return [...]string{"normal", "relaxed", "fast"}[t%numTimers]
-}
-
-// Scale is how much longer than normal the timers run.
-func (t Timer) Scale() float64 {
-	return [...]float64{1, 1.5, 0.75}[t%numTimers]
-}
-
 // Timers lists the timer settings in the order Settings offers them.
-var Timers = []Timer{Relaxed, Normal, Fast}
+var Timers = settings.Timers
 
-// LangSettings are the settings for one language.
-type LangSettings struct {
-	Rules words.Rules
-	// Highlight shows typing mistakes as they are made, like a Rune of
-	// Clarity that never runs out.
-	Highlight bool
-	Timer     Timer
-}
+// LangSettings are the settings for one language (settings.Lang).
+type LangSettings = settings.Lang
 
 // Preset is the settings a language starts with, and the fixed rules of
 // Hardcore runs: the language's grading rules, normal timers and no
 // highlighting.
-func Preset(lang *words.Language) LangSettings {
-	return LangSettings{Rules: lang.Defaults}
-}
+func Preset(lang *words.Language) LangSettings { return settings.Preset(lang) }
 
 // Settings are the player's settings: for the game, and for each
 // language.

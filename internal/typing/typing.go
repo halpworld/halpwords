@@ -13,39 +13,18 @@ import (
 // MaxLen is the longest answer the field accepts, in characters.
 const MaxLen = 40
 
-// betaCode maps Latin keys to Greek letters in Greek mode.
-var betaCode = map[rune]rune{
-	'a': 'α', 'b': 'β', 'g': 'γ', 'd': 'δ', 'e': 'ε', 'z': 'ζ', 'h': 'η', 'q': 'θ',
-	'i': 'ι', 'k': 'κ', 'l': 'λ', 'm': 'μ', 'n': 'ν', 'c': 'ξ', 'o': 'ο', 'p': 'π',
-	'r': 'ρ', 's': 'σ', 't': 'τ', 'u': 'υ', 'f': 'φ', 'x': 'χ', 'y': 'ψ', 'w': 'ω',
-}
-
 // BetaCodeChart lists the Greek mode keys in alphabet order, for on-screen help.
-var BetaCodeChart = []struct{ Key, Greek rune }{
-	{'a', 'α'}, {'b', 'β'}, {'g', 'γ'}, {'d', 'δ'}, {'e', 'ε'}, {'z', 'ζ'},
-	{'h', 'η'}, {'q', 'θ'}, {'i', 'ι'}, {'k', 'κ'}, {'l', 'λ'}, {'m', 'μ'},
-	{'n', 'ν'}, {'c', 'ξ'}, {'o', 'ο'}, {'p', 'π'}, {'r', 'ρ'}, {'s', 'σ'},
-	{'t', 'τ'}, {'u', 'υ'}, {'f', 'φ'}, {'x', 'χ'}, {'y', 'ψ'}, {'w', 'ω'},
-}
+var BetaCodeChart = words.BetaCodeChart()
 
 // Combining marks used in Greek mode.
 const (
-	smooth     = '̓'
-	rough      = '̔'
-	acute      = '́'
-	grave      = '̀'
-	circumflex = '͂'
-	iotaSub    = 'ͅ'
-	diaeresis  = '̈'
+	acute      = words.MarkAcute
+	grave      = words.MarkGrave
+	circumflex = words.MarkCircumflex
 )
 
-// markKeys maps Beta Code diacritic keys to combining marks.
-var markKeys = map[rune]rune{
-	')': smooth, '(': rough, '/': acute, '\\': grave, '=': circumflex, '|': iotaSub, '+': diaeresis,
-}
-
 // Marks that replace each other.
-var markGroups = [][]rune{{smooth, rough}, {acute, grave, circumflex}}
+var markGroups = words.BetaCodeMarkGroups()
 
 // Field is a single-line text entry.
 type Field struct {
@@ -88,10 +67,10 @@ func (f *Field) Type(r rune) bool {
 		return false
 	}
 	if f.Greek {
-		if m, ok := markKeys[r]; ok {
+		if m, ok := words.BetaCodeMark(r); ok {
 			return f.addMark(m)
 		}
-		if g, ok := betaCode[unicode.ToLower(r)]; ok {
+		if g, ok := words.BetaCodeLetter(r); ok {
 			if unicode.IsUpper(r) {
 				g = unicode.ToUpper(g)
 			}

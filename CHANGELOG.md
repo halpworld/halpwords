@@ -31,6 +31,19 @@ version as its release notes.
   and `Cloze []ClozeLine`; `words.Format(list)` writes a list back in the
   text format, so that it parses to the same `List`. `pkg/puzzle`:
   `FromLists`, `Generated.Add`, and `ClozeLine.Answer`.
+- `pkg/words`: the Grimoire's numbers, so halpwords-server shows a
+  grown-up what the child sees: `GrimoireSort` (`GrimoireWeakest`,
+  `GrimoireListOrder`, `GrimoireAZ`, with `String`, `ID` and
+  `ParseGrimoireSort`), `Memory.SortGrimoire`, `Memory.NewGrimoire`
+  (a `Grimoire` of `GrimoireRow`s), `Distinct`, `Percent` and
+  `Card.WatchOut`. And the Greek typing keys: `BetaKey`,
+  `BetaCodeChart`, `BetaCodeLetter`, `BetaCodeMark`, `BetaCodeLetters`,
+  `BetaCodeMarks`, `BetaCodeMarkGroups` and the `Mark…` constants.
+- `pkg/settings`: a player's settings for one language, `Lang` (was
+  `profile.LangSettings`), and the battle `Timer` (`Normal`, `Relaxed`,
+  `Fast`, `Timers`, `ParseTimer`, `Valid`), with `Preset`. settings.json
+  is unchanged. The Grimoire, the Greek typing field and the settings play
+  as before.
 - `internal/link`: the client for halpwords-server's game API (not used
   by the game yet). It links with a pairing code, keeps its tokens in a
   private `link.json`, queues answers and sessions on disk (at most about

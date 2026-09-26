@@ -3,8 +3,6 @@ package scene
 import (
 	"fmt"
 	"image/color"
-	"sort"
-	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -16,31 +14,18 @@ import (
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
-// grimoireSort is the order the Grimoire lists words in.
-type grimoireSort int
-
-const (
-	sortWeakest grimoireSort = iota
-	sortList
-	sortAZ
-	numSorts
-)
-
-var sortNames = [numSorts]string{"weakest first", "list order", "A to Z"}
-
 // Grimoire shows what the player knows of each word: its Leitner box, how
 // often it was right, how fast, and the words they struggle with most.
 type Grimoire struct {
-	bg      *ebiten.Image
-	langs   []*words.Language
-	li      int
-	fixed   bool // opened during an adventure: the language can't change
-	entries []words.Entry
-	order   []int
-	sum     words.Summary
-	by      grimoireSort
-	sel     int
-	top     int
+	bg    *ebiten.Image
+	langs []*words.Language
+	li    int
+	fixed bool // opened during an adventure: the language can't change
+	rows  []words.GrimoireRow
+	sum   words.Summary
+	by    words.GrimoireSort
+	sel   int
+	top   int
 }
 
 // NewGrimoire creates the Grimoire. With a language, it is opened over an
@@ -70,49 +55,13 @@ func (g *Grimoire) lang() *words.Language {
 
 // load reads the words for the language shown and sorts them.
 func (g *Grimoire) load(ctx *game.Context) {
-	g.entries, g.order, g.sel, g.top = nil, nil, 0, 0
+	g.rows, g.sel, g.top = nil, 0, 0
 	lang := g.lang()
 	if lang == nil {
 		return
 	}
-	mem := ctx.Profile.MemoryFor(lang.Code)
-	seen := map[string]bool{}
-	for _, e := range entriesFor(ctx, lang) {
-		if k := words.Key(e); !seen[k] {
-			seen[k] = true
-			g.entries = append(g.entries, e)
-		}
-	}
-	g.sum = mem.Summarize(g.entries)
-	g.order = make([]int, len(g.entries))
-	for i := range g.order {
-		g.order[i] = i
-	}
-	switch g.by {
-	case sortWeakest:
-		weak := mem.Weakest(g.entries, len(g.entries))
-		rank := map[int]int{}
-		for r, i := range weak {
-			rank[i] = r + 1
-		}
-		// Weak words first, then the rest by box: new words last.
-		sort.SliceStable(g.order, func(a, b int) bool {
-			ia, ib := g.order[a], g.order[b]
-			ra, rb := rank[ia], rank[ib]
-			switch {
-			case ra > 0 && rb > 0:
-				return ra < rb
-			case ra > 0 || rb > 0:
-				return ra > 0
-			}
-			ba, bb := mem.Box(g.entries[ia]), mem.Box(g.entries[ib])
-			return ba > bb
-		})
-	case sortAZ:
-		sort.SliceStable(g.order, func(a, b int) bool {
-			return strings.ToLower(g.entries[g.order[a]].Prompt) < strings.ToLower(g.entries[g.order[b]].Prompt)
-		})
-	}
+	gr := ctx.Profile.MemoryFor(lang.Code).NewGrimoire(entriesFor(ctx, lang), g.by)
+	g.rows, g.sum = gr.Rows, gr.Summary
 }
 
 // Layout of the word list.
@@ -134,7 +83,7 @@ func (g *Grimoire) close(ctx *game.Context) {
 
 // Update implements game.Scene.
 func (g *Grimoire) Update(ctx *game.Context) error {
-	n := len(g.order)
+	n := len(g.rows)
 	move := func(by int) {
 		if n == 0 {
 			return
@@ -155,7 +104,7 @@ func (g *Grimoire) Update(ctx *game.Context) error {
 		move(grRows)
 	case input.Pressed(ebiten.KeyTab):
 		ctx.Sound.Play(audio.Accent)
-		g.by = (g.by + 1) % numSorts
+		g.by = (g.by + 1) % words.NumGrimoireSorts
 		g.load(ctx)
 	case !g.fixed && len(g.langs) > 1 && (input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyArrowRight)):
 		ctx.Sound.Play(audio.Blip)
@@ -201,7 +150,7 @@ func (g *Grimoire) Draw(dst *ebiten.Image, ctx *game.Context) {
 	x, w := grX+14, grW-28
 	head := fmt.Sprintf("%d of %d words mastered", s.Mastered(), s.Words)
 	if s.Seen > 0 {
-		head += fmt.Sprintf("   ·   right %d%%", int(s.Accuracy()*100+0.5))
+		head += fmt.Sprintf("   ·   right %d%%", words.Percent(s.Accuracy()))
 	}
 	if s.Timed > 0 {
 		head += fmt.Sprintf("   ·   %.1fs an answer", s.AvgSecs())
@@ -240,9 +189,9 @@ func (g *Grimoire) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, h, cols[i], hy, 1, pal.Tan)
 	}
 	mem := ctx.Profile.MemoryFor(lang.Code)
-	for r := 0; r < grRows && g.top+r < len(g.order); r++ {
+	for r := 0; r < grRows && g.top+r < len(g.rows); r++ {
 		i := g.top + r
-		e := g.entries[g.order[i]]
+		e := g.rows[i].Entry
 		ry := hy + 20 + r*grRowH
 		col := pal.Steel
 		if i == g.sel {
@@ -267,7 +216,7 @@ func (g *Grimoire) Draw(dst *ebiten.Image, ctx *game.Context) {
 			f.DrawShadow(dst, "new", cols[3], ry, 1, pal.Ash)
 			continue
 		}
-		f.DrawShadow(dst, fmt.Sprintf("%d%%", int(c.Accuracy()*100+0.5)), cols[3], ry, 1, col)
+		f.DrawShadow(dst, fmt.Sprintf("%d%%", words.Percent(c.Accuracy())), cols[3], ry, 1, col)
 		if c.Timed > 0 {
 			f.DrawShadow(dst, fmt.Sprintf("%.1fs", c.AvgSecs()), cols[4], ry, 1, col)
 		}
@@ -275,12 +224,12 @@ func (g *Grimoire) Draw(dst *ebiten.Image, ctx *game.Context) {
 	if g.top > 0 {
 		f.Draw(dst, "▲", grX+grW-24, hy, 1, pal.Ash)
 	}
-	if g.top+grRows < len(g.order) {
+	if g.top+grRows < len(g.rows) {
 		f.Draw(dst, "▼", grX+grW-24, hy+20+(grRows-1)*grRowH, 1, pal.Ash)
 	}
 	g.drawSelected(dst, ctx, mem)
 
-	help := "↑/↓ scroll · Tab sort: " + sortNames[g.by] + " · Esc back"
+	help := "↑/↓ scroll · Tab sort: " + g.by.String() + " · Esc back"
 	if !g.fixed && len(g.langs) > 1 {
 		help = "←/→ language · " + help
 	}
@@ -289,11 +238,11 @@ func (g *Grimoire) Draw(dst *ebiten.Image, ctx *game.Context) {
 
 // drawSelected describes the chosen word under the list.
 func (g *Grimoire) drawSelected(dst *ebiten.Image, ctx *game.Context, mem *words.Memory) {
-	if len(g.order) == 0 {
+	if len(g.rows) == 0 {
 		return
 	}
 	f := ctx.Font
-	e := g.entries[g.order[g.sel]]
+	e := g.rows[g.sel].Entry
 	y := grY + 34 + grRows*grRowH
 	c := mem.Card(e)
 	var text string
@@ -304,14 +253,8 @@ func (g *Grimoire) drawSelected(dst *ebiten.Image, ctx *game.Context, mem *words
 		text = fmt.Sprintf("Mastered! Answered %d times.", c.Seen)
 	default:
 		text = fmt.Sprintf("Answered %d times, %d perfect, %d missed.", c.Seen, c.Perfect, c.Misses)
-		worst, n := words.NoMistake, 0
-		for m, k := range c.Mistakes {
-			if k > n {
-				worst, n = words.Mistake(m), k
-			}
-		}
-		if worst != words.NoMistake {
-			text += " Watch out for " + worst.String() + "."
+		if m := c.WatchOut(); m != words.NoMistake {
+			text += " Watch out for " + m.String() + "."
 		}
 	}
 	f.DrawShadow(dst, text, grX+grW-14-f.Width(text, 1), y, 1, pal.Ice)
