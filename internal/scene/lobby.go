@@ -22,7 +22,8 @@ import (
 // opened on the website, joins it, and sees who is in it. Players can
 // only send the preset phrases and emotes below: there is no free text.
 // In a race room, a race the host starts begins from here after a
-// countdown (race.go). Boss Raid (W7.5) starts from here later.
+// countdown (race.go). In a raid room, the player joins the raid as soon
+// as the teacher starts it (raid.go).
 type Lobby struct {
 	bg   *ebiten.Image
 	code []rune // the room code being typed
@@ -41,6 +42,9 @@ type Lobby struct {
 	raced int
 	next  *run
 	bad   int
+	// raided is the number of the last raid the player was in, so the
+	// lobby doesn't open it again.
+	raided int
 }
 
 // NewLobby creates the Play Together screen.
@@ -257,7 +261,7 @@ func (l *Lobby) updateCode(ctx *game.Context, p *link.Play) {
 }
 
 func (l *Lobby) updateRoom(ctx *game.Context, p *link.Play, st link.PlayState) {
-	if l.updateRace(ctx, p, st) {
+	if l.updateRace(ctx, p, st) || l.updateRaid(ctx, st) {
 		return
 	}
 	if l.leaving {
@@ -334,6 +338,30 @@ func (l *Lobby) updateRace(ctx *game.Context, p *link.Play, st link.PlayState) b
 	ctx.Sound.Play(audio.Select)
 	ctx.Replace(startRace(l.next))
 	return true
+}
+
+// updateRaid opens the raid for a learner in the room, as soon as it
+// starts (or at once, for one who joins during it). It reports whether
+// it did.
+func (l *Lobby) updateRaid(ctx *game.Context, st link.PlayState) bool {
+	rd := st.Raid
+	if rd == nil || rd.Number == l.raided || !isLearner(st.Room) {
+		return false
+	}
+	l.raided = rd.Number
+	ctx.Sound.Play(audio.Alert)
+	ctx.Replace(newRaidScreen(ctx, st))
+	return true
+}
+
+// isLearner reports whether the player is a learner in the room.
+func isLearner(r link.Room) bool {
+	for _, m := range r.Members {
+		if m.ID == r.You {
+			return m.Role == link.RoleLearner
+		}
+	}
+	return false
 }
 
 func (l *Lobby) leave(ctx *game.Context) {
@@ -439,8 +467,11 @@ func (l *Lobby) drawRoom(dst *ebiten.Image, ctx *game.Context, st link.PlayState
 	const mx, my, mw, mh = 8, 40, 300, 244
 	gfx.Window(dst, mx, my, mw, mh)
 	head := "Room " + showRoomCode(r.Code)
-	if r.Mode == link.ModeRace {
+	switch r.Mode {
+	case link.ModeRace:
 		head = "Race room " + showRoomCode(r.Code)
+	case link.ModeRaid:
+		head = "Raid room " + showRoomCode(r.Code)
 	}
 	if left := time.Until(r.EndsAt); !r.EndsAt.IsZero() && left > 0 {
 		head += fmt.Sprintf("  ·  %d min left", int(left.Minutes())+1)
@@ -495,6 +526,20 @@ func (l *Lobby) drawRoom(dst *ebiten.Image, ctx *game.Context, st link.PlayState
 	case r.Mode == link.ModeRace:
 		f.DrawShadow(dst, "What's happening", ex+10, my+8, 1, pal.Yellow)
 		f.DrawShadow(dst, "Waiting for the host to start a race.", ex+10, y, 1, pal.Lime)
+		y += 18
+		shown = 10
+	case r.Mode == link.ModeRaid:
+		f.DrawShadow(dst, "What's happening", ex+10, my+8, 1, pal.Yellow)
+		msg := "Waiting for your teacher to start the raid."
+		switch {
+		case st.Raid != nil:
+			msg = "A Boss Raid is on!"
+		case st.Finale != nil && st.Finale.Outcome == link.RaidWon:
+			msg = "Your class defeated the " + st.Finale.Boss + "!"
+		case st.Finale != nil:
+			msg = "The last raid is over."
+		}
+		f.DrawShadow(dst, fit(f, msg, ew-20, 1), ex+10, y, 1, pal.Lime)
 		y += 18
 		shown = 10
 	default:

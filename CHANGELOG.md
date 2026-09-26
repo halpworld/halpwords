@@ -26,6 +26,10 @@ version as its release notes.
   floor 3. Hardcore rules, one class, nothing saved. The other racers show
   as small dots on the map, and the race ends with a results screen.
   `link.Play` gets `Race`, `Results` and `Report`.
+- `pkg/raid`: the rules of a Boss Raid in halpwords-server's play rooms
+  (`TimeLimit`, `BossHP`, `Damage`, `Streak`, `AttackEvery`, `DodgeTime`,
+  `Dodged`, `StunTime`), `Grade` (the game's grading with a language's
+  default rules) and `BossFor`, whose `Sprite` is the crowned boss.
 - `pkg/race`: the rules of a Race in halpwords-server's play rooms
   (`Goal`, `TimeLimit`, `Report`), the `Judge` the server checks each
   racer's reports with (floors in order and not sooner than walking there
