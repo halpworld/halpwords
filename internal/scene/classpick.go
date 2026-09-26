@@ -38,11 +38,14 @@ func NewClassPick(lang *words.Language, setup runSetup) game.Scene {
 func (p *ClassPick) Update(ctx *game.Context) error {
 	n := len(rpg.Classes)
 	switch {
+	case input.Back() && p.setup.quest != nil && p.setup.quest.Language != "":
+		ctx.Sound.Play(audio.Back)
+		ctx.Replace(NewQuests(ctx))
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
 		setup := p.setup
-		if setup.quest != nil {
-			ctx.Replace(NewQuests(ctx))
+		if setup.assign != nil {
+			ctx.Replace(NewAssignments(ctx))
 			return nil
 		}
 		if setup.mode == compete.Daily {
@@ -57,7 +60,12 @@ func (p *ClassPick) Update(ctx *game.Context) error {
 		p.sel = (p.sel + 1) % n
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		ctx.Sound.Play(audio.Select)
-		ctx.Replace(newCrawl(newRun(ctx, p.lang, rpg.Classes[p.sel], p.setup)))
+		r := newRun(ctx, p.lang, rpg.Classes[p.sel], p.setup)
+		if r.quest != nil {
+			ctx.Replace(questIntro(r))
+			return nil
+		}
+		ctx.Replace(newCrawl(r))
 	}
 	return nil
 }

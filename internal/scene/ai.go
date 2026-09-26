@@ -130,7 +130,7 @@ func floorWords(r *run, n int) []words.Entry {
 // direct asks the Dungeon Director for the script of floor depth, unless it
 // has one or is working on it.
 func (a *runAI) direct(r *run, depth int) {
-	if !a.on() || a.scripts[depth] != nil || a.directing[depth] != nil || a.tries[depth] >= maxTries {
+	if !a.on() || r.quest != nil || a.scripts[depth] != nil || a.directing[depth] != nil || a.tries[depth] >= maxTries {
 		return
 	}
 	a.tries[depth]++
@@ -149,7 +149,7 @@ func (a *runAI) direct(r *run, depth int) {
 	if b := l.Boss(); b != nil {
 		f.Boss = b.Kind.Name
 	}
-	f.Quest, f.QuestWords = r.directorQuest()
+	f.Quest, f.QuestWords = r.directorAssignment()
 	svc := a.svc
 	a.directing[depth] = llm.Start(func() (*llm.Script, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -158,15 +158,15 @@ func (a *runAI) direct(r *run, depth int) {
 	})
 }
 
-// directorQuest is the quest the Dungeon Director builds floors around:
-// the run's own quest (its words are the run's), or else the quest to do
-// next in the run's language that counts in an Adventure, with its words
-// the player knows least first. It is "" when there is none.
-func (r *run) directorQuest() (string, []words.Entry) {
-	if r.quest != nil {
-		return r.quest.Title, nil
+// directorAssignment is the assignment quest the Dungeon Director builds
+// floors around: the run's own (its words are the run's), or else the
+// one to do next in the run's language that counts in an Adventure, with
+// its words the player knows least first. It is "" when there is none.
+func (r *run) directorAssignment() (string, []words.Entry) {
+	if r.assign != nil {
+		return r.assign.Title, nil
 	}
-	now := questNow()
+	now := assignNow()
 	for _, q := range link.SortQuests(r.link.Quests(), now) {
 		if q.Complete() || !q.Started(now) || q.Mode == link.ModePractice {
 			continue
@@ -175,14 +175,14 @@ func (r *run) directorQuest() (string, []words.Entry) {
 			if l.ID != q.List.ID || l.Language != r.lang.Code || len(l.Entries) == 0 {
 				continue
 			}
-			return questName(q), weakestFirst(r.deck.Memory(), l.Entries, maxQuestWords)
+			return assignName(q), weakestFirst(r.deck.Memory(), l.Entries, maxAssignWords)
 		}
 	}
 	return "", nil
 }
 
-// maxQuestWords is how many of a quest's words the Director is told.
-const maxQuestWords = 8
+// maxAssignWords is how many of an assignment's words the Director is told.
+const maxAssignWords = 8
 
 // weakestFirst returns up to n of entries, the ones mem says are weakest
 // first and then in the list's order.
@@ -338,7 +338,7 @@ func (a *runAI) tipFor(r *run, id int) (string, bool) {
 // script returns the Dungeon Director's script for the floor the run is
 // on, or nil.
 func (r *run) script() *llm.Script {
-	if r.ai == nil {
+	if r.ai == nil || r.quest != nil {
 		return nil
 	}
 	return r.ai.scripts[r.depth]
@@ -347,6 +347,12 @@ func (r *run) script() *llm.Script {
 // themeFor is the look of the run's current floor: the Director's choice,
 // or the usual one for the depth.
 func (r *run) themeFor() *proc.Theme {
+	if m := r.questMap(r.depth); m != nil {
+		if i := m.ThemeIndex(); i >= 0 && i < len(proc.Themes) {
+			return &proc.Themes[i]
+		}
+		return proc.ThemeFor(m.Level())
+	}
 	if sc := r.script(); sc != nil && sc.Theme >= 0 && sc.Theme < len(proc.Themes) {
 		return &proc.Themes[sc.Theme]
 	}
@@ -355,6 +361,9 @@ func (r *run) themeFor() *proc.Theme {
 
 // floorName is the name the floor's banner shows.
 func (c *Crawl) floorName() string {
+	if m := c.run.questMap(c.run.depth); m != nil {
+		return m.Title
+	}
 	if sc := c.run.script(); sc != nil {
 		return sc.Name
 	}
@@ -381,6 +390,12 @@ func dress(l *dungeon.Level, sc *llm.Script) {
 func (c *Crawl) arrive() {
 	r := c.run
 	sc := r.script()
+	if r.quest != nil {
+		r.say(fmt.Sprintf("Floor %d of %d: %s. Find the stairs down!", r.depth, len(r.quest.Maps), c.floorName()), pal.Yellow)
+		c.lore = nil
+		c.readNote()
+		return
+	}
 	r.say(fmt.Sprintf("Floor %d: %s. Find the stairs down!", r.depth, c.floorName()), pal.Yellow)
 	if sc != nil && sc.Intro != "" {
 		r.say(sc.Intro, pal.Cyan)

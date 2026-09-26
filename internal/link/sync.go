@@ -333,11 +333,13 @@ func (c *Client) Close() {
 	c.mu.Lock()
 	stop, stopped := c.stop, c.stopped
 	c.stop = nil
+	play := c.play
 	linked, pending := c.st.linked(), c.q.len()
 	c.mu.Unlock()
 	if stop != nil {
 		close(stop)
 	}
+	play.Leave()
 	if linked && pending > 0 {
 		// A sync still running holds syncMu; don't wait for it.
 		if c.syncMu.TryLock() {
@@ -351,6 +353,13 @@ func (c *Client) Close() {
 		}
 	}
 	c.saveQueue()
+	// An unlink the server hasn't heard about yet gets a moment too.
+	waited := make(chan struct{})
+	go func() { c.bg.Wait(); close(waited) }()
+	select {
+	case <-waited:
+	case <-time.After(closeTimeout):
+	}
 	if stopped != nil {
 		select {
 		case <-stopped:
@@ -362,15 +371,54 @@ func (c *Client) Close() {
 // Unlink unlinks the game. It keeps the player's progress and the
 // assigned lists, as their own lists (licensed lists are removed), and
 // forgets the tokens and the events not yet sent. It doesn't wait for the
-// network; a sync still running throws away what it gets. The family
-// sees the game on the website until they remove it there.
+// network; a sync still running throws away what it gets. In the
+// background it tells the server (POST /api/v1/unlink), so the game
+// leaves the learner's page on the website; if that fails (offline), the
+// family can still remove it there.
 func (c *Client) Unlink() {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	access, refresh, exp := c.st.Access, c.st.Refresh, c.st.AccessExp
+	linked := c.st.linked()
 	c.unlink()
+	play := c.play
+	c.mu.Unlock()
+	play.Leave()
+	if !linked {
+		return
+	}
+	c.bg.Add(1)
+	go func() {
+		defer c.bg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), unlinkTimeout)
+		defer cancel()
+		c.tellUnlinked(ctx, access, refresh, exp)
+	}()
+}
+
+// unlinkTimeout is how long Unlink keeps trying to tell the server.
+const unlinkTimeout = 20 * time.Second
+
+// tellUnlinked asks the server to unlink the device whose tokens these
+// were. An access token that has run out is first swapped with the
+// refresh token (the new pair is only used for this). A 401 means the
+// server has unlinked it already.
+func (c *Client) tellUnlinked(ctx context.Context, access, refresh string, exp time.Time) error {
+	if access == "" || c.now().After(exp) {
+		if refresh == "" {
+			return ErrNotLinked
+		}
+		payload, _ := json.Marshal(map[string]string{"refresh_token": refresh})
+		var t tokens
+		if _, _, err := c.once(ctx, http.MethodPost, "/api/v1/token", "", nil, payload, &t); err != nil {
+			return err
+		}
+		access = t.AccessToken
+	}
+	_, _, err := c.once(ctx, http.MethodPost, "/api/v1/unlink", access, nil, nil, nil)
+	return err
 }
 
 // lost unlinks the game because the server no longer takes its tokens.

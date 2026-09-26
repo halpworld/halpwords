@@ -274,6 +274,10 @@ type Client struct {
 	stop    chan struct{}
 	stopped chan struct{}
 	sleep   func(time.Duration) // between retries; tests make it instant
+
+	bg sync.WaitGroup // telling the server about an unlink
+
+	play *Play // playing together, once used
 }
 
 // listRef is the list an answer names.
@@ -529,6 +533,20 @@ func (c *Client) userAgent() string {
 		v = "dev"
 	}
 	return "Halpwords/" + v + " (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
+}
+
+// clientHeader is the header the web build sends its version in, as the
+// server's docs/api says: "halpwords/1.2.0 (js; wasm)".
+const clientHeader = "X-Halpwords-Client"
+
+// inBrowser is true in the web build, which sends clientHeader instead of
+// a User-Agent.
+var inBrowser = false
+
+// clientVersion is the value of clientHeader: the User-Agent with the
+// product name in lower case.
+func (c *Client) clientVersion() string {
+	return "halpwords/" + strings.TrimPrefix(c.userAgent(), "Halpwords/")
 }
 
 // deviceName is what the game calls itself on the learner's page.

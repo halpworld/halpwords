@@ -150,7 +150,7 @@ func traitWords(t dungeon.Trait) string {
 func (c *Crawl) deal(ctx *game.Context, p phase) {
 	b := c.battle
 	ok := false
-	target := combat.WordTarget(c.run.depth, b.m.Kind.Boss())
+	target := combat.WordTarget(c.level.Depth, b.m.Kind.Boss())
 	if b.m.Phase > 0 {
 		// An angry boss asks for longer words.
 		b.word, b.wordID, ok = c.run.deck.NextNear(target, func(e words.Entry) bool { return runes(e.Answers[0]) >= 6 })
@@ -533,6 +533,9 @@ func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []log
 	c.fxCoins(gold)
 	lines = append(lines, logLine{fmt.Sprintf("The %s is defeated! +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow})
 	c.run.say(fmt.Sprintf("You defeat the %s. +%d XP, +%d gold.", m.Name(), xp, gold), pal.Yellow)
+	if rr := c.run.race; rr != nil {
+		rr.monsters++
+	}
 	loot := m.Loot
 	switch {
 	case m.Kind.Boss():
@@ -542,7 +545,7 @@ func (c *Crawl) win(ctx *game.Context, title string, col color.RGBA, lines []log
 	}
 	if m.Kind.Boss() {
 		// Bosses always drop gear, a tier better than the floor's.
-		g := rpg.RandomGear(c.run.depth+2, c.run.rng)
+		g := rpg.RandomGear(c.level.Depth+2, c.run.rng)
 		loot = &dungeon.Chest{Gear: &g, Potions: 1}
 		c.showBanner("VICTORY!", "The stairs are free")
 		c.run.say("The way down is open!", pal.Lime)

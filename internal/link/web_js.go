@@ -6,4 +6,7 @@ package link
 // holds about 5 MB for the whole game.
 const webQueueCap = 10_000
 
-func init() { defaultCap = webQueueCap }
+func init() {
+	defaultCap = webQueueCap
+	inBrowser = true
+}

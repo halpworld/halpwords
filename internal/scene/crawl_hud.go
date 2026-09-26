@@ -91,6 +91,8 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 	case modeQuit:
 		title, text := "Quit without saving?", "You will go back to your last shrine."
 		switch {
+		case c.run.race != nil:
+			title, text = "Give up the race?", fmt.Sprintf("You will be out, on floor %d.", c.run.depth)
 		case c.run.hardcore():
 			title, text = "Give up this run?", fmt.Sprintf("Your score of %s will be recorded.", groupDigits(c.run.score()))
 		case c.lastSave == nil:
@@ -103,6 +105,10 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 		c.drawCampfire(view, ctx)
 	case modeDead:
 		gfx.FillRect(view, viewX, viewY, vw, vh, pal.Fade(pal.Red, 0.35))
+		if c.run.race != nil {
+			c.drawDialog(view, ctx, "YOU HAVE FALLEN", fmt.Sprintf("Your race ends on floor %d.", c.run.depth), "Enter see the race")
+			break
+		}
 		if c.run.hardcore() {
 			c.drawDialog(view, ctx, "YOU HAVE FALLEN", fmt.Sprintf("Floor %d · score %s", c.run.depth, groupDigits(c.run.score())), "Enter see your score")
 			break
@@ -215,7 +221,9 @@ func (c *Crawl) drawSide(dst *ebiten.Image, ctx *game.Context) {
 		return
 	}
 	title := fmt.Sprintf("Floor %d · %s", c.run.depth, c.floorName())
-	if c.run.hardcore() {
+	if c.run.race != nil {
+		title = c.raceTitle(ctx)
+	} else if c.run.hardcore() {
 		title = fmt.Sprintf("Floor %d · Score %s", c.run.depth, groupDigits(c.run.score()))
 		if best := ctx.Profile.Fame.Best(compete.TableKey(c.run.mode, c.run.lang.Code)); best > 0 && c.run.score() > best {
 			f.DrawShadow(dst, "★ BEST", x+w-10-f.Width("★ BEST", 1), y+7, 1, pal.Yellow)
@@ -311,6 +319,11 @@ func (c *Crawl) drawAutomap(dst *ebiten.Image, x, y, w, h, cell int, full bool) 
 		}
 		px, py := ox+m.At.X*cell, oy+m.At.Y*cell
 		gfx.FillRect(clip, px+1, py+1, cell-2, cell-2, pal.Rose)
+	}
+	// The other racers: small dots in their colours.
+	for _, rv := range c.rivals() {
+		px, py := ox+rv.at.X*cell, oy+rv.at.Y*cell
+		gfx.FillRect(clip, px+cell/4, py+cell/4, max(2, cell-cell/2), max(2, cell-cell/2), rv.col)
 	}
 	// The hero: a white dot with a yellow nose pointing the way they face.
 	px, py := ox+c.pos.X*cell, oy+c.pos.Y*cell
