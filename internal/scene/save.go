@@ -45,6 +45,9 @@ type saveFile struct {
 	Mode  compete.Mode  `json:",omitempty"`
 	Day   string        `json:",omitempty"` // a Daily Dungeon's date
 	Tally compete.Tally // what a Hardcore score counts
+	// Played is how long the run has been played, in seconds, for the
+	// rankings' plausibility check.
+	Played float64 `json:",omitempty"`
 	// Scripts are the Dungeon Director's scripts for the floors the save
 	// can go back to, by depth.
 	Scripts map[int]*llm.Script `json:",omitempty"`
@@ -82,6 +85,7 @@ func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir, 
 		Mode:       r.mode,
 		Day:        r.day,
 		Tally:      r.tally,
+		Played:     r.played,
 		Quest:      r.quest,
 		Assignment: r.assign,
 	}
@@ -150,7 +154,7 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 		return nil, errDamaged
 	}
 	r.setMode(ctx, s.Mode)
-	r.day, r.tally = s.Day, s.Tally
+	r.day, r.tally, r.played = s.Day, s.Tally, s.Played
 	r.greek = s.Greek
 	r.seenTraits = s.SeenTraits
 	r.deck.SetState(s.Deck)

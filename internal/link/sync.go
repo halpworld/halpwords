@@ -139,7 +139,14 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 	if err := c.syncQuests(ctx, gen); err != nil {
 		return err
 	}
-	return c.syncMemory(ctx, gen)
+	if err := c.syncMemory(ctx, gen); err != nil {
+		return err
+	}
+	// Rankings last, so a server without them never holds back the rest.
+	if err := c.uploadRuns(ctx, gen); err != nil {
+		return err
+	}
+	return c.syncRanks(ctx, gen)
 }
 
 // syncMe fetches the learner. syncMu is held.

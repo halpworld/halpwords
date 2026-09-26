@@ -54,6 +54,11 @@ func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
 		}
 	}
 	g.code = share.Code()
+	if r.mode.Scored() && r.race == nil && r.quest == nil && r.assign == nil && r.deck != nil {
+		// Sent for the rankings when the game is linked; the server
+		// ranks it only if a grown-up put the learner on a board.
+		ctx.Link.Run(compete.Run{Share: share, Tally: r.tally, Secs: int(r.played)}, compete.ListHash(r.deck.Entries()))
+	}
 	key := compete.TableKey(r.mode, r.lang.Code)
 	g.best = ctx.Profile.Fame.Best(key)
 	g.place = ctx.Profile.Fame.Rank(key, g.score)

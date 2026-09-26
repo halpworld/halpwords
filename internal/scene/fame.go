@@ -24,8 +24,9 @@ var fameModes = []compete.Mode{compete.Hardcore, compete.Daily}
 type HallOfFame struct {
 	bg   *ebiten.Image
 	li   int
-	mi   int
+	mi   int // the tab: a fameModes table, or len(fameModes) for Rankings
 	mark int // the place to highlight, from 1, or 0
+	bi   int // the ranking board shown, on the Rankings tab
 
 	checking bool // typing a friend's share code
 	code     []rune
@@ -66,13 +67,22 @@ func (h *HallOfFame) Update(ctx *game.Context) error {
 		ctx.Replace(NewTitle(ctx))
 	case input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyA):
 		ctx.Sound.Play(audio.Blip)
-		h.li, h.mark = (h.li+n-1)%n, 0
+		h.li, h.mark, h.bi = (h.li+n-1)%n, 0, 0
 	case input.Repeat(ebiten.KeyArrowRight) || input.Repeat(ebiten.KeyD):
 		ctx.Sound.Play(audio.Blip)
-		h.li, h.mark = (h.li+1)%n, 0
+		h.li, h.mark, h.bi = (h.li+1)%n, 0, 0
+	case h.ranking() && (input.Repeat(ebiten.KeyArrowUp) || input.Repeat(ebiten.KeyArrowDown)):
+		if n := len(h.boards(ctx)); n > 1 {
+			ctx.Sound.Play(audio.Blip)
+			step := 1
+			if input.Repeat(ebiten.KeyArrowUp) {
+				step = n - 1
+			}
+			h.bi = (h.bi + step) % n
+		}
 	case input.Pressed(ebiten.KeyTab) || input.Up() || input.Down():
 		ctx.Sound.Play(audio.Accent)
-		h.mi, h.mark = (h.mi+1)%len(fameModes), 0
+		h.mi, h.mark, h.bi = (h.mi+1)%h.tabs(ctx), 0, 0
 	case input.Pressed(ebiten.KeyC) || input.Confirm():
 		ctx.Sound.Play(audio.Select)
 		h.checking, h.code, h.result = true, nil, nil
@@ -156,6 +166,14 @@ func (h *HallOfFame) Draw(dst *ebiten.Image, ctx *game.Context) {
 	cx := game.ScreenW / 2
 	gfx.DrawArt(dst, h.bg, 0, 0)
 	f.DrawCentered(dst, "Hall of Fame", cx, 8, 3, pal.Yellow)
+	if h.mi >= h.tabs(ctx) {
+		h.mi = 0 // the rankings went away (unlinked)
+	}
+	if h.ranking() {
+		h.drawRankings(dst, ctx)
+		f.DrawShadow(dst, "←/→ language · ↑/↓ board · Tab table · Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+		return
+	}
 	mode := fameModes[h.mi]
 	f.DrawCentered(dst, "◄ "+h.lang().Name+" ►   ·   "+mode.String(), cx, 60, 1, pal.Tan)
 
@@ -186,6 +204,9 @@ func (h *HallOfFame) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 
 	help := "←/→ language · Tab table · C check a friend's code · Esc back"
+	if h.tabs(ctx) > len(fameModes) {
+		help = "←/→ language · Tab table or Rankings · C check a code · Esc back"
+	}
 	if h.checking {
 		h.drawCheck(dst, ctx)
 		help = "Type the share code · Enter check · Esc close"

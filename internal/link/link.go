@@ -243,6 +243,10 @@ type state struct {
 	Quests    []Quest    `json:",omitempty"`
 	// SSO is a sign-in with a school account on its way.
 	SSO *SSOCode `json:",omitempty"`
+	// Runs are finished scored runs waiting to be sent for the rankings,
+	// and Boards the rankings the learner is on (ranks.go).
+	Runs   []qRun  `json:",omitempty"`
+	Boards []Board `json:",omitempty"`
 }
 
 func (s *state) linked() bool { return s.Refresh != "" }

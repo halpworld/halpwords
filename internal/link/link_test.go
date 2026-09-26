@@ -121,6 +121,13 @@ type fake struct {
 	// ai answers POST /api/v1/ai/{task}: a status and a body.
 	ai func(task string, body []byte) (int, any)
 
+	// runs are the bodies of POST /api/v1/runs; runStatus, when not 0,
+	// is the status to answer them with. boards is GET /api/v1/ranks'
+	// answer; nil answers 404, as a server with rankings off.
+	runs      []map[string]any
+	runStatus int
+	boards    []any
+
 	playMu sync.Mutex
 	playWS http.HandlerFunc // answers /api/v1/play, outside mu
 }
@@ -336,6 +343,30 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.postEvents(w, body)
+	case r.Method == "POST" && path == "/api/v1/runs":
+		if !auth() {
+			return
+		}
+		var run map[string]any
+		if err := json.Unmarshal(body, &run); err != nil {
+			writeErr(w, 400, "invalid_request")
+			return
+		}
+		f.runs = append(f.runs, run)
+		if f.runStatus != 0 {
+			writeErr(w, f.runStatus, "implausible_run")
+			return
+		}
+		writeJSON(w, 201, map[string]any{"id": "run_1", "stored": true})
+	case r.Method == "GET" && path == "/api/v1/ranks":
+		if !auth() {
+			return
+		}
+		if f.boards == nil {
+			writeErr(w, 404, "not_found")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"boards": f.boards})
 	case r.Method == "POST" && strings.HasPrefix(path, "/api/v1/ai/") && f.ai != nil:
 		if !auth() {
 			return

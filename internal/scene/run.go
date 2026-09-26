@@ -82,6 +82,10 @@ type run struct {
 	day string
 	// tally counts what the hero has done, for a Hardcore score.
 	tally compete.Tally
+	// played is how long the run has been played, in seconds, counting
+	// the dungeon's ticks only (not menus or suspends): a ranked run
+	// sends it (compete.Run.Secs).
+	played float64
 	// settings are the grading rules and timers. Hardcore runs always use
 	// the language's preset.
 	settings profile.LangSettings
