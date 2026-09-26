@@ -34,9 +34,17 @@ const (
 	acSync
 	acUnlinkItem
 	acBack
+	acSchool
 )
 
-var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back"}
+var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school"}
+
+// school reports whether the game signed in at school, with a login card
+// or the class code: it signs out rather than unlinks (W2.5).
+func school(ctx *game.Context) bool {
+	w := ctx.Link.Way()
+	return w == link.WayCard || w == link.WayClass
+}
 
 // Account links the game to a grown-up's account on the website, shows who
 // can see the player's progress, and syncs or unlinks.
@@ -47,8 +55,10 @@ type Account struct {
 	code []rune // the pairing code being typed, without the hyphen
 	// linking is set while a link started here is on its way.
 	linking bool
-	msg     string
-	msgCol  color.RGBA
+	// signingOut reports when a sign-out has finished.
+	signingOut func() bool
+	msg        string
+	msgCol     color.RGBA
 }
 
 // NewAccount creates the Account screen.
@@ -60,13 +70,20 @@ func (a *Account) items(ctx *game.Context) []acItem {
 	if ctx.Link.Linked() {
 		return []acItem{acSync, acUnlinkItem, acBack}
 	}
-	return []acItem{acLink, acBack}
+	return []acItem{acLink, acSchool, acBack}
 }
 
 func (a *Account) say(msg string, c color.RGBA) { a.msg, a.msgCol = msg, c }
 
 // Update implements game.Scene.
 func (a *Account) Update(ctx *game.Context) error {
+	if a.signingOut != nil {
+		if a.signingOut() {
+			a.signingOut = nil
+			ctx.Replace(NewLearners(ctx))
+		}
+		return nil
+	}
 	st := ctx.Link.Status()
 	if a.linking && !st.Busy {
 		a.linking = false
@@ -87,6 +104,11 @@ func (a *Account) Update(ctx *game.Context) error {
 		return nil
 	case acUnlink:
 		switch {
+		case input.Pressed(ebiten.KeyY) && school(ctx):
+			ctx.Sound.Play(audio.Select)
+			a.signingOut = ctx.SignOut()
+			a.mode = acBrowse
+			a.say("Signing out…", pal.Ice)
 		case input.Pressed(ebiten.KeyY):
 			ctx.Link.Unlink()
 			ctx.Sound.Play(audio.Select)
@@ -127,6 +149,9 @@ func (a *Account) Update(ctx *game.Context) error {
 		case acUnlinkItem:
 			ctx.Sound.Play(audio.Select)
 			a.mode = acUnlink
+		case acSchool:
+			ctx.Sound.Play(audio.Select)
+			ctx.Replace(NewSignIn(ctx, ""))
 		case acBack:
 			a.leave(ctx)
 		}
@@ -281,6 +306,9 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 			}
 		}
 		label := acLabels[it]
+		if it == acUnlinkItem && school(ctx) {
+			label = "Sign out"
+		}
 		if it == acLink && a.linking {
 			label = "Linking…"
 		}
@@ -300,6 +328,10 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, "A code works once, for 15 minutes.", dx, dy+76, 1, pal.Steel)
 		f.DrawShadow(dst, "Enter link   Esc cancel", dx, dy+96, 1, pal.Ash)
 	case acUnlink:
+		if school(ctx) {
+			drawSignOut(dst, ctx)
+			break
+		}
 		dx, dy := dialog(dst, ctx, "UNLINK?", 460, 170)
 		f.DrawShadow(dst, "Your progress stays in this game, and assigned", dx, dy, 1, pal.Ice)
 		f.DrawShadow(dst, "lists become your own (except bought ones).", dx, dy+16, 1, pal.Ice)

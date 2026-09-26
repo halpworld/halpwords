@@ -11,16 +11,13 @@ import (
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
-// Remove deletes a file from the user's folder, for the link.
-func (saveStore) Remove(name string) error { return save.Remove(name) }
-
-// openLink opens the link to a grown-up's account, if there is one, and
-// starts syncing in the background. A game that was never linked does
-// nothing on the network.
+// openLink opens the learner's link to a grown-up's account, if there is
+// one, and starts syncing in the background. A game that was never
+// linked does nothing on the network. The link keeps its files in the
+// learner's folder, even if another learner plays before it has closed.
 func (c *Context) openLink() {
-	c.Link = link.Open(link.Options{Store: saveStore{}, Version: Version, OwnDir: WordsDir})
+	c.Link = link.Open(link.Options{Store: save.Current(), Version: Version, OwnDir: WordsDir})
 	c.Link.Start()
-	watchPage(c.Link)
 }
 
 // pollLink picks up what the link brought in the background: assigned
@@ -37,6 +34,7 @@ func (c *Context) pollLink() {
 		c.Profile.SaveMemory()
 	}
 	c.lockSettings()
+	c.notePlayer()
 }
 
 // lockSettings puts the settings a grown-up set into the profile, where
@@ -147,4 +145,14 @@ func (c *Context) EndSession() {
 func (g *Game) Close() {
 	g.ctx.EndSession()
 	g.ctx.Link.Close()
+	for _, done := range g.ctx.closing { // learners who played before
+		select {
+		case <-done:
+		case <-time.After(closeWait):
+		}
+	}
 }
+
+// closeWait is how long quitting waits for the links of learners who
+// played before to close.
+const closeWait = 5 * time.Second

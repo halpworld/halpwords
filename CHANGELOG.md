@@ -7,6 +7,18 @@ version as its release notes.
 
 ### Added
 
+- **Several learners on one computer.** Each learner has their own folder
+  (`profiles/<id>/`) with their hero, word memory, Hall of Fame, word
+  lists, settings and link; a game from before moves into the first
+  learner's folder on its first start. The title shows who is playing:
+  press Tab to switch, add a learner or sign one out. Children sign in at
+  school with a login card, or with the class code, their name and 3
+  pictures; the same card or pictures open their progress on that
+  computer again. `link` gets `SignIn`, `FindClass`, `Way` and
+  `KeepOnSignOut`; `save` gets `Folder`.
+- `pkg/proc`: the picture set of picture passwords (`Pictures`,
+  `PictureAt`, `Picture.Image`, `Picture.Runs`), shared with
+  halpwords-server's login cards and sign-in.
 - **The web game can move house.** Ready for the move from
   `halpworld.github.io/halpwords` to `play.halpwords.com` (not live yet): a
   *We've moved* page for the old address (`web/moved`, `make build-moved`)

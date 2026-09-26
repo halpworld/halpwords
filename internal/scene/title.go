@@ -104,6 +104,9 @@ func (t *Title) Update(ctx *game.Context) error {
 	}
 	n := len(t.items)
 	switch {
+	case input.Pressed(ebiten.KeyTab) && ctx.Learners != nil:
+		ctx.Sound.Play(audio.Select)
+		ctx.Replace(NewLearners(ctx))
 	case input.Up():
 		ctx.Sound.Play(audio.Blip)
 		t.sel = (t.sel + n - 1) % n
@@ -206,6 +209,7 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 
 	drawAssignBanner(dst, ctx, t.assigns)
+	drawLearnerBadge(dst, ctx)
 
 	f.DrawShadow(dst, "Arrows choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
 	v := game.VersionText()
@@ -214,4 +218,16 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 		on := "✦ AI on"
 		f.DrawShadow(dst, on, game.ScreenW/2-f.Width(on, 1)/2, game.ScreenH-20, 1, pal.Lime)
 	}
+}
+
+// drawLearnerBadge shows who is playing, top left, and how to switch
+// (W2.5): on a shared computer the next child must see it isn't them.
+func drawLearnerBadge(dst *ebiten.Image, ctx *game.Context) {
+	l := ctx.Learner()
+	if l == nil {
+		return
+	}
+	f := ctx.Font
+	f.DrawShadow(dst, fit(f, l.Name, 150, 1), 8, 6, 1, pal.White)
+	f.DrawShadow(dst, "Not you? Press Tab", 8, 20, 1, pal.Ash)
 }

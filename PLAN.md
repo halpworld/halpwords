@@ -825,6 +825,29 @@ checking it all against staging (W1.8's "Done when"),
 per-assignment settings, and the accommodations the game doesn't have yet
 (cheaper hints, larger text, no timed dodges).
 
+*Now (server W2.5, done):* **several learners on one computer.** Each
+learner has a folder, `profiles/<id>/`, with everything that is theirs
+(settings, word memory, Hall of Fame, the saved adventure, word lists,
+`link.json` and the queue); `learners.json` lists them, and the AI
+helper's settings, the report queue and crash reports stay shared. The
+first start moves a game from before into the first learner's folder
+(copy, save the list, then remove), named from the Hall of Fame. The
+`save` package's `Folder` binds the link client to one learner's folder,
+so a sync still running never writes into the next learner's. The title
+shows who is playing ("Not you? Press Tab"); **Switch learner** lists
+them, adds one (sign in, or just play with a name), and signs one out or
+removes them. Sign-in at school: a login card's 12-character code, or the
+class code, a name from the class (or a username when the teacher hides
+the list) and 3 of 9 pictures (arrows or 1-9; only a count of taps
+shows), using the server's `POST /api/v1/link` and `/link/class`. The
+pictures are `pkg/proc`'s picture set, shared with the server. A learner
+signed in at school gets a local lock on their folder: the same card or
+pictures, kept as a PBKDF2 hash, 5 wrong tries lock it for 15 minutes, so
+children can't open each other's progress. Sign-out forgets the tokens;
+the folder stays only when the server's `me.keep_on_sign_out` says so (by
+default kept for a grown-up's pairing code, deleted for a card or class
+sign-in). Still to do: reading a login card's QR code with a camera.
+
 *Now (W1.9, done):* assignments show as **assignment quests** (`link.Quest`
 methods in `internal/link/quest.go` turn the server's goal, dates and
 progress into "Master 20 words", "8/20 words", "due tomorrow"). The title
