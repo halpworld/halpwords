@@ -18,3 +18,9 @@ var Words embed.FS
 //
 //go:embed puzzles/riddles.txt
 var Riddles []byte
+
+// Quests are the hand-made quests built into the game, one .hwquest file
+// each (see pkg/maps).
+//
+//go:embed quests/*.hwquest
+var Quests embed.FS

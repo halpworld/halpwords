@@ -141,7 +141,7 @@ func hasLog(r *run, s string) bool {
 func TestDungeonDirector(t *testing.T) {
 	ctx, _ := aiContext(t)
 	lang, _ := words.Lookup("fr")
-	r := startRun(ctx, lang, rpg.Rogue, 5)
+	r := startRun(ctx, lang, rpg.Rogue, 5, nil)
 	c := newCrawl(r)
 	// Floor 1's script arrives after the hero does, and dresses the floor.
 	pump(t, c, "floor 1's script", func() bool { return hasLog(r, "The dungeon stirs") })
@@ -186,7 +186,7 @@ func TestDungeonDirector(t *testing.T) {
 func TestGeneratedContent(t *testing.T) {
 	ctx, f := aiContext(t)
 	lang, _ := words.Lookup("fr")
-	r := startRun(ctx, lang, rpg.Knight, 11)
+	r := startRun(ctx, lang, rpg.Knight, 11, nil)
 	c := newCrawl(r)
 	pump(t, c, "cloze sentences", func() bool {
 		g := r.ai.generated(r)
@@ -243,7 +243,7 @@ func TestGeneratedContent(t *testing.T) {
 func TestNoAI(t *testing.T) {
 	ctx := testContext(t)
 	lang, _ := words.Lookup("fr")
-	r := startRun(ctx, lang, rpg.Knight, 11)
+	r := startRun(ctx, lang, rpg.Knight, 11, nil)
 	c := newCrawl(r)
 	c.run.ai.poll(c)
 	if r.ai.generated(r) != nil || r.script() != nil || len(r.ai.directing) != 0 || r.ai.work != nil {

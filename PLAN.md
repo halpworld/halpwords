@@ -78,14 +78,16 @@ halpwords/
 │   ├── profile/                 # settings, word memory and Hall of Fame, kept between runs
 │   ├── llm/                     # provider interface, Anthropic + OpenAI-compatible,
 │   │                            # prompt templates, JSON validation, cache, budget
-│   └── save/                    # profiles, run saves, settings (JSON in user config dir)
+│   ├── playtest/                # the web game's play-test: a quest fetched from its own website
+│   └── save/                    # profiles, run saves, settings (JSON in user config dir, or memory)
 ├── pkg/                         # public API, also used by halpwords-server
 │   ├── words/                   # word packs, answer matching, Unicode normalisation, SRS
 │   ├── puzzle/                  # puzzle interface, generators, fixed puzzle bank
 │   ├── compete/                 # Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
 │   ├── proc/                    # procedural pixel art, the app icon
-│   └── safety/                  # family-safe AI policy and text filter
-├── assets/                      # embedded: font, word packs, puzzle bank, hero template
+│   ├── safety/                  # family-safe AI policy and text filter
+│   └── maps/                    # hand-made maps and quests (.hwmap, .hwquest) and their checks
+├── assets/                      # embedded: font, word packs, puzzle bank, quests, hero template
 │   ├── fonts/                   # Unifont subset (.hex) + OFL licence
 │   ├── words/                   # starter lists: french.txt, latin.txt, greek.txt, irish.txt
 │   └── puzzles/                 # hand-written riddles/cloze templates per pack
@@ -97,9 +99,9 @@ Rules:
   `combat`, `puzzle`, `rpg`, `compete`, `profile`, `llm`). That makes it unit-testable, deterministic
   from a seed, and portable.
 - **`pkg/` is a public API.** halpwords-server imports `pkg/words`,
-  `pkg/compete`, `pkg/puzzle`, `pkg/proc` and `pkg/safety` (list format,
-  grading, word memory, seeds and scores, worksheets, pictures, the AI
-  policy), so the two never disagree. Rules for it:
+  `pkg/compete`, `pkg/puzzle`, `pkg/proc`, `pkg/safety` and `pkg/maps` (list
+  format, grading, word memory, seeds and scores, worksheets, pictures, the
+  AI policy, the map format and its checks), so the two never disagree. Rules for it:
   - No Ebitengine, `internal/game`, `internal/scene` or `internal/gfx`,
     directly or through another package; `pkg/imports_test.go` checks this.
   - Any change to an exported name or to behaviour the server relies on
@@ -309,6 +311,31 @@ quarter turn at a time.
   the full map over the 3D view. A compass shows the facing.
 - **HUD:** level, language, HP and XP bars, ATK, gold, potions and combo, plus
   a four-line message log.
+- **Hand-made floors:** a map (`.hwmap`) is a grid of cells with monsters,
+  the puzzles and words on its locks, and notes on walls; a quest
+  (`.hwquest`) is 1 to 10 maps in order with an introduction and an ending.
+  `pkg/maps` holds the format and its checks (a wall all round, one start
+  and one stairs, doors between walls, everything reachable, a start that
+  isn't sealed in, and, given the word lists, that each lock's word is in
+  them and its puzzle can be made), shared with halpwords-server's map
+  editor. `dungeon.FromMap` builds a floor from a map; loot, stock and
+  monster looks are rolled from the seed as usual, and generated floors
+  turned into maps (`dungeon.ToMap`) pass the same checks. Quests are
+  under *New Adventure → Quest*, or dropped on the window.
+  *Now (W10.1, done):* the formats, the checks, `FromMap`, the Quest
+  picker with a built-in quest, dropped files kept in the `quests` folder,
+  quest saves, and the intro and ending pages. Quests from a linked game
+  and play-testing from the website come with the server (W10.3, W10.4).
+  *Now (server W10.3, done):* **play-testing** in the web game. The
+  server's *Play-test* button opens the web game with
+  `?quest=<address of the quest file>` (a short-lived signed link).
+  `internal/playtest` accepts only an address on the page's own origin
+  (same scheme, host and port, no user name, no backslashes), fetches it
+  with no cookies and no redirects, and checks it with `pkg/maps`; the
+  game then starts the quest (the language picker or the class). A
+  play-test keeps every file in memory (`save.UseMemory`) from before the
+  profile loads: nothing is saved, the player's own saves are neither
+  read nor changed, no AI key is loaded, and nothing is sent anywhere.
 - **Save points:** Save Shrines (§8). Falling wakes the hero at the last
   shrine they prayed at, on a new floor.
 - **Later:** sneaking up on a sleeping monster for a free first strike, and

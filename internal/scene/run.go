@@ -5,8 +5,11 @@ import (
 	"image/color"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
@@ -15,6 +18,7 @@ import (
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/pkg/compete"
+	"github.com/halpworld/halpwords/pkg/maps"
 	"github.com/halpworld/halpwords/pkg/proc"
 	"github.com/halpworld/halpwords/pkg/puzzle"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -88,6 +92,9 @@ type run struct {
 	ai *runAI
 	// cloze are the gap-fill sentences written in the word lists, or nil.
 	cloze *puzzle.Generated
+	// quest is the hand-made quest being played, or nil for the usual
+	// dungeon. Its maps are the floors, in order.
+	quest *maps.Quest
 }
 
 // runSetup is what the New Adventure screens choose before the class.
@@ -98,6 +105,7 @@ type runSetup struct {
 	seed   uint64
 	seeded bool
 	day    string // the Daily Dungeon's date
+	quest  *maps.Quest
 }
 
 // dailySetup is today's Daily Dungeon in lang.
@@ -124,7 +132,7 @@ func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runS
 			seed = v
 		}
 	}
-	r := startRun(ctx, lang, class, seed)
+	r := startRun(ctx, lang, class, seed, setup.quest)
 	r.setMode(ctx, setup.mode)
 	r.day = setup.day
 	return r
@@ -139,10 +147,36 @@ func (r *run) setMode(ctx *game.Context, m compete.Mode) {
 	}
 }
 
+// questLists returns the word lists a run in lang deals from: for a quest
+// whose maps name lists the game has (by ID), those; otherwise every list
+// for lang.
+func questLists(ctx *game.Context, lang *words.Language, q *maps.Quest) []*words.List {
+	all := ctx.ListsFor(lang.Code)
+	if q == nil {
+		return all
+	}
+	var named []*words.List
+	for _, l := range all {
+		for _, m := range q.Maps {
+			if m.List != nil && m.List.ID != "" && m.List.ID == l.ID && !slices.Contains(named, l) {
+				named = append(named, l)
+			}
+		}
+	}
+	if len(named) == 0 {
+		return all
+	}
+	return named
+}
+
 // startRun begins an Adventure in lang as a hero of class through the
-// dungeon made from seed.
-func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64) *run {
-	entries := entriesFor(ctx, lang)
+// dungeon made from seed, or through quest when it is not nil.
+func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, quest *maps.Quest) *run {
+	lists := questLists(ctx, lang, quest)
+	var entries []words.Entry
+	for _, l := range lists {
+		entries = append(entries, l.Entries...)
+	}
 	src := proc.NewPCG(seed)
 	rng := rand.New(src)
 	r := &run{
@@ -159,7 +193,8 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 		prof:    ctx.Profile,
 		link:    ctx.Link,
 		ai:      newRunAI(ctx),
-		cloze:   puzzle.FromLists(ctx.ListsFor(lang.Code)),
+		cloze:   puzzle.FromLists(lists),
+		quest:   quest,
 	}
 	if r.prof != nil {
 		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))
@@ -190,14 +225,35 @@ func (r *run) score() int { return r.tally.Score(r.depth) }
 // seedCode is the code that replays the run's dungeon.
 func (r *run) seedCode() string { return compete.SeedCode(r.seed) }
 
-// floor makes the map for floor depth. Hardcore floors have no shrines.
+// floor makes the map for floor depth: a quest's map, or a generated one.
+// Hardcore floors have no shrines.
 func (r *run) floor(depth int) *dungeon.Level {
+	if m := r.questMap(depth); m != nil {
+		if l, err := dungeon.FromMap(m, r.floorSeed(depth)); err == nil {
+			return l
+		}
+		// Quests are checked before they are played, so this is a bug;
+		// a generated floor keeps the game going.
+	}
 	l := dungeon.Generate(r.floorSeed(depth), depth)
 	if r.hardcore() {
 		l.Harden()
 	}
 	return l
 }
+
+// questMap returns the quest's map for floor depth, or nil when the run is
+// not a quest.
+func (r *run) questMap(depth int) *maps.Map {
+	if r.quest == nil || depth < 1 || depth > len(r.quest.Maps) {
+		return nil
+	}
+	return r.quest.Map(depth - 1)
+}
+
+// lastFloor reports whether the hero is on a quest's last map, whose
+// stairs end the quest.
+func (r *run) lastFloor() bool { return r.quest != nil && r.depth >= len(r.quest.Maps) }
 
 // remember writes what the player has learned to disk, if it can.
 func (r *run) remember() {
@@ -247,3 +303,24 @@ func (r *run) say(text string, col color.RGBA) {
 }
 
 func (r *run) info(text string) { r.say(text, pal.Ice) }
+
+// logWidth is how many characters fit on a line of the message log.
+const logWidth = 74
+
+// sayLong says text over as many log lines as it needs.
+func (r *run) sayLong(text string, col color.RGBA) {
+	line := ""
+	for _, word := range strings.Fields(text) {
+		if line != "" && utf8.RuneCountInString(line)+1+utf8.RuneCountInString(word) > logWidth {
+			r.say(line, col)
+			line = ""
+		}
+		if line != "" {
+			line += " "
+		}
+		line += word
+	}
+	if line != "" {
+		r.say(line, col)
+	}
+}
