@@ -221,6 +221,23 @@ func (c *Context) LoadLists() error {
 	return nil
 }
 
+// ReloadSaves reads everything kept in the user's folder again: word lists,
+// the profile and the AI settings. It is used after progress moves in from
+// another address.
+func (c *Context) ReloadSaves() error {
+	if err := c.LoadLists(); err != nil {
+		return err
+	}
+	prof, errs := profile.Load()
+	c.Profile = prof
+	if len(errs) > 0 {
+		c.Notify("Some saved progress was damaged")
+	}
+	c.ApplyOptions()
+	c.AI = llm.Load(saveStore{})
+	return nil
+}
+
 // saveStore keeps the AI settings in the user's folder.
 type saveStore struct{}
 

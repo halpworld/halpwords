@@ -132,3 +132,28 @@ func TestUseMemory(t *testing.T) {
 		t.Errorf("the key reached the folder: %v", err)
 	}
 }
+
+func TestAll(t *testing.T) {
+	useTempDir(t)
+	if names, err := All(); err != nil || len(names) != 0 {
+		t.Fatalf("empty folder: got %v, %v", names, err)
+	}
+	for _, n := range []string{"b.json", "words/x.txt", "a.json", "ai/bank-fr.json"} {
+		if err := Write(n, []byte(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"a.json", "ai/bank-fr.json", "b.json", "words/x.txt"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}

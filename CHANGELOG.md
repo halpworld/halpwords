@@ -7,6 +7,14 @@ version as its release notes.
 
 ### Added
 
+- **The web game can move house.** Ready for the move from
+  `halpworld.github.io/halpwords` to `play.halpwords.com` (not live yet): a
+  *We've moved* page for the old address (`web/moved`, `make build-moved`)
+  hands the hero, word memory, own word lists, Hall of Fame and settings
+  over in the new address's URL fragment, in parts if a save is very big.
+  The game takes them in once, asks before replacing progress that is
+  already there, and clears the address. AI helper keys stay behind. The
+  cut-over steps are in `docs/RELEASING.md`.
 - **Report from the pause menu.** "Report" sends a bug report (game
   version, system, seed, and crash.txt only if you tick the box) or an
   "I was upset by..." report, with an optional note, to the Halpwords

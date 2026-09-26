@@ -79,7 +79,8 @@ halpwords/
 │   ├── llm/                     # provider interface, Anthropic + OpenAI-compatible,
 │   │                            # prompt templates, JSON validation, cache, budget
 │   ├── playtest/                # the web game's play-test: a quest fetched from its own website
-│   └── save/                    # profiles, run saves, settings (JSON in user config dir, or memory)
+│   ├── save/                    # profiles, run saves, settings (JSON in user config dir, or memory)
+│   └── move/                    # the web game's addresses; hands browser saves to a new address
 ├── pkg/                         # public API, also used by halpwords-server
 │   ├── words/                   # word packs, answer matching, Unicode normalisation, SRS
 │   ├── puzzle/                  # puzzle interface, generators, fixed puzzle bank
@@ -91,6 +92,7 @@ halpwords/
 │   ├── fonts/                   # Unifont subset (.hex) + OFL licence
 │   ├── words/                   # starter lists: french.txt, latin.txt, greek.txt, irish.txt
 │   └── puzzles/                 # hand-written riddles/cloze templates per pack
+├── web/moved/                   # the "We've moved" page for the web game's old address
 └── overrides/                   # optional drop-in PNGs (AI art) that replace procedural sprites
 ```
 
@@ -888,6 +890,19 @@ GitHub release with checksums and the changelog's notes, notarisation when
 the secrets are set, and the web version on GitHub Pages
 ([docs/RELEASING.md](docs/RELEASING.md)). A panic in the game loop writes
 `crash.txt` to the user folder.
+
+*Now (W1.16, code done; the move waits for DNS):* the web game is moving
+from `halpworld.github.io/halpwords` to `play.halpwords.com`. `move.WebURL`
+is the one place the address players are sent to lives (README and
+`docs/RELEASING.md` must agree; a test checks). `web/moved` (`make
+build-moved`) is the page the old address will serve: it reads the saves
+from local storage and opens the new address with them in the fragment
+(`#import=k/n:id:data`, raw DEFLATE and base64url, split into parts over
+900,000 characters, the AI keys left behind). On start the web game takes
+the parts (`move.Receive`), asks before replacing progress already there
+(`scene.moveAsk`), imports once and clears the fragment. The cut-over steps
+for people, and the proposed release workflow, are in
+[docs/RELEASING.md](docs/RELEASING.md) and `docs/cutover/release.yml`.
 
 ---
 
