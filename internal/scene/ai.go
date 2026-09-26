@@ -8,6 +8,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/pkg/proc"
@@ -148,12 +149,60 @@ func (a *runAI) direct(r *run, depth int) {
 	if b := l.Boss(); b != nil {
 		f.Boss = b.Kind.Name
 	}
+	f.Quest, f.QuestWords = r.directorAssignment()
 	svc := a.svc
 	a.directing[depth] = llm.Start(func() (*llm.Script, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 		return svc.Direct(ctx, f)
 	})
+}
+
+// directorAssignment is the assignment quest the Dungeon Director builds
+// floors around: the run's own (its words are the run's), or else the
+// one to do next in the run's language that counts in an Adventure, with
+// its words the player knows least first. It is "" when there is none.
+func (r *run) directorAssignment() (string, []words.Entry) {
+	if r.assign != nil {
+		return r.assign.Title, nil
+	}
+	now := assignNow()
+	for _, q := range link.SortQuests(r.link.Quests(), now) {
+		if q.Complete() || !q.Started(now) || q.Mode == link.ModePractice {
+			continue
+		}
+		for _, l := range r.link.Lists() {
+			if l.ID != q.List.ID || l.Language != r.lang.Code || len(l.Entries) == 0 {
+				continue
+			}
+			return assignName(q), weakestFirst(r.deck.Memory(), l.Entries, maxAssignWords)
+		}
+	}
+	return "", nil
+}
+
+// maxAssignWords is how many of an assignment's words the Director is told.
+const maxAssignWords = 8
+
+// weakestFirst returns up to n of entries, the ones mem says are weakest
+// first and then in the list's order.
+func weakestFirst(mem *words.Memory, entries []words.Entry, n int) []words.Entry {
+	var out []words.Entry
+	have := map[int]bool{}
+	var ids []int
+	if mem != nil {
+		ids = mem.Weakest(entries, n)
+	}
+	for id := range entries {
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		if !have[id] && len(out) < n {
+			have[id] = true
+			out = append(out, entries[id])
+		}
+	}
+	return out
 }
 
 // startFloor asks for what the floor the hero has just reached needs, and

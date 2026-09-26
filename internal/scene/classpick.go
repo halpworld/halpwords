@@ -44,6 +44,10 @@ func (p *ClassPick) Update(ctx *game.Context) error {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
 		setup := p.setup
+		if setup.assign != nil {
+			ctx.Replace(NewAssignments(ctx))
+			return nil
+		}
 		if setup.mode == compete.Daily {
 			setup = runSetup{mode: compete.Daily} // the language decides the dungeon
 		}

@@ -820,9 +820,26 @@ as `X-Halpwords-Client: halpwords/1.2.0 (js; wasm)` instead. Unlinking
 also tells the server (`POST /api/v1/unlink`, in the background, after
 refreshing an old access token), so the game leaves the child's page on
 the website; offline, the family removes it there. Still to do:
-checking it all against staging (W1.8's "Done when"), quests (W1.9),
+checking it all against staging (W1.8's "Done when"),
 per-assignment settings, and the accommodations the game doesn't have yet
 (cheaper hints, larger text, no timed dodges).
+
+*Now (W1.9, done):* assignments show as **assignment quests** (`link.Quest`
+methods in `internal/link/quest.go` turn the server's goal, dates and
+progress into "Master 20 words", "8/20 words", "due tomorrow"). The title
+screen shows the one to do next in a banner and gains **Assignments**,
+which lists them (to do by due date, then not started, then complete) with
+a bar and a due date; Enter plays one in Practice (only its list) or in an
+Adventure (only its words, kept in the save as `Assignment`), from where
+its answers count (←/→ when both do). Campfires show the current one, and
+Q there opens the list to look at. With the AI helper on, the Dungeon
+Director is told the assignment's name, and in other Adventures in that
+language up to 8 of its words, weakest first. Progress is the server's as
+of the last sync; per-assignment settings are read but not applied yet,
+and goal kinds or modes the game doesn't know are shown as just practise,
+anywhere. In the code they are `assignRun`, `Assignments` and
+`run.assign` (`internal/scene/assignments.go`), apart from W10.1's
+hand-made quests (`maps.Quest`, `run.quest`); a save can carry both.
 
 *Now (W7.4, done):* Title → **Play Together** joins a room a grown-up
 opened on the website (`/play/host`), by its 6-character code, over

@@ -105,6 +105,8 @@ func (a *Adventure) Draw(dst *ebiten.Image, ctx *game.Context) {
 // seed 7K3QZP".
 func setupText(s runSetup) string {
 	switch {
+	case s.assign != nil:
+		return "Assignment: " + s.assign.Title
 	case s.quest != nil:
 		return "Quest · " + s.quest.Title
 	case s.mode == compete.Daily && s.day != "":

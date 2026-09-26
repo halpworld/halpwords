@@ -97,6 +97,9 @@ type run struct {
 	// quest is the hand-made quest being played, or nil for the usual
 	// dungeon. Its maps are the floors, in order.
 	quest *maps.Quest
+	// assign is the assignment quest the adventure was started for, or
+	// nil: its words are the assigned list's only.
+	assign *assignRun
 }
 
 // runSetup is what the New Adventure screens choose before the class.
@@ -108,6 +111,8 @@ type runSetup struct {
 	seeded bool
 	day    string // the Daily Dungeon's date
 	quest  *maps.Quest
+	// assign, when not nil, plays an assignment quest's list only.
+	assign *assignRun
 }
 
 // dailySetup is today's Daily Dungeon in lang.
@@ -118,11 +123,29 @@ func dailySetup(ctx *game.Context, lang *words.Language) runSetup {
 
 // entriesFor returns every word in the lists for lang.
 func entriesFor(ctx *game.Context, lang *words.Language) []words.Entry {
+	return entriesOf(ctx.ListsFor(lang.Code))
+}
+
+func entriesOf(lists []*words.List) []words.Entry {
 	var entries []words.Entry
-	for _, l := range ctx.ListsFor(lang.Code) {
+	for _, l := range lists {
 		entries = append(entries, l.Entries...)
 	}
 	return entries
+}
+
+// runLists are the lists a run in lang plays: an assignment quest's
+// list, or else the lists of a hand-made quest (questLists). ok is false
+// when the assignment's list is gone.
+func runLists(ctx *game.Context, lang *words.Language, quest *maps.Quest, a *assignRun) (lists []*words.List, ok bool) {
+	if a == nil {
+		return questLists(ctx, lang, quest), true
+	}
+	l := assignList(ctx, a.List)
+	if l == nil || l.Language != lang.Code || len(l.Entries) == 0 {
+		return nil, false
+	}
+	return []*words.List{l}, true
 }
 
 func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runSetup) *run {
@@ -134,9 +157,12 @@ func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runS
 			seed = v
 		}
 	}
-	r := startRun(ctx, lang, class, seed, setup.quest)
+	r := beginRun(ctx, lang, class, seed, setup.quest, setup.assign)
 	r.setMode(ctx, setup.mode)
 	r.day = setup.day
+	if r.assign != nil {
+		r.say("Assignment: "+r.assign.Title+". Its words fill this dungeon.", pal.Yellow)
+	}
 	return r
 }
 
@@ -174,8 +200,19 @@ func questLists(ctx *game.Context, lang *words.Language, q *maps.Quest) []*words
 // startRun begins an Adventure in lang as a hero of class through the
 // dungeon made from seed, or through quest when it is not nil.
 func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, quest *maps.Quest) *run {
-	r := startRunWith(ctx, lang, class, seed, questLists(ctx, lang, quest))
-	r.quest = quest
+	return beginRun(ctx, lang, class, seed, quest, nil)
+}
+
+// beginRun is startRun that also plays an assignment quest's list only,
+// when a is not nil. An assignment whose list is gone plays the usual
+// lists instead.
+func beginRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, quest *maps.Quest, a *assignRun) *run {
+	lists, ok := runLists(ctx, lang, quest, a)
+	if !ok {
+		lists, a = questLists(ctx, lang, quest), nil
+	}
+	r := startRunWith(ctx, lang, class, seed, lists)
+	r.quest, r.assign = quest, a
 	r.prof, r.link, r.ai = ctx.Profile, ctx.Link, newRunAI(ctx)
 	if r.prof != nil {
 		r.deck.SetMemory(r.prof.MemoryFor(lang.Code))
@@ -188,10 +225,7 @@ func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uin
 // link and no AI. The dungeon and the deal of words come from seed and
 // the lists alone.
 func startRunWith(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, lists []*words.List) *run {
-	var entries []words.Entry
-	for _, l := range lists {
-		entries = append(entries, l.Entries...)
-	}
+	entries := entriesOf(lists)
 	src := proc.NewPCG(seed)
 	rng := rand.New(src)
 	r := &run{

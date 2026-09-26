@@ -99,6 +99,7 @@ type fake struct {
 	n        int             // tokens handed out
 	expires  int             // expires_in of access tokens
 	lists    []wireList
+	quests   []byte // the answer to GET /api/v1/assignments; nil is none
 	etag     string
 	memory   map[string]*words.Memory
 	me       map[string]any
@@ -261,9 +262,15 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, 200, map[string]any{"lists": lists})
 	case r.Method == "GET" && path == "/api/v1/assignments":
-		if auth() {
-			writeJSON(w, 200, map[string]any{"assignments": []any{}})
+		if !auth() {
+			return
 		}
+		if f.quests != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(f.quests)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"assignments": []any{}})
 	case r.Method == "GET" && path == "/api/v1/memory":
 		if !auth() {
 			return

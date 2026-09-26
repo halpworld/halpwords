@@ -40,9 +40,12 @@ version as its release notes.
   unlinking keeps your progress and removes the game from the website's
   list too. The web version links too, keeping everything in the
   browser's local storage.
-  unlinking keeps your progress. The web version links too, keeping
-  everything in the browser's local storage.
-  unlinking keeps your progress.
+- **Assignment quests.** Word lists a grown-up assigns show as quests on
+  the title screen (the next one in a banner, all of them under
+  Assignments) and at campfires, with a progress bar and a due date.
+  Choosing one practises its list, or starts an Adventure with only its
+  words, as the grown-up chose. With the AI helper on, the Dungeon
+  Director weaves the assignment's words into its floors.
 - **Quests and hand-made maps.** *New Adventure → Quest* plays hand-made
   floors in order, with an introduction and an ending. A `.hwquest` (a
   quest) or `.hwmap` (one floor) file dropped on the window is checked and

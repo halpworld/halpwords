@@ -3,6 +3,7 @@ package scene
 import (
 	"math"
 	"runtime"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 )
 
@@ -20,6 +22,10 @@ type Title struct {
 	sel     int
 	items   []titleItem
 	saved   string // describes the saved adventure, if there is one
+	hasSave bool
+	// assigns are the assignment quests a grown-up set, when the game is
+	// linked.
+	assigns []link.Quest
 }
 
 // titleItem is an entry in the main menu.
@@ -37,9 +43,10 @@ const (
 	titleAI
 	titleAccount
 	titleQuit
+	titleAssignments
 )
 
-var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Play Together", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit"}
+var titleLabels = [...]string{"Continue", "New Adventure", "Practice", "Play Together", "Grimoire", "Hall of Fame", "Word Lists", "Settings", "AI Helper", "Account", "Quit", "Assignments"}
 
 // NewTitle creates the title screen.
 func NewTitle(ctx *game.Context) game.Scene {
@@ -47,16 +54,37 @@ func NewTitle(ctx *game.Context) game.Scene {
 	t := &Title{
 		bg:      backdrop(1, 1.1),
 		torches: []*gfx.Torch{gfx.NewTorch(96, 150, 1), gfx.NewTorch(game.ScreenW-96, 150, 2)},
-		items:   []titleItem{titleNew, titlePractice, titleTogether, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount},
 	}
+	t.saved, t.hasSave = saveSummary()
+	t.build(ctx)
+	return t
+}
+
+// build makes the menu: Assignments comes first when there are
+// assignment quests, after Continue. The same entry stays chosen.
+func (t *Title) build(ctx *game.Context) {
+	var was titleItem = -1
+	if t.sel < len(t.items) {
+		was = t.items[t.sel]
+	}
+	t.assigns = ctx.Link.Quests()
+	t.items = t.items[:0]
+	if t.hasSave {
+		t.items = append(t.items, titleContinue)
+	}
+	if len(t.assigns) > 0 {
+		t.items = append(t.items, titleAssignments)
+	}
+	t.items = append(t.items, titleNew, titlePractice, titleTogether, titleGrimoire, titleFame, titleWordLists, titleSettings, titleAI, titleAccount)
 	if runtime.GOOS != "js" {
 		t.items = append(t.items, titleQuit) // a web page is closed, not quit
 	}
-	if s, ok := saveSummary(); ok {
-		t.saved = s
-		t.items = append([]titleItem{titleContinue}, t.items...)
+	t.sel = 0
+	for i, it := range t.items {
+		if it == was {
+			t.sel = i
+		}
 	}
-	return t
 }
 
 // rows is how many items are in each of the menu's two columns.
@@ -70,6 +98,9 @@ func (t *Title) Update(ctx *game.Context) error {
 	if d := droppedQuests(); len(d) > 0 {
 		ctx.Replace(NewQuests(ctx, d...))
 		return nil
+	}
+	if qs := ctx.Link.Quests(); !slices.EqualFunc(qs, t.assigns, func(a, b link.Quest) bool { return a == b }) {
+		t.build(ctx) // a sync brought new assignments
 	}
 	n := len(t.items)
 	switch {
@@ -107,15 +138,16 @@ func (t *Title) Update(ctx *game.Context) error {
 		}
 		ctx.Sound.Play(audio.Select)
 		ctx.Replace(map[titleItem]func(*game.Context) game.Scene{
-			titleNew:       NewNewGame,
-			titlePractice:  NewPractice,
-			titleTogether:  NewLobby,
-			titleGrimoire:  func(ctx *game.Context) game.Scene { return NewGrimoire(ctx, nil) },
-			titleFame:      NewHallOfFame,
-			titleWordLists: NewWordLists,
-			titleSettings:  NewSettings,
-			titleAI:        NewAISetup,
-			titleAccount:   NewAccount,
+			titleNew:         NewNewGame,
+			titlePractice:    NewPractice,
+			titleTogether:    NewLobby,
+			titleGrimoire:    func(ctx *game.Context) game.Scene { return NewGrimoire(ctx, nil) },
+			titleFame:        NewHallOfFame,
+			titleWordLists:   NewWordLists,
+			titleSettings:    NewSettings,
+			titleAI:          NewAISetup,
+			titleAccount:     NewAccount,
+			titleAssignments: NewAssignments,
 		}[it](ctx))
 	}
 	return nil
@@ -172,6 +204,8 @@ func (t *Title) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 		f.DrawShadow(dst, titleLabels[it], x+36, y, 2, c)
 	}
+
+	drawAssignBanner(dst, ctx, t.assigns)
 
 	f.DrawShadow(dst, "Arrows choose   Enter select", 8, game.ScreenH-20, 1, pal.Ash)
 	v := game.VersionText()

@@ -14,6 +14,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/typing"
@@ -28,6 +29,10 @@ type Practice struct {
 	rng   *rand.Rand
 	langs []*words.Language // languages that have at least one list
 	li    int
+	// assign is the assignment quest being practised, and list its words;
+	// otherwise every list of the language is practised.
+	assign *link.Quest
+	list   *words.List
 
 	deck     *words.Deck
 	settings profile.LangSettings
@@ -57,11 +62,24 @@ func NewPractice(ctx *game.Context) game.Scene {
 	return p
 }
 
+// NewAssignPractice creates the practice screen for an assignment quest: it
+// practises the assigned list l only.
+func NewAssignPractice(ctx *game.Context, q link.Quest, l *words.List) game.Scene {
+	lang, _ := words.Lookup(l.Language)
+	p := &Practice{bg: backdrop(7, 1.6), rng: proc.NewRand(ctx.Tick + 1), langs: []*words.Language{lang}, assign: &q, list: l}
+	p.setLanguage(ctx, 0)
+	return p
+}
+
 func (p *Practice) lang() *words.Language { return p.langs[p.li] }
 
 func (p *Practice) setLanguage(ctx *game.Context, i int) {
 	p.li = (i + len(p.langs)) % len(p.langs)
-	p.deck = words.NewDeck(entriesFor(ctx, p.lang()), p.rng)
+	entries := entriesFor(ctx, p.lang())
+	if p.list != nil {
+		entries = p.list.Entries
+	}
+	p.deck = words.NewDeck(entries, p.rng)
 	p.deck.SetMemory(ctx.Profile.MemoryFor(p.lang().Code))
 	p.settings = ctx.Profile.Settings.For(p.lang())
 	p.field = typing.NewField(p.lang())
@@ -83,6 +101,12 @@ func (p *Practice) Update(ctx *game.Context) error {
 	}
 	if input.Back() {
 		ctx.Sound.Play(audio.Back)
+		if p.assign != nil {
+			ctx.EndSession()
+			ctx.Link.SyncNow() // for the assignment's progress
+			ctx.Replace(NewAssignments(ctx))
+			return nil
+		}
 		ctx.Replace(NewTitle(ctx))
 		return nil
 	}
@@ -94,6 +118,7 @@ func (p *Practice) Update(ctx *game.Context) error {
 		return nil
 	}
 	switch {
+	case p.assign != nil:
 	case input.Pressed(ebiten.KeyArrowLeft):
 		ctx.Sound.Play(audio.Blip)
 		p.setLanguage(ctx, p.li-1)
@@ -150,7 +175,16 @@ func (p *Practice) Draw(dst *ebiten.Image, ctx *game.Context) {
 	gfx.DrawArt(dst, p.bg, 0, 0)
 
 	// Header: language selector and streak.
-	f.DrawCentered(dst, "◄ "+p.lang().Name+" ►", cx, 12, 2, pal.Yellow)
+	if q := p.assign; q != nil {
+		head := "Assignment: " + assignName(*q)
+		f.DrawCentered(dst, fit(f, head, 360, 2), cx, 12, 2, pal.Yellow)
+		goal := q.GoalText()
+		f.DrawShadow(dst, goal, game.ScreenW-12-f.Width(goal, 1), 12, 1, pal.Ice)
+		prog := q.ProgressText()
+		f.DrawShadow(dst, prog, game.ScreenW-12-f.Width(prog, 1), 30, 1, pal.Steel)
+	} else {
+		f.DrawCentered(dst, "◄ "+p.lang().Name+" ►", cx, 12, 2, pal.Yellow)
+	}
 	f.DrawShadow(dst, fmt.Sprintf("Streak %d", p.streak), 12, 12, 1, pal.Ice)
 	f.DrawShadow(dst, fmt.Sprintf("Best %d", p.best), 12, 30, 1, pal.Steel)
 	if len(ctx.ListErrors) > 0 {
@@ -208,7 +242,7 @@ func (p *Practice) drawHelp(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	y := 262
 	if p.showing {
-		f.DrawCentered(dst, "Enter: next word    Esc: menu", game.ScreenW/2, y+40, 1, pal.Steel)
+		f.DrawCentered(dst, "Enter: next word    Esc: "+p.escTo(), game.ScreenW/2, y+40, 1, pal.Steel)
 		return
 	}
 	if p.field.Greek {
@@ -225,10 +259,10 @@ func (p *Practice) drawHelp(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawCentered(dst, row2.String(), game.ScreenW/2, y+20, 1, pal.Ice)
 		f.DrawCentered(dst, "after a vowel:  ) ἀ   ( ἁ   / ά   \\ ὰ   = ᾶ   | ᾳ   + ϊ", game.ScreenW/2, y+38, 1, pal.Tan)
 		f.DrawCentered(dst, "Tab: cycle accent   F2: Greek keys off", game.ScreenW/2, y+54, 1, pal.Tan)
-		f.DrawCentered(dst, "Enter: check   ←/→: language   Esc: menu", game.ScreenW/2, y+70, 1, pal.Steel)
+		f.DrawCentered(dst, "Enter: check   "+p.langKeys()+"Esc: "+p.escTo(), game.ScreenW/2, y+70, 1, pal.Steel)
 		return
 	}
-	help := "Enter: check   Backspace: fix   ←/→: language   Esc: menu"
+	help := "Enter: check   Backspace: fix   " + p.langKeys() + "Esc: " + p.escTo()
 	if cycle, _, ok := p.lang().AccentCycle('e'); ok {
 		hint := strings.Join(strings.Split(string(cycle), ""), " → ")
 		f.DrawCentered(dst, "Tab after a letter adds an accent:  "+hint, game.ScreenW/2, y+22, 1, pal.Tan)
@@ -237,4 +271,20 @@ func (p *Practice) drawHelp(dst *ebiten.Image, ctx *game.Context) {
 		help = "F2: Greek keys on   " + help
 	}
 	f.DrawCentered(dst, help, game.ScreenW/2, y+40, 1, pal.Steel)
+}
+
+// langKeys is the key hint for changing language, when the arrows do.
+func (p *Practice) langKeys() string {
+	if p.assign != nil {
+		return ""
+	}
+	return "←/→: language   "
+}
+
+// escTo names where Esc goes.
+func (p *Practice) escTo() string {
+	if p.assign != nil {
+		return "assignments"
+	}
+	return "menu"
 }
