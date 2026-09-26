@@ -36,7 +36,7 @@ func useTempDir(t *testing.T) {
 func testRun(t *testing.T, ctx *game.Context) (*run, *dungeon.Level) {
 	t.Helper()
 	lang, _ := words.Lookup("fr")
-	r := startRun(ctx, lang, rpg.Rogue, 99)
+	r := startRun(ctx, lang, rpg.Rogue, 99, nil)
 	r.depth, r.regen = 3, 1
 	r.hero.Gold, r.hero.Items[rpg.Potion], r.hero.Streak = 17, 2, 4
 	r.hero.Take(rpg.Gear{Slot: rpg.Trinket, Tier: 1, Affix: rpg.Fortune})
@@ -131,7 +131,7 @@ func TestLoadAtShrine(t *testing.T) {
 func TestLoadBadSave(t *testing.T) {
 	ctx := testContext(t)
 	lang, _ := words.Lookup("la")
-	r := startRun(ctx, lang, rpg.Knight, 1)
+	r := startRun(ctx, lang, rpg.Knight, 1, nil)
 	l := dungeon.Generate(r.floorSeed(1), 1)
 	good, err := encodeSave(r, l, l.Start, l.StartDir, true)
 	if err != nil {

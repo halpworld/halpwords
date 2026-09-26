@@ -7,6 +7,16 @@ version as its release notes.
 
 ### Added
 
+- **Quests and hand-made maps.** *New Adventure → Quest* plays hand-made
+  floors in order, with an introduction and an ending. A `.hwquest` (a
+  quest) or `.hwmap` (one floor) file dropped on the window is checked and
+  kept in the `quests` folder; one quest comes with the game.
+- `pkg/maps` (new): the `.hwmap` and `.hwquest` formats (`Map`, `Quest`,
+  `ParseMap`, `ParseQuest`, `Load`, `Encode`) and their checks
+  (`Map.Check`, `Quest.Check`, returning `[]Problem` with the cell), plus
+  the names a map can use (`MonsterKinds`, `BossKinds`, `Traits`, `Themes`,
+  `PuzzleNames`, `DoorPuzzles`, `ChestPuzzles`) and `FindWord`.
+  `pkg/puzzle`: `OneWord` and `MakeWord`, a puzzle about a chosen word.
 - **Gap-fill sentences in word lists.** A `>> sentence with ___ | answer`
   line gives a list its own cloze puzzles, used with or without the AI
   helper (not on scored runs). The answer must be one of the list's

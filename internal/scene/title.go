@@ -64,6 +64,10 @@ func (t *Title) Update(ctx *game.Context) error {
 	for _, tr := range t.torches {
 		tr.Update()
 	}
+	if d := droppedQuests(); len(d) > 0 {
+		ctx.Replace(NewQuests(ctx, d...))
+		return nil
+	}
 	n := len(t.items)
 	switch {
 	case input.Up():

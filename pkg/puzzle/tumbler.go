@@ -44,7 +44,7 @@ func TumblerOptions(depth int) int {
 }
 
 // newTumbler returns nil if no word in the deck fits on the lock.
-func newTumbler(deck *words.Deck, depth int, lang *words.Language, rng *rand.Rand) *tumbler {
+func newTumbler(deck dealer, depth int, lang *words.Language, rng *rand.Rand) *tumbler {
 	e, id, ok := deck.NextWhere(func(e words.Entry) bool {
 		_, rest := splitArticle(e.Answers[0], lang)
 		n := len(Letters(rest))
