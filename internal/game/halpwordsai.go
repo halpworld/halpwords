@@ -8,12 +8,13 @@ import (
 
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/llm"
+	"github.com/halpworld/halpwords/internal/save"
 )
 
 // loadAI reads the AI settings and connects the AI to Halpwords AI
 // through the link.
 func (c *Context) loadAI() *llm.Service {
-	ai := llm.Load(saveStore{})
+	ai := llm.Load(save.Root)
 	ai.UseHalpwords(halpwordsAI{c})
 	return ai
 }

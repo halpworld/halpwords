@@ -59,7 +59,7 @@ type Report struct {
 // there is no run).
 func newReport(ctx *game.Context, seed string) *Report {
 	r := &Report{bg: backdrop(5, 1.3), seed: seed}
-	if b, err := save.Read(game.CrashFile); err == nil {
+	if b, err := save.Root.Read(game.CrashFile); err == nil {
 		r.crash = string(b)
 		if len(r.crash) > report.MaxCrash {
 			r.crash = r.crash[len(r.crash)-report.MaxCrash:] // the end says what went wrong

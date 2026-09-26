@@ -130,7 +130,12 @@ type Me struct {
 	// SeenBy are the roles of the adults who can see the learner's
 	// progress.
 	SeenBy []string `json:"seen_by"`
-	Game   struct {
+	// KeepOnSignOut says whether the game may keep the learner's
+	// progress on the computer after they sign out: a school decides
+	// for its classes' shared computers (W2.5). Nil from a server that
+	// doesn't say.
+	KeepOnSignOut *bool `json:"keep_on_sign_out,omitempty"`
+	Game          struct {
 		Version    string `json:"version"`
 		MinVersion string `json:"min_version"`
 		Supported  bool   `json:"supported"`
@@ -225,7 +230,9 @@ type state struct {
 	Refresh    string
 	RefreshExp time.Time
 	LinkedAt   time.Time
-	LastSync   time.Time `json:",omitempty"`
+	// Way is how the game signed in: WayPairing, WayCard or WayClass.
+	Way      string    `json:",omitempty"`
+	LastSync time.Time `json:",omitempty"`
 	// NextSeq is the sequence number of the next event. It only grows,
 	// even across unlinking, so no number is ever used twice.
 	NextSeq   int64

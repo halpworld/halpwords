@@ -40,6 +40,7 @@ const (
 	codeTokenReused     = "token_reused"
 	codeInvalidCode     = "invalid_code"
 	codeNotLinkable     = "not_linkable"
+	codeLocked          = "locked"
 	codeInvalidRequest  = "invalid_request"
 	codeTooLarge        = "too_large"
 	codeRateLimited     = "rate_limited"
@@ -67,7 +68,7 @@ func Explain(err error) string {
 	case err == nil:
 		return ""
 	case errors.Is(err, ErrBadCode), errors.Is(err, ErrNotLinkable), errors.Is(err, ErrUnlinked),
-		errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked):
+		errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked):
 		return err.Error()
 	case errors.Is(err, context.DeadlineExceeded):
 		return "the server took too long to answer"

@@ -10,24 +10,34 @@ import (
 	"time"
 )
 
-// Link links the game with a pairing code from the website, in the
-// background: Status says when it is done (Busy goes false, and Linked
-// or Err is set). The first sync follows at once.
-func (c *Client) Link(code string) {
+// Link links the game with a pairing code from the website, or a login
+// card's code, in the background: Status says when it is done (Busy goes
+// false, and Linked or Err is set). The first sync follows at once.
+func (c *Client) Link(code string) { c.SignIn(SignIn{Code: code}) }
+
+// SignIn signs a learner in, in the background, as Link does: with a
+// pairing code, a login card, or a class code and pictures.
+func (c *Client) SignIn(s SignIn) {
 	c.mu.Lock()
 	c.busy, c.err = true, nil
 	c.mu.Unlock()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
 		defer cancel()
-		if err := c.LinkNow(ctx, code); err == nil {
+		if err := c.SignInNow(ctx, s); err == nil {
 			c.Sync(ctx)
 		}
 	}()
 }
 
-// LinkNow links the game with a pairing code and waits for the answer.
+// LinkNow links the game with a pairing code or a login card's code and
+// waits for the answer.
 func (c *Client) LinkNow(ctx context.Context, code string) error {
+	return c.SignInNow(ctx, SignIn{Code: code})
+}
+
+// SignInNow signs a learner in and waits for the answer.
+func (c *Client) SignInNow(ctx context.Context, s SignIn) error {
 	c.syncMu.Lock()
 	defer c.syncMu.Unlock()
 	c.mu.Lock()
@@ -36,7 +46,7 @@ func (c *Client) LinkNow(ctx context.Context, code string) error {
 	c.mu.Unlock()
 	err := ErrLinked
 	if !linked {
-		err = c.link(ctx, code)
+		err = c.link(ctx, s)
 	}
 	c.mu.Lock()
 	c.busy, c.err = false, err
@@ -44,25 +54,18 @@ func (c *Client) LinkNow(ctx context.Context, code string) error {
 	return err
 }
 
-func (c *Client) link(ctx context.Context, code string) error {
-	code = strings.TrimSpace(code)
-	if n := len(strings.NewReplacer("-", "", " ", "").Replace(code)); n != 8 || len(code) > 16 {
-		return ErrBadCode
-	}
-	var t tokens
-	// Sent once: a code works once.
-	payload, _ := json.Marshal(map[string]string{"code": code, "name": c.deviceName()})
-	_, _, err := c.once(ctx, http.MethodPost, "/api/v1/link", "", nil, payload, &t)
-	var e *Error
-	if errors.As(err, &e) {
-		switch {
-		case e.Code == codeInvalidCode || (e.Status == http.StatusBadRequest && e.Code == codeInvalidRequest):
-			return ErrBadCode
-		case e.Code == codeNotLinkable || e.Status == http.StatusForbidden:
-			return ErrNotLinkable
-		}
-	}
+func (c *Client) link(ctx context.Context, s SignIn) error {
+	body, err := s.body()
 	if err != nil {
+		return err
+	}
+	body["name"] = c.deviceName()
+	var t tokens
+	// Sent once: a pairing code works once, and a wrong card or picture
+	// counts towards a lockout.
+	payload, _ := json.Marshal(body)
+	_, _, err = c.once(ctx, http.MethodPost, "/api/v1/link", "", nil, payload, &t)
+	if err = s.explain(err); err != nil {
 		return err
 	}
 	if t.AccessToken == "" || t.RefreshToken == "" {
@@ -71,7 +74,7 @@ func (c *Client) link(ctx context.Context, code string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.gen++
-	c.st = state{NextSeq: c.st.NextSeq, LinkedAt: c.now()}
+	c.st = state{NextSeq: c.st.NextSeq, LinkedAt: c.now(), Way: s.Way()}
 	c.q = queue{}
 	c.dirty = true
 	c.keep(t)
