@@ -333,11 +333,13 @@ func (c *Client) Close() {
 	c.mu.Lock()
 	stop, stopped := c.stop, c.stopped
 	c.stop = nil
+	play := c.play
 	linked, pending := c.st.linked(), c.q.len()
 	c.mu.Unlock()
 	if stop != nil {
 		close(stop)
 	}
+	play.Leave()
 	if linked && pending > 0 {
 		// A sync still running holds syncMu; don't wait for it.
 		if c.syncMu.TryLock() {
@@ -381,7 +383,9 @@ func (c *Client) Unlink() {
 	access, refresh, exp := c.st.Access, c.st.Refresh, c.st.AccessExp
 	linked := c.st.linked()
 	c.unlink()
+	play := c.play
 	c.mu.Unlock()
+	play.Leave()
 	if !linked {
 		return
 	}

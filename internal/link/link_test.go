@@ -111,8 +111,12 @@ type fake struct {
 	refuse   map[int64]string
 	tooLarge int // answer 413 to batches bigger than this; 0 never
 	agents   []string
-	clients  []string // X-Halpwords-Client headers
-	unlinked int      // devices unlinked by the game
+	clients  []string        // X-Halpwords-Client headers
+	unlinked int             // devices unlinked by the game
+	tickets  map[string]bool // play tickets not used yet
+
+	playMu sync.Mutex
+	playWS http.HandlerFunc // answers /api/v1/play, outside mu
 }
 
 func newFake(t *testing.T) *fake {
@@ -173,6 +177,15 @@ func (f *fake) tokens() map[string]any {
 }
 
 func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/v1/play" {
+		f.playMu.Lock()
+		h := f.playWS
+		f.playMu.Unlock()
+		if h != nil {
+			h(w, r)
+			return
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	path := r.URL.Path
@@ -261,6 +274,16 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			m = words.NewMemory()
 		}
 		writeJSON(w, 200, map[string]any{"lang": lang, "answers": 0, "built_at": nil, "memory": m})
+	case r.Method == "POST" && path == "/api/v1/play/tickets":
+		if !auth() {
+			return
+		}
+		if f.tickets == nil {
+			f.tickets = map[string]bool{}
+		}
+		t := fmt.Sprintf("hpt_%d", len(f.tickets)+1)
+		f.tickets[t] = true
+		writeJSON(w, 200, map[string]any{"ticket": t, "url": "/api/v1/play", "expires_in": 30})
 	case r.Method == "POST" && path == "/api/v1/events":
 		if !auth() {
 			return
