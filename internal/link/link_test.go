@@ -1177,3 +1177,21 @@ func TestHelpers(t *testing.T) {
 		t.Error(ServerURL())
 	}
 }
+
+func TestTrySave(t *testing.T) {
+	_, c, st, _ := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	c.mu.Lock()
+	err := c.TrySave()
+	c.mu.Unlock()
+	if !errors.Is(err, errBusy) || st.has(queueFile) {
+		t.Fatalf("saved while busy: %v", err)
+	}
+	if err := c.TrySave(); err != nil || !st.has(queueFile) {
+		t.Fatalf("not saved: %v", err)
+	}
+	var nilClient *Client
+	if nilClient.TrySave() != nil {
+		t.Error("nil client")
+	}
+}

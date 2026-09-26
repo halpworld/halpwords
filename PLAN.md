@@ -808,7 +808,13 @@ asked and on quitting. Assigned lists are downloaded by ETag into
 merged in (server cards for server words, queued answers replayed on top);
 settings and accommodations from `/me` are locked in Settings with who set
 them. Title → **Account** links, syncs and unlinks (progress and lists stay;
-licensed lists go). Hardcore runs keep the standard settings. Still to do:
+licensed lists go). Hardcore runs keep the standard settings. The web build
+uses the same client (Go's `net/http` runs on `fetch` there) with the files
+in local storage, a queue of at most 10,000 events for its ~5 MB, and saves
+the queue when the page is hidden or closed. A web game on another origin
+than the server needs CORS on the game API, and browsers don't let a page
+set `User-Agent`, so the server can't tell a web game's version: both are
+server follow-ups. Still to do:
 checking it all against staging (W1.8's "Done when"), quests (W1.9),
 per-assignment settings, and the accommodations the game doesn't have yet
 (cheaper hints, larger text, no timed dodges).

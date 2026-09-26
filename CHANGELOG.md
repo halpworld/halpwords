@@ -12,6 +12,8 @@ version as its release notes.
   sessions in the background, gets assigned word lists (read-only, in Word
   Lists), progress from the grown-up's other games, and settings a grown-up
   set, which Settings then shows locked. It works the same offline, and
+  unlinking keeps your progress. The web version links too, keeping
+  everything in the browser's local storage.
   unlinking keeps your progress.
 - **Quests and hand-made maps.** *New Adventure → Quest* plays hand-made
   floors in order, with an introduction and an ending. A `.hwquest` (a

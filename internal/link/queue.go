@@ -2,6 +2,7 @@ package link
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"strings"
 	"time"
@@ -13,6 +14,10 @@ import (
 // answers are folded into daily totals (about 50,000; PLAN §3 of
 // halpwords-server).
 const DefaultQueueCap = 50_000
+
+// defaultCap is the cap when Options.QueueCap is 0: DefaultQueueCap,
+// or less in a web browser.
+var defaultCap = DefaultQueueCap
 
 // MaxBatch is the most events one POST /api/v1/events may carry.
 const MaxBatch = 1000
@@ -254,8 +259,18 @@ func (c *Client) fold() {
 
 // saveQueue writes the queue if it changed. It marshals a copy, so the
 // game loop is held up only while the slices are copied.
-func (c *Client) saveQueue() error {
-	c.mu.Lock()
+func (c *Client) saveQueue() error { return c.writeQueue(false) }
+
+// writeQueue writes the queue if it changed. With try, it gives up rather
+// than wait for the lock.
+func (c *Client) writeQueue(try bool) error {
+	if try {
+		if !c.mu.TryLock() {
+			return errBusy
+		}
+	} else {
+		c.mu.Lock()
+	}
 	if !c.dirty || c.o.Store == nil {
 		c.mu.Unlock()
 		return nil
@@ -278,12 +293,20 @@ func (c *Client) saveQueue() error {
 		}
 	}
 	if err != nil {
-		c.mu.Lock()
+		if try && !c.mu.TryLock() {
+			return err
+		}
+		if !try {
+			c.mu.Lock()
+		}
 		c.dirty = true
 		c.mu.Unlock()
 	}
 	return err
 }
+
+// errBusy is a TrySave that found the link busy.
+var errBusy = errors.New("link: busy")
 
 // Save writes the queue of events to disk, if it changed. The link saves
 // it every few seconds by itself once started, and on Close.
@@ -292,6 +315,15 @@ func (c *Client) Save() error {
 		return nil
 	}
 	return c.saveQueue()
+}
+
+// TrySave is Save that never waits: it fails if the link is busy. A web
+// page's event handlers use it, as they must not block.
+func (c *Client) TrySave() error {
+	if c == nil {
+		return nil
+	}
+	return c.writeQueue(true)
 }
 
 // The wire format of POST /api/v1/events (docs/api/events.request).

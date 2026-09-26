@@ -563,7 +563,8 @@ in **Word Lists** marked ◆, read-only. Settings a grown-up set are locked in
 **Settings**. Nothing changes when the website can't be reached: answers
 wait (in `link-queue.json`) until it can. The tokens are kept in
 `link.json`, readable only by you. `HALPWORDS_SERVER` points the game at
-another server, such as a test one.
+another server, such as a test one. In a web browser, all of this is kept
+in the page's local storage.
 
 ## Controls
 

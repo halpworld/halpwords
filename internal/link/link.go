@@ -100,7 +100,8 @@ type Options struct {
 	// there as the player's own (licensed lists are removed).
 	OwnDir string
 	// QueueCap is how many events the queue holds before the oldest
-	// answers are folded into daily totals; 0 is DefaultQueueCap.
+	// answers are folded into daily totals; 0 is DefaultQueueCap (10,000
+	// in a web browser, for its small local storage).
 	QueueCap int
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
@@ -307,7 +308,7 @@ func Open(o Options) *Client {
 		c.server = ServerURL()
 	}
 	if c.o.QueueCap <= 0 {
-		c.o.QueueCap = DefaultQueueCap
+		c.o.QueueCap = defaultCap
 	}
 	if o.Store != nil {
 		if data, err := o.Store.Read(stateFile); err == nil {
