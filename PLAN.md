@@ -795,6 +795,23 @@ checking it all against staging (W1.8's "Done when"), quests (W1.9),
 per-assignment settings, and the accommodations the game doesn't have yet
 (cheaper hints, larger text, no timed dodges).
 
+*Now (W7.4, done):* Title → **Play Together** joins a room a grown-up
+opened on the website (`/play/host`), by its 6-character code, over
+halpwords-server's `/api/v1/play` WebSocket (its `docs/api/play.md`). Only
+a linked game can: it gets a one-use ticket with its device token. The
+lobby shows who is in the room (learners by pseudonym, grown-ups by role)
+and what happens, and sends the six preset phrases and four emotes the
+server offers, at most one a second; there is no free text and nothing
+else can be sent. `link.Play` gets back into the room after a drop (for up
+to 55 seconds; the server keeps the place for 60), joins again to resync
+after a gap in the room's event numbers, pings every heartbeat, and goes
+back to the lobby with a reason when the room ends, the host removes the
+player or the server restarts. The desktop game speaks the WebSocket
+protocol itself (`internal/link/wsframe.go`: RFC 6455 text frames,
+ping/pong, close and client masking, with a fuzzed frame reader), so the
+game keeps its three dependencies; the web build uses the browser's
+`WebSocket`. Boss Raid (W7.5) and Race (W7.6) start from this lobby.
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |

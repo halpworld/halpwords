@@ -272,6 +272,8 @@ type Client struct {
 	sleep   func(time.Duration) // between retries; tests make it instant
 
 	bg sync.WaitGroup // telling the server about an unlink
+
+	play *Play // playing together, once used
 }
 
 // listRef is the list an answer names.

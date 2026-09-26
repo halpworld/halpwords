@@ -177,7 +177,13 @@ func (c *Client) once(ctx context.Context, method, path, token string, hdr http.
 		}
 		return resp.StatusCode, resp.Header, nil
 	}
-	e := &Error{Status: resp.StatusCode, Code: http.StatusText(resp.StatusCode)}
+	return resp.StatusCode, resp.Header, errorFrom(resp.StatusCode, resp.Header, data)
+}
+
+// errorFrom is the *Error of an error answer: its status, the code and
+// message of its JSON body, and Retry-After.
+func errorFrom(status int, h http.Header, data []byte) *Error {
+	e := &Error{Status: status, Code: http.StatusText(status)}
 	var eb struct {
 		Error struct {
 			Code    string `json:"code"`
@@ -191,10 +197,10 @@ func (c *Client) once(ctx context.Context, method, path, token string, hdr http.
 	if json.Unmarshal(data, &eb) == nil && eb.Error.Code != "" {
 		e.Code, e.Message, e.Details = eb.Error.Code, eb.Error.Message, eb.Error.Details
 	}
-	if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s >= 0 {
+	if s, err := strconv.Atoi(h.Get("Retry-After")); err == nil && s >= 0 {
 		e.RetryAfter = time.Duration(s) * time.Second
 	}
-	return resp.StatusCode, resp.Header, e
+	return e
 }
 
 // tokens is the answer to POST /api/v1/link and /api/v1/token.
