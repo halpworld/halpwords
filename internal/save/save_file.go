@@ -105,10 +105,10 @@ func diskList(dir string) ([]string, error) {
 	return names, nil
 }
 
-// All returns the names of every file, in every folder, sorted, with
+// diskAll returns the names of every file, in every folder, sorted, with
 // forward slashes. A missing user folder is empty.
-func All() ([]string, error) {
-	root, err := Dir()
+func diskAll() ([]string, error) {
+	root, err := diskDir()
 	if err != nil {
 		return nil, err
 	}

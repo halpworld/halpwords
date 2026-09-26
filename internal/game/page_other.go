@@ -6,4 +6,4 @@ import "github.com/halpworld/halpwords/internal/link"
 
 // watchPage does nothing outside a web browser: the game saves the queue
 // when it quits.
-func watchPage(*link.Client) {}
+func watchPage(func() *link.Client) {}

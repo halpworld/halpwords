@@ -60,6 +60,10 @@ type Context struct {
 	// Reports queues the pause menu's reports and sends them to
 	// Halpwords when the game is online. It may be nil (in tests).
 	Reports *report.Outbox
+	// Learners are the learners who play on this computer, each with
+	// their own folder (W2.5). It is nil when the list couldn't be
+	// read: the game then plays with the user's folder, as one learner.
+	Learners *profile.Learners
 
 	scenes  *manager
 	notice  string // a short message in the corner, like "Sound off"
@@ -69,6 +73,9 @@ type Context struct {
 	// play session going on.
 	linkSeen int
 	session  *session
+	// closing are links of learners switched away from, still closing
+	// in the background, by folder.
+	closing map[save.Folder]chan struct{}
 
 	// Full screen changes wait for the one before to finish: on macOS,
 	// changing again during the animation crashes the app.
@@ -228,22 +235,20 @@ func (c *Context) ReloadSaves() error {
 	if err := c.LoadLists(); err != nil {
 		return err
 	}
+	c.loadProfile()
+	c.ApplyOptions()
+	c.AI = llm.Load(save.Root)
+	return nil
+}
+
+// loadProfile loads the profile of the learner playing.
+func (c *Context) loadProfile() {
 	prof, errs := profile.Load()
 	c.Profile = prof
 	if len(errs) > 0 {
 		c.Notify("Some saved progress was damaged")
 	}
-	c.ApplyOptions()
-	c.AI = llm.Load(saveStore{})
-	return nil
 }
-
-// saveStore keeps the AI settings in the user's folder.
-type saveStore struct{}
-
-func (saveStore) Read(name string) ([]byte, error)            { return save.Read(name) }
-func (saveStore) Write(name string, data []byte) error        { return save.Write(name, data) }
-func (saveStore) WritePrivate(name string, data []byte) error { return save.WritePrivate(name, data) }
 
 // NewOutbox returns the report queue in the user's folder, sending to
 // report.ServerURL(). Reports are anonymous: the game isn't linked to an
@@ -251,7 +256,7 @@ func (saveStore) WritePrivate(name string, data []byte) error { return save.Writ
 // token, "" when unlinked.
 func NewOutbox() *report.Outbox {
 	return &report.Outbox{
-		Queue:  report.NewQueue(saveStore{}),
+		Queue:  report.NewQueue(save.Root),
 		Sender: &report.Sender{Server: report.ServerURL(), UserAgent: UserAgent()},
 	}
 }
@@ -278,19 +283,17 @@ func New(first func(*Context) Scene) (*Game, error) {
 		Sound:  newSound(),
 		scenes: &manager{},
 	}
+	ctx.openLearners()
 	ctx.openLink()
+	watchPage(func() *link.Client { return ctx.Link })
 	if err := ctx.LoadLists(); err != nil {
 		return nil, err
 	}
-	prof, errs := profile.Load()
-	ctx.Profile = prof
-	if len(errs) > 0 {
-		ctx.Notify("Some saved progress was damaged")
-	}
+	ctx.loadProfile()
 	ctx.lockSettings()
 	ctx.linkSeen = ctx.Link.Changes()
 	ctx.ApplyOptions()
-	ctx.AI = llm.Load(saveStore{})
+	ctx.AI = llm.Load(save.Root)
 	if p := ctx.AI.Provider(); p != nil {
 		ctx.AI.Check(p.ID) // free: it lists the models the key can use
 	}

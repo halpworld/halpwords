@@ -83,8 +83,8 @@ func diskList(dir string) ([]string, error) {
 	return names, nil
 }
 
-// All returns the names of every file, in every folder, sorted.
-func All() ([]string, error) {
+// diskAll returns the names of every file, in every folder, sorted.
+func diskAll() ([]string, error) {
 	ls, err := storage("valueOf")
 	if err != nil {
 		return nil, err

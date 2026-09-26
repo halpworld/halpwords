@@ -134,7 +134,7 @@ func TestAccountHelpers(t *testing.T) {
 	}
 	ctx := testContext(t)
 	a := NewAccount(ctx).(*Account)
-	if items := a.items(ctx); len(items) != 2 || items[0] != acLink {
+	if items := a.items(ctx); len(items) != 3 || items[0] != acLink || items[1] != acSchool {
 		t.Fatalf("unlinked menu %v", items)
 	}
 	ctx = linkedContext(t)

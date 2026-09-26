@@ -146,21 +146,27 @@ type Profile struct {
 	// Name is the name last put in the Hall of Fame.
 	Name string
 
-	disk bool
+	disk   bool
+	folder save.Folder
 }
 
 // New returns an empty profile that is never written to disk.
 func New() *Profile { return &Profile{Memory: map[string]*words.Memory{}} }
 
-// Load reads the profile from the user's folder. Missing files are empty.
-// A damaged file is kept to one side, with ".bad" after its name, and
-// described in the errors; the rest of the profile still loads.
-func Load() (*Profile, []error) {
+// Load reads the profile from the save package's current folder: the
+// learner playing. Missing files are empty. A damaged file is kept to one
+// side, with ".bad" after its name, and described in the errors; the rest
+// of the profile still loads.
+func Load() (*Profile, []error) { return LoadFrom(save.Current()) }
+
+// LoadFrom reads the profile from folder f, as Load does. The profile is
+// written back there, whichever folder is current later.
+func LoadFrom(f save.Folder) (*Profile, []error) {
 	p := New()
-	p.disk = true
+	p.disk, p.folder = true, f
 	var errs []error
 	read := func(name string, v any) {
-		data, err := save.Read(name)
+		data, err := f.Read(name)
 		if errors.Is(err, fs.ErrNotExist) {
 			return
 		}
@@ -168,7 +174,7 @@ func Load() (*Profile, []error) {
 			if err = json.Unmarshal(data, v); err == nil {
 				return
 			}
-			save.Write(name+".bad", data)
+			f.Write(name+".bad", data)
 		}
 		errs = append(errs, err)
 	}
@@ -210,7 +216,7 @@ func (p *Profile) write(name string, v any) error {
 	if err != nil {
 		return err
 	}
-	return save.Write(name, data)
+	return p.folder.Write(name, data)
 }
 
 // SaveSettings writes the settings.

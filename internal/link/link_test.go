@@ -116,6 +116,7 @@ type fake struct {
 	clients  []string        // X-Halpwords-Client headers
 	unlinked int             // devices unlinked by the game
 	tickets  map[string]bool // play tickets not used yet
+	locked   bool            // sign-ins answer 403 locked
 
 	playMu sync.Mutex
 	playWS http.HandlerFunc // answers /api/v1/play, outside mu
@@ -212,16 +213,51 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == "POST" && path == "/api/v1/link":
-		var req struct{ Code, Name string }
+		var req struct {
+			Code, Name string
+			ClassCode  string `json:"class_code"`
+			LearnerID  string `json:"learner_id"`
+			Username   string
+			Pictures   []int
+		}
 		json.Unmarshal(body, &req)
 		norm := strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(req.Code))
-		if norm != strings.ReplaceAll(f.code, "-", "") {
+		switch {
+		case f.locked:
+			writeErr(w, 403, "locked")
+			return
+		case req.ClassCode != "":
+			if NormCode(req.ClassCode) != "C1A55C0D" || (req.LearnerID != "lrn_1" && req.Username != "aoife") ||
+				fmt.Sprint(req.Pictures) != "[4 0 7]" {
+				writeErr(w, 400, "invalid_code")
+				return
+			}
+		case norm == "CARDCARDCARD":
+		case norm != strings.ReplaceAll(f.code, "-", ""):
+			writeErr(w, 400, "invalid_code")
+			return
+		default:
+			f.code = "USED-USED"
+		}
+		f.linkedAs = req.Name
+		writeJSON(w, 200, f.tokens())
+	case r.Method == "POST" && path == "/api/v1/link/class":
+		var req struct {
+			ClassCode string `json:"class_code"`
+			LearnerID string `json:"learner_id"`
+			Username  string
+		}
+		json.Unmarshal(body, &req)
+		if NormCode(req.ClassCode) != "C1A55C0D" {
 			writeErr(w, 400, "invalid_code")
 			return
 		}
-		f.code = "USED-USED"
-		f.linkedAs = req.Name
-		writeJSON(w, 200, f.tokens())
+		out := map[string]any{"class": map[string]any{"name": "1st Year French", "language": "fr"},
+			"names_shown": true, "learners": []any{map[string]any{"id": "lrn_1", "display_name": "Aoife"}}}
+		if req.LearnerID != "" || req.Username != "" {
+			out["pictures"] = []int{4, 9, 0, 11, 7, 2, 3, 5, 6}
+		}
+		writeJSON(w, 200, out)
 	case r.Method == "POST" && path == "/api/v1/token":
 		var req struct {
 			RefreshToken string `json:"refresh_token"`
@@ -1358,5 +1394,84 @@ func TestTrySave(t *testing.T) {
 	var nilClient *Client
 	if nilClient.TrySave() != nil {
 		t.Error("nil client")
+	}
+}
+
+func TestSignInWithCard(t *testing.T) {
+	f, c, _, _ := setup(t)
+	if c.KeepOnSignOut() != true {
+		t.Error("an unlinked game keeps its progress")
+	}
+	if err := c.LinkNow(context.Background(), "CARD-CARD-CARX"); !errors.Is(err, ErrWrongSignIn) {
+		t.Fatalf("wrong card: %v", err)
+	}
+	if err := c.LinkNow(context.Background(), "CARD-CARD"); !errors.Is(err, ErrBadCode) {
+		t.Fatalf("a wrong 8-character code is a pairing code: %v", err)
+	}
+	if err := c.LinkNow(context.Background(), "card-card-card"); err != nil {
+		t.Fatal(err)
+	}
+	if c.Way() != WayCard || c.KeepOnSignOut() {
+		t.Errorf("way %q, keep %v: a card's progress isn't kept until the school says so", c.Way(), c.KeepOnSignOut())
+	}
+	f.mu.Lock()
+	f.me["keep_on_sign_out"] = true
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !c.KeepOnSignOut() {
+		t.Error("the school allows keeping progress, but the game doesn't")
+	}
+}
+
+func TestSignInWithClassCode(t *testing.T) {
+	f, c, _, _ := setup(t)
+	ctx := context.Background()
+	if _, err := c.FindClass(ctx, "NOPE-NOPE", "", ""); !errors.Is(err, ErrWrongSignIn) {
+		t.Fatalf("wrong class code: %v", err)
+	}
+	cl, err := c.FindClass(ctx, "c1a5-5c0d", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cl.Class.Name != "1st Year French" || !cl.NamesShown || len(cl.Learners) != 1 || cl.Pictures != nil {
+		t.Fatalf("class: %+v", cl)
+	}
+	cl, err = c.FindClass(ctx, "c1a5-5c0d", cl.Learners[0].ID, "")
+	if err != nil || len(cl.Pictures) != Grid {
+		t.Fatalf("pictures: %+v, %v", cl, err)
+	}
+	s := SignIn{ClassCode: "c1a5-5c0d", LearnerID: "lrn_1", Pictures: []int{4, 0, 2}}
+	if err := c.SignInNow(ctx, s); !errors.Is(err, ErrWrongSignIn) {
+		t.Fatalf("wrong pictures: %v", err)
+	}
+	if err := c.SignInNow(ctx, SignIn{ClassCode: "c1a5-5c0d", LearnerID: "lrn_1", Pictures: []int{4}}); !errors.Is(err, ErrWrongSignIn) {
+		t.Fatalf("one picture: %v", err)
+	}
+	f.mu.Lock()
+	f.locked = true
+	f.mu.Unlock()
+	s.Pictures = []int{4, 0, 7}
+	if err := c.SignInNow(ctx, s); !errors.Is(err, ErrLocked) {
+		t.Fatalf("locked: %v", err)
+	}
+	f.mu.Lock()
+	f.locked = false
+	f.mu.Unlock()
+	if err := c.SignInNow(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if !c.Linked() || c.Way() != WayClass || c.KeepOnSignOut() {
+		t.Errorf("linked %v, way %q, keep %v", c.Linked(), c.Way(), c.KeepOnSignOut())
+	}
+	if _, err := c.FindClass(ctx, "c1a5-5c0d", "", ""); !errors.Is(err, ErrLinked) {
+		t.Errorf("a linked game looked up a class: %v", err)
+	}
+	// By username.
+	_, c2, _, _ := setup(t)
+	c2.server = c.server
+	if err := c2.SignInNow(ctx, SignIn{ClassCode: "C1A55C0D", Username: "aoife", Pictures: []int{4, 0, 7}}); err != nil {
+		t.Fatal(err)
 	}
 }
