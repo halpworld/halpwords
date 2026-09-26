@@ -69,13 +69,17 @@ const (
 )
 
 // Exportable reports whether the file name moves with the player. Not
-// moved: ai.json, which holds the player's AI keys (a URL can end up in the
-// browser's history); crash reports; damaged files kept to one side; and
+// moved: ai.json, which holds the player's AI keys, and link.json and
+// link-queue.json, which hold the link's tokens and the events waiting to be
+// sent (a URL can end up in the browser's history; the game links again at
+// its new address); crash reports; damaged files kept to one side; and
 // this package's own files.
 func Exportable(name string) bool {
 	switch {
 	case !validName(name),
 		name == "ai.json",
+		name == "link.json",
+		name == "link-queue.json",
 		name == "crash.txt",
 		strings.HasSuffix(name, ".bad"),
 		strings.HasPrefix(name, stashDir):

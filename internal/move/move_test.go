@@ -61,7 +61,7 @@ func moved() map[string][]byte {
 func TestExportable(t *testing.T) {
 	for name, want := range map[string]bool{
 		"adventure.json": true, "words/x.txt": true, "ai/bank-fr.json": true, "ai-spend.json": true,
-		"ai.json": false, "crash.txt": false, "fame.json.bad": false, "move/done": false,
+		"ai.json": false, "link.json": false, "link-queue.json": false, "crash.txt": false, "fame.json.bad": false, "move/done": false,
 		"": false, "/abs": false, "../x": false, "a/../b": false, "a//b": false, "a\\b": false, "a\nb": false,
 	} {
 		if got := Exportable(name); got != want {
