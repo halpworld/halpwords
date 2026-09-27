@@ -75,6 +75,8 @@ type run struct {
 	// seenTraits are the monster traits the hero has been told about.
 	seenTraits dungeon.Trait
 	sound      *game.Sound
+	// sayWord says a word after a miss (game.Context.SayWord), or is nil.
+	sayWord func(lang string, e words.Entry)
 
 	// mode is Adventure, Hardcore or the Daily Dungeon.
 	mode compete.Mode
@@ -254,6 +256,7 @@ func startRunWith(ctx *game.Context, lang *words.Language, class rpg.Class, seed
 		depth:   1,
 		greek:   lang.Script == words.ScriptGreek,
 		sound:   ctx.Sound,
+		sayWord: ctx.SayWord,
 		perfect: map[int]bool{},
 		cloze:   puzzle.FromLists(lists),
 	}

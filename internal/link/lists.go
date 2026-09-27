@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/halpworld/halpwords/pkg/audiopack"
 	"github.com/halpworld/halpwords/pkg/gameai"
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -48,6 +49,7 @@ func IsAssigned(l *words.List) bool { return l != nil && strings.HasPrefix(l.Fil
 func (c *Client) loadLists() {
 	c.lists, c.keys = nil, map[string]map[string]listRef{}
 	if c.o.Store == nil || !c.st.linked() {
+		c.packs = map[string]*audiopack.Pack{}
 		return
 	}
 	var keep []ListInfo
@@ -64,6 +66,14 @@ func (c *Client) loadLists() {
 		c.addList(l, li)
 	}
 	c.st.Lists = keep
+	// Keep only the audio packs of the lists kept, at their versions.
+	packs := map[string]*audiopack.Pack{}
+	for _, li := range keep {
+		if p, ok := c.packs[li.ID]; ok && p.Version == li.Version {
+			packs[li.ID] = p
+		}
+	}
+	c.packs = packs
 }
 
 // addList adds a parsed list to the lists and the word index. c.mu is
@@ -149,10 +159,14 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 	for _, g := range lists {
 		now[g.li.File] = true
 	}
-	for _, g := range lists {
+	for i, g := range lists {
 		old := slices.IndexFunc(c.st.Lists, func(o ListInfo) bool { return o.File == g.li.File })
 		if old >= 0 && c.st.Lists[old].Version == g.li.Version {
+			lists[i].li.Audio = c.st.Lists[old].Audio
 			continue // unchanged
+		}
+		if old >= 0 && c.st.Lists[old].Audio != 0 {
+			c.o.Store.Remove(audioFile(c.st.Lists[old])) // for the old version
 		}
 		if err := c.o.Store.Write(AssignedDir+"/"+g.li.File, []byte(g.text)); err != nil {
 			return err
@@ -180,6 +194,9 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 func (c *Client) moveOut(li ListInfo) {
 	src := AssignedDir + "/" + li.File
 	defer c.o.Store.Remove(src)
+	if li.Audio != 0 {
+		c.o.Store.Remove(audioFile(li))
+	}
 	if li.Licensed || c.o.OwnDir == "" {
 		return
 	}

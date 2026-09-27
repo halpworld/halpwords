@@ -152,3 +152,25 @@ func Encode(samples []float32) []byte {
 	}
 	return b
 }
+
+// Resample changes samples from one rate to another, by straight lines
+// between samples: good enough for a voice saying a word.
+func Resample(samples []float32, from, to int) []float32 {
+	if from == to || from <= 0 || to <= 0 || len(samples) == 0 {
+		return samples
+	}
+	n := int(int64(len(samples)) * int64(to) / int64(from))
+	out := make([]float32, n)
+	step := float64(from) / float64(to)
+	for i := range out {
+		at := float64(i) * step
+		j := int(at)
+		if j+1 >= len(samples) {
+			out[i] = samples[len(samples)-1]
+			continue
+		}
+		f := float32(at - float64(j))
+		out[i] = samples[j]*(1-f) + samples[j+1]*f
+	}
+	return out
+}

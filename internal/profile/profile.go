@@ -81,7 +81,15 @@ type Options struct {
 	// Shake shakes the view when the hero is hit. Some players find it
 	// uncomfortable.
 	Shake bool
+	// Quiet turns off saying a word after a miss, which a game linked to
+	// a plan with pronunciation does (Say). It is a "no" so settings
+	// saved before it say words.
+	Quiet bool `json:",omitempty"`
 }
+
+// SayWords reports whether a word is said after a miss, when its audio
+// is there.
+func (o Options) SayWords() bool { return !o.Quiet }
 
 // DefaultOptions are the game settings to start with.
 func DefaultOptions() Options {

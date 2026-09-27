@@ -120,6 +120,8 @@ type fake struct {
 
 	// ai answers POST /api/v1/ai/{task}: a status and a body.
 	ai func(task string, body []byte) (int, any)
+	// audio answers GET /api/v1/lists/{id}/audio: a status and a pack.
+	audio func(id, version string) (int, []byte)
 
 	// runs are the bodies of POST /api/v1/runs; runStatus, when not 0,
 	// is the status to answer them with. boards is GET /api/v1/ranks'
@@ -367,6 +369,18 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"boards": f.boards})
+	case r.Method == "GET" && strings.HasPrefix(path, "/api/v1/lists/") && strings.HasSuffix(path, "/audio") && f.audio != nil:
+		if !auth() {
+			return
+		}
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v1/lists/"), "/audio")
+		status, data := f.audio(id, r.URL.Query().Get("version"))
+		if status != 200 {
+			writeErr(w, status, "fake")
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.halpwords.audiopack+zip")
+		w.Write(data)
 	case r.Method == "POST" && strings.HasPrefix(path, "/api/v1/ai/") && f.ai != nil:
 		if !auth() {
 			return

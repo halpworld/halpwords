@@ -10,6 +10,7 @@ import (
 	"github.com/ebitengine/oto/v3"
 
 	"github.com/halpworld/halpwords/internal/audio"
+	"github.com/halpworld/halpwords/pkg/audiopack"
 )
 
 // maxVoices is how many sounds can play at once. Starting another stops
@@ -41,6 +42,9 @@ type Sound struct {
 	later  []delayed
 	tick   uint64
 	music  music
+	voice  *oto.Player // a word being said (Say)
+	word   []byte      // a word to say at wordAt, after the miss jingle
+	wordAt uint64
 }
 
 type delayed struct {
@@ -119,6 +123,44 @@ func (s *Sound) Play(id audio.ID) {
 	s.voices = append(s.voices, p)
 }
 
+// wordVolume is a spoken word's volume, over the effects.
+const wordVolume = 0.9
+
+// sayDelay is how many ticks a spoken word waits, so the jingle of a
+// miss is heard first.
+const sayDelay = 25
+
+// Say plays a spoken word, after a moment: a WAV file from an audio pack
+// (16-bit PCM, mono). A word already being said stops. It reports
+// whether the word will play; it won't when sound is off or muted, or
+// the file is bad.
+func (s *Sound) Say(wav []byte) bool {
+	if s.Muted || !s.usable() {
+		return false
+	}
+	samples, rate, err := audiopack.DecodeWAV(wav)
+	if err != nil {
+		return false
+	}
+	s.word, s.wordAt = audio.Encode(audio.Resample(samples, rate, audio.SampleRate)), s.tick+sayDelay
+	return true
+}
+
+// sayNow starts the word waiting to be said.
+func (s *Sound) sayNow() {
+	pcm := s.word
+	s.word = nil
+	if s.Muted || !s.usable() {
+		return
+	}
+	if s.voice != nil {
+		s.voice.Pause()
+	}
+	s.voice = s.ctx.NewPlayer(bytes.NewReader(pcm))
+	s.voice.SetVolume(wordVolume * max(s.Effects, 0.5))
+	s.voice.Play()
+}
+
 // PlayLater starts a sound after ticks updates, to follow another one.
 func (s *Sound) PlayLater(id audio.ID, ticks int) {
 	s.later = append(s.later, delayed{id, s.tick + uint64(ticks)})
@@ -131,7 +173,10 @@ func (s *Sound) Toggle() bool {
 		for _, v := range s.voices {
 			v.Pause()
 		}
-		s.later = s.later[:0]
+		if s.voice != nil {
+			s.voice.Pause()
+		}
+		s.later, s.word = s.later[:0], nil
 	}
 	s.music.volume(s)
 	return !s.Muted
@@ -155,6 +200,9 @@ func (s *Sound) update(tick uint64) {
 	s.later = due
 	for _, id := range now {
 		s.Play(id)
+	}
+	if s.word != nil && s.wordAt <= tick {
+		s.sayNow()
 	}
 	if s.usable() {
 		s.music.update(s)

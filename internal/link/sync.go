@@ -146,7 +146,11 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 	if err := c.uploadRuns(ctx, gen); err != nil {
 		return err
 	}
-	return c.syncRanks(ctx, gen)
+	if err := c.syncRanks(ctx, gen); err != nil {
+		return err
+	}
+	// Audio packs last of all: they are the biggest downloads.
+	return c.syncAudio(ctx, gen)
 }
 
 // syncMe fetches the learner. syncMu is held.

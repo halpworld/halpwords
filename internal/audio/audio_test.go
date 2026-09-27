@@ -94,3 +94,17 @@ func TestEncode(t *testing.T) {
 		t.Errorf("1.0 encoded as % x", b[4:8])
 	}
 }
+
+func TestResample(t *testing.T) {
+	in := []float32{0, 1, 0, -1}
+	if got := Resample(in, 100, 100); len(got) != 4 {
+		t.Errorf("same rate: %v", got)
+	}
+	up := Resample(in, 100, 200)
+	if len(up) != 8 || up[1] != 0.5 || up[2] != 1 {
+		t.Errorf("up: %v", up)
+	}
+	if down := Resample(in, 200, 100); len(down) != 2 || down[1] != 0 {
+		t.Errorf("down: %v", down)
+	}
+}

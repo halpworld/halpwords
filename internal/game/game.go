@@ -126,6 +126,18 @@ func (c *Context) isFullscreen() bool {
 // Shake reports whether the view may shake. Some players turn it off.
 func (c *Context) Shake() bool { return c.opts.Shake }
 
+// SayWord says a word after a miss: the audio for entry in lang from the
+// linked account's audio packs. It does nothing when the player turned
+// it off, the game isn't linked, or there is no audio for the word.
+func (c *Context) SayWord(lang string, entry words.Entry) {
+	if !c.opts.SayWords() || c.Link == nil {
+		return
+	}
+	if wav, ok := c.Link.Pronunciation(lang, entry); ok {
+		c.Sound.Say(wav)
+	}
+}
+
 // toggleFullscreen switches full screen on or off and remembers it.
 func (c *Context) toggleFullscreen() {
 	o := c.Profile.Settings.Options()

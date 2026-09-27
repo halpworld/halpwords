@@ -17,6 +17,8 @@
 //   - gameai: the prompts, replies and checks of the game's AI content
 //     (floor scripts, gap-fill sentences, riddles, taunts, memory tips),
 //     which halpwords-server's Halpwords AI uses too
+//   - audiopack: the audio pack of a word list's pronunciation, which a
+//     linked game downloads and halpwords-server makes
 //
 // None of them may import Ebitengine or the game's screens, so a server
 // can build them without graphics code (see imports_test.go). Changes to

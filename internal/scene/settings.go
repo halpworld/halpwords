@@ -195,6 +195,12 @@ var options = []option{
 		get:     func(o *profile.Options) int { return onOff(o.Shake) },
 		set:     func(o *profile.Options, i int) { o.Shake = i == 0 },
 	},
+	{
+		name: "Say words", about: "After a miss, say the word, when your account's plan includes pronunciation.",
+		choices: []string{"on", "off"},
+		get:     func(o *profile.Options) int { return onOff(o.SayWords()) },
+		set:     func(o *profile.Options, i int) { o.Quiet = i != 0 },
+	},
 }
 
 // line is one line of the tab showing, ready to draw or change.
@@ -391,9 +397,13 @@ func (s *Settings) Draw(dst *ebiten.Image, ctx *game.Context) {
 		tx += w + 8
 	}
 
-	const x, w, rowH, valX = 24, game.ScreenW - 48, 24, 244
+	const x, w, valX = 24, game.ScreenW - 48, 244
 	y := 80
 	list := s.lines(ctx)
+	rowH := 24
+	if len(list) > 5 {
+		rowH = 21 // closer together, so the window ends above the notes
+	}
 	gfx.Window(dst, x, y, w, rowH*(len(list)+2)+24)
 	row := func(i int, name string, draw func(y int, sel bool)) {
 		ry := y + 12 + i*rowH

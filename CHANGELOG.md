@@ -7,6 +7,14 @@ version as its release notes.
 
 ### Added
 
+- **Hear the word after a miss.** A game linked to an account whose plan
+  includes pronunciation downloads an audio pack for each assigned list,
+  and says the word after a miss in battle and in practice. "Say words"
+  in Sound & Screen turns it off.
+- `pkg/audiopack`: the audio pack format (`Pack`, `Word`, `Read`, `Write`,
+  `Encode`, `Key`, `Find`, `EncodeWAV`, `DecodeWAV`, `MediaType`): a zip
+  with a `pack.json` manifest and a 16-bit PCM mono WAV file for each
+  word, with limits a reader checks.
 - **Halpwords AI.** A game linked to an account whose plan includes AI in
   the game gets floor stories, gap-fill sentences, riddles, monster taunts
   and memory tips from the Halpwords server, with no API key. It is on by

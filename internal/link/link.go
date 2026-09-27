@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/internal/profile"
+	"github.com/halpworld/halpwords/pkg/audiopack"
 	"github.com/halpworld/halpwords/pkg/settings"
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -143,6 +144,9 @@ type Me struct {
 	// AI is Halpwords AI in the game, when the server offers it (older
 	// servers leave it out).
 	AI *MeAI `json:"ai,omitempty"`
+	// Pronunciation says whether the learner can hear their assigned
+	// lists' words (older servers leave it out).
+	Pronunciation *MePronunciation `json:"pronunciation,omitempty"`
 }
 
 // MeAI says whether the learner's account can use Halpwords AI in the
@@ -185,6 +189,9 @@ type ListInfo struct {
 	// Riddles are riddles for the list's words that its grown-up added
 	// with the list's AI sentences.
 	Riddles []ListRiddle `json:",omitempty"`
+	// Audio is the version of the list whose audio pack is kept next to
+	// it (audio.go), or 0.
+	Audio int `json:",omitempty"`
 }
 
 // ListRiddle is a riddle for one of a list's words, by its English.
@@ -304,6 +311,8 @@ type Client struct {
 	// of a language is in.
 	lists []*words.List
 	keys  map[string]map[string]listRef
+	// packs are the assigned lists' audio packs read so far, by list ID.
+	packs map[string]*audiopack.Pack
 	// memories are word memories from the server waiting for the game
 	// loop to merge them, and uploads counts uploads, so a merge never
 	// uses a memory older than an upload.

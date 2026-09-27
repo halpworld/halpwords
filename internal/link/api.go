@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/halpworld/halpwords/pkg/audiopack"
 )
 
 // Error is an error answer from the server (docs/api/error.schema.json).
@@ -157,7 +159,9 @@ func (c *Client) onceWith(ctx context.Context, hc *http.Client, limit time.Durat
 	} else {
 		req.Header.Set("User-Agent", c.userAgent())
 	}
-	req.Header.Set("Accept", "application/json")
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/json")
+	}
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -169,12 +173,20 @@ func (c *Client) onceWith(ctx context.Context, hc *http.Client, limit time.Durat
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	limitBytes := int64(16 << 20)
+	raw, isRaw := out.(*[]byte) // the body as it is, such as an audio pack
+	if isRaw {
+		limitBytes = audiopack.MaxBytes + 1
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limitBytes))
 	if err != nil {
 		return resp.StatusCode, resp.Header, err
 	}
 	switch {
 	case resp.StatusCode == http.StatusNotModified:
+		return resp.StatusCode, resp.Header, nil
+	case resp.StatusCode >= 200 && resp.StatusCode < 300 && isRaw:
+		*raw = data
 		return resp.StatusCode, resp.Header, nil
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
 		if out != nil {

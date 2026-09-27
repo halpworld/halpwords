@@ -290,6 +290,9 @@ func (c *Crawl) scoreAnswer(id int, res words.Result, typed string, hinted bool,
 	}
 	if t == words.Miss {
 		r.tally.Misses++
+		if id >= 0 && r.sayWord != nil {
+			r.sayWord(r.lang.Code, r.deck.Entries()[id])
+		}
 	}
 	if t == words.Perfect && id >= 0 && !hinted {
 		r.tally.Perfect++

@@ -447,6 +447,7 @@ turn the music down without leaving the dungeon.
 | CRT filter | off · soft · strong | *off* |
 | Full screen | on · off | *off* (remembered when you press <kbd>F11</kbd>) |
 | Screen shake | on · off | *on* |
+| Say words | on · off | *on* (only heard when linked to a plan with pronunciation) |
 
 The language tabs change how answers are graded:
 
@@ -560,7 +561,10 @@ own).
 
 Linked games sync every few minutes and when you quit. Assigned lists appear
 in **Word Lists** marked ◆, read-only. Settings a grown-up set are locked in
-**Settings**. Nothing changes when the website can't be reached: answers
+**Settings**. If the account's plan includes pronunciation, the game
+downloads each assigned list's audio (kept next to the list as
+`assigned/<list>.audio`) and says the word after a miss; *Say words* in
+Sound & Screen turns it off. Nothing changes when the website can't be reached: answers
 wait (in `link-queue.json`) until it can. The tokens are kept in
 `link.json`, readable only by you. `HALPWORDS_SERVER` points the game at
 another server, such as a test one. In a web browser, all of this is kept

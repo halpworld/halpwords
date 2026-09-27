@@ -143,6 +143,9 @@ func (p *Practice) Update(ctx *game.Context) error {
 		ctx.Link.Answer(p.lang().Code, p.word, "practice", words.Answer{Tier: p.result.Tier, Timed: true, Secs: p.taken, Mistake: p.mistake})
 		p.showing = true
 		ctx.Sound.Play(tierSound[p.result.Tier])
+		if p.result.Tier == words.Miss {
+			ctx.SayWord(p.lang().Code, p.word)
+		}
 		if p.result.Tier >= words.Correct {
 			p.streak++
 			p.best = max(p.best, p.streak)
