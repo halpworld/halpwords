@@ -51,7 +51,7 @@ func TestSSOPollErrorsKeepOrDropTheCode(t *testing.T) {
 	}{
 		{"rate limited", 429, "rate_limited", "3", nil, true},
 		{"429 without code", 429, "", "", nil, true},
-		{"rate limited for too long", 429, "rate_limited", "120", nil, false},
+		{"rate limited for too long", 429, "rate_limited", "120", nil, true},
 		{"server error", 503, "unavailable", "", nil, true},
 		{"internal error", 500, "internal", "", nil, true},
 		{"slow_down", 400, codeSlowDown, "", ErrSSOPending, true},

@@ -53,6 +53,10 @@ type SSOCode struct {
 // minPoll is the least time between polls, whatever the server says.
 const minPoll = 2 * time.Second
 
+// maxPoll is the most time between polls, whatever the server says and
+// however often it says slow_down.
+const maxPoll = time.Minute
+
 // StartSSO asks the server for a code to sign in with a school account.
 // returnTo is where the web game wants the website to send the pupil
 // back to, or "". It waits for the answer, so call it from a goroutine.
@@ -82,7 +86,7 @@ func (c *Client) StartSSO(ctx context.Context, returnTo string) (*SSOCode, error
 	code := &SSOCode{DeviceCode: out.DeviceCode, UserCode: out.UserCode, URL: out.URL, VerifyURL: out.VerifyURL,
 		Started: c.now(),
 		Expires: c.now().Add(time.Duration(out.ExpiresIn) * time.Second),
-		Every:   max(time.Duration(out.Interval)*time.Second, minPoll)}
+		Every:   min(max(time.Duration(out.Interval)*time.Second, minPoll), maxPoll)}
 	if !strings.HasPrefix(code.VerifyURL, "http") {
 		code.VerifyURL = code.URL
 	}
@@ -135,7 +139,7 @@ func (c *Client) PollSSO(ctx context.Context) error {
 	code := c.st.SSO
 	c.mu.Unlock()
 	if code == nil || !c.now().Before(code.Expires) {
-		c.CancelSSO()
+		c.dropSSO(code)
 		return ErrSSOExpired
 	}
 	payload, _ := json.Marshal(map[string]string{"device_code": code.DeviceCode, "name": c.deviceName()})
@@ -171,7 +175,7 @@ func (c *Client) PollSSO(ctx context.Context) error {
 		// out, once a grown-up sees to it on the website.
 		return err
 	}
-	c.CancelSSO()
+	c.dropSSO(code)
 	if again {
 		return ErrSSOExpired // it ran out while the connection was bad
 	}
@@ -184,16 +188,27 @@ func (c *Client) slowSSO(code *SSOCode) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.st.SSO == code {
-		code.Every += 5 * time.Second
+		code.Every = min(code.Every+5*time.Second, maxPoll)
+		c.saveState()
+	}
+}
+
+// dropSSO forgets code, if it is still the sign-in on its way: a poll
+// that comes back late must not wipe a newer code.
+func (c *Client) dropSSO(code *SSOCode) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if code != nil && c.st.SSO == code {
+		c.st.SSO = nil
 		c.saveState()
 	}
 }
 
 // retryableStatus reports whether the server's error answer is one that
-// passes: a server error or a rate limit.
+// passes: a server error or a rate limit, however long it says to wait
+// (the screen waits that long, up to a limit, before it asks again).
 func retryableStatus(e *Error) bool {
-	again, _ := retryable(e)
-	return again
+	return e.Code == codeRateLimited || e.Status == http.StatusTooManyRequests || e.Status >= 500
 }
 
 // explainSSO turns the server's error answer to a sign-in with a school

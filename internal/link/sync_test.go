@@ -363,3 +363,38 @@ func TestSignInDoesNotWaitForTheFirstSync(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// Quitting (or moving to another learner) stops a first sync still on
+// its way: it must not go on writing the folder after Close.
+func TestCloseStopsTheFirstSync(t *testing.T) {
+	f := newFake(t)
+	gate := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/link" {
+			select {
+			case <-gate:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		f.srv.Config.Handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(slow.Close)
+	t.Cleanup(func() { close(gate) })
+	c := Open(Options{Store: newMemStore(), Server: slow.URL, OwnDir: "words"})
+	c.SignIn(SignIn{Code: "abcd efgh"})
+	for start := time.Now(); c.Status().Signing; time.Sleep(2 * time.Millisecond) {
+		if time.Since(start) > 2*time.Second {
+			t.Fatal("never signed in")
+		}
+	}
+	for start := time.Now(); !c.Status().Busy; time.Sleep(2 * time.Millisecond) {
+		if time.Since(start) > 2*time.Second {
+			t.Fatal("the first sync never started")
+		}
+	}
+	c.Close()
+	if st := c.Status(); st.Busy {
+		t.Fatalf("a sync is still running after Close: %+v", st)
+	}
+}

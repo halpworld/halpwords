@@ -23,7 +23,7 @@ func (c *Client) SignIn(s SignIn) {
 	c.busy, c.signing, c.err = true, true, nil
 	c.mu.Unlock()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+		ctx, cancel := context.WithTimeout(c.life, syncTimeout)
 		defer cancel()
 		if err := c.SignInNow(ctx, s); err == nil {
 			c.Sync(ctx)
@@ -349,7 +349,7 @@ func (c *Client) Start() {
 			case <-next.C:
 			case <-c.kick:
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+			ctx, cancel := context.WithTimeout(c.life, syncTimeout)
 			c.Sync(ctx)
 			cancel()
 			next.Stop()
@@ -383,7 +383,7 @@ func (c *Client) SyncNow() {
 	c.mu.Unlock()
 	if !started {
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+			ctx, cancel := context.WithTimeout(c.life, syncTimeout)
 			defer cancel()
 			c.Sync(ctx)
 		}()
@@ -394,6 +394,9 @@ func (c *Client) SyncNow() {
 	default:
 	}
 }
+
+// syncStopWait is how long Close waits for a sync it has stopped.
+const syncStopWait = 2 * time.Second
 
 // Close stops the background sync, tries for a moment to send what is
 // queued, and saves the queue. The game calls it when it quits.
@@ -411,17 +414,26 @@ func (c *Client) Close() {
 		close(stop)
 	}
 	play.Leave()
-	if linked && pending > 0 {
-		// A sync still running holds syncMu; don't wait for it.
-		if c.syncMu.TryLock() {
+	// Stop a sign-in or sync still on its way, and give it a moment to
+	// end: it writes the learner's folder, which the game may move or
+	// remove as soon as Close returns.
+	c.endLife()
+	gotSync := false
+	for deadline := time.Now().Add(syncStopWait); ; time.Sleep(5 * time.Millisecond) {
+		if gotSync = c.syncMu.TryLock(); gotSync || time.Now().After(deadline) {
+			break
+		}
+	}
+	if gotSync {
+		if linked && pending > 0 {
 			ctx, cancel := context.WithTimeout(context.Background(), closeTimeout)
 			c.mu.Lock()
 			gen := c.gen
 			c.mu.Unlock()
 			c.upload(ctx, gen)
 			cancel()
-			c.syncMu.Unlock()
 		}
+		c.syncMu.Unlock()
 	}
 	c.saveQueue()
 	c.mu.Lock()

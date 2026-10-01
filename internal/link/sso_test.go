@@ -1,6 +1,7 @@
 package link
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,7 @@ type ssoServer struct {
 	// answers slow_down; gate, when not nil, holds a poll until it is
 	// closed (entered is told first).
 	hang     time.Duration
+	interval int64 // the interval start answers; 0 is 5
 	slowDown bool
 	gate     chan struct{}
 	entered  chan struct{}
@@ -60,7 +62,7 @@ func (f *ssoServer) serve(w http.ResponseWriter, r *http.Request) {
 		f.started = body
 		writeJSON(w, http.StatusOK, map[string]any{"device_code": "hwsso_abc", "user_code": "ABCD-EFGH",
 			"verification_uri": "https://halpwords.test/sso/device", "verification_uri_complete": "https://halpwords.test/sso/device?code=ABCD-EFGH",
-			"expires_in": 600, "interval": 5})
+			"expires_in": 600, "interval": cmp.Or(f.interval, 5)})
 	case "/api/v1/sso/token":
 		f.polls++
 		switch {
@@ -313,5 +315,66 @@ func TestSSOCancelDuringPoll(t *testing.T) {
 	}
 	if c.Linked() {
 		t.Fatal("the game linked after the sign-in was cancelled")
+	}
+}
+
+// An old poll that comes back after Esc and a new code must not wipe the
+// new code, whichever way it ends.
+func TestSSOStalePollDoesNotWipeNewCode(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(f *ssoServer)
+	}{
+		{"expired", func(f *ssoServer) { f.used = true }},
+		{"refused", func(f *ssoServer) { f.refused = true }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, c, _, _ := ssoSetup(t)
+			ctx := context.Background()
+			if _, err := c.StartSSO(ctx, ""); err != nil {
+				t.Fatal(err)
+			}
+			tc.setup(f)
+			f.gate, f.entered = make(chan struct{}), make(chan struct{}, 1)
+			done := make(chan error, 1)
+			go func() { done <- c.PollSSO(ctx) }()
+			<-f.entered
+			c.CancelSSO()
+			again, err := c.StartSSO(ctx, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			close(f.gate)
+			<-done
+			if p := c.PendingSSO(); p == nil || p.DeviceCode != again.DeviceCode {
+				t.Fatalf("the new code was wiped: %+v", p)
+			}
+		})
+	}
+}
+
+// However often the server says slow_down, or whatever interval it
+// starts with, the game polls at least once a minute.
+func TestSSOEveryIsCapped(t *testing.T) {
+	f, c, _, _ := ssoSetup(t)
+	ctx := context.Background()
+	f.interval = 300
+	code, err := c.StartSSO(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code.Every != time.Minute {
+		t.Fatalf("started at %v", code.Every)
+	}
+	f.interval = 5
+	if _, err := c.StartSSO(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.slowDown = true
+	for range 20 {
+		c.PollSSO(ctx)
+	}
+	if p := c.PendingSSO(); p == nil || p.Every != time.Minute {
+		t.Fatalf("after many slow_downs: %+v", p)
 	}
 }

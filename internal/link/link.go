@@ -355,6 +355,11 @@ type Client struct {
 
 	bg sync.WaitGroup // telling the server about an unlink
 
+	// life ends when the client is closed: the background sign-in and
+	// syncs stop with it, so none writes the learner's folder after it.
+	life    context.Context
+	endLife context.CancelFunc
+
 	play *Play // playing together, once used
 
 	// aiOff is set when the server said Halpwords AI is off for this
@@ -387,6 +392,7 @@ func Open(o Options) *Client {
 		batch:    MaxBatch,
 		kick:     make(chan struct{}, 1),
 	}
+	c.life, c.endLife = context.WithCancel(context.Background())
 	if c.hc == nil {
 		c.hc = &http.Client{Timeout: requestTimeout}
 	}
