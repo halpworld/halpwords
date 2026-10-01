@@ -555,18 +555,23 @@ func FloorLava(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// lavaGlow is the colour of lava gap pixels from the plate edge; heat
-// (0 or 1) makes it one step hotter.
+// lavaGlow is the colour of lava gap pixels from the plate edge: the
+// hottest colour (the ramp's last) only in a thin core down the middle of
+// a crack, the middle colour for the rest, and the first at the edges.
+// heat (0 or 1) lets the wave of heat warm an edge pixel one step; the
+// core never grows, so the floor never glares.
 func lavaGlow(ramp []color.RGBA, gap float64, heat int) color.RGBA {
-	i := 0
 	switch {
-	case gap < 0.8:
-		i = 2
+	case gap < lavaCore:
+		return ramp[len(ramp)-1]
 	case gap < 1.7:
-		i = 1
+		return ramp[1]
 	}
-	return ramp[min(len(ramp)-1, i+heat)]
+	return ramp[min(1, heat)]
 }
+
+// lavaCore is the half-width of the hottest line down a lava crack.
+const lavaCore = 0.25
 
 // AnimLava makes a slow wave of heat flow along the lava cracks.
 func AnimLava(m *Indexed, l Look, seed uint64, frame int) {

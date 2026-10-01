@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"math"
+	"os"
 	"reflect"
 	"slices"
 	"testing"
@@ -53,13 +54,13 @@ func TestWorldViewsPinned(t *testing.T) {
 	want := map[string]string{
 		"The Crypt":          "f398f0a2d834f38f12e6f7e329f8881059b3fc79bf16e7d89247eaac96381c16",
 		"Mossy Cellars":      "93d4b579d98063ccad17d5768bd0322f40fd32467d34efa4d4a0bd10cf15d303",
-		"Flooded Caves":      "4b5baa7bdc790c44ba5250eeb2d12c245a509ff120c7add0cbb2210bd862ea4e",
-		"Ice Halls":          "04df68dca1c08236aa6e9203b18540e2f1f9a5e7a88994f87d8ee3295d522c94",
-		"Lava Forge":         "1291547a9a8fecb55879d1143e0a40d11bda847597bf979d1e69aa1d1772d965",
-		"Amethyst Vaults":    "98324dd479ce2f82a65051f0684d25aabdb9742e79fe38cfe11110c29636a2f0",
+		"Flooded Caves":      "73403b0f71df63921ac7d708150d9152f5ffab7992cca0e4c044c14c7e84466c",
+		"Ice Halls":          "3fcadb3d399e5344554e1406ab85b25d199a8aa904ae8b456279d1944b12975d",
+		"Lava Forge":         "76d6836391d70e2352e0f8b3aed7ebc46621af8394e3248554dc0fa666b55216",
+		"Amethyst Vaults":    "444974aedb48ba6957ed6a3d8433ec66cb7ef635022c26babff13a48f445c2aa",
 		"Clockwork Workshop": "b2fb2fa9c38f8e5b09e0ebe0cc30069eb5b8469b209e2317a3e01f0bdfc4aaa3",
 		"Sky Garden":         "de5e690d2e81a374c515f808f85a980de858969f395043ea9fb1c5ef892df036",
-		"Sandstone Tomb":     "4740d1b768b63813be2dfbd6b1b398d5d1ce3c624ed8e958e8771ed41e1cb116",
+		"Sandstone Tomb":     "a3ddaae900e8270884f12bb4d441449cc238f0536aaa9d7ea81f78d73a492f6a",
 		"Whispering Library": "99e87f859289de08f6383156a705531f04d3d83610d6f07d892bc746bd5404c3",
 	}
 	if fusedMultiplyAdd {
@@ -81,24 +82,31 @@ func TestWorldViewsPinned(t *testing.T) {
 var fusedWant = map[string]string{
 	"The Crypt":          "f398f0a2d834f38f12e6f7e329f8881059b3fc79bf16e7d89247eaac96381c16",
 	"Mossy Cellars":      "85379a77247ba1b1f19c78893959c9c13e2522ffe2ea791262ca3eba05b9bf0c",
-	"Flooded Caves":      "4b5baa7bdc790c44ba5250eeb2d12c245a509ff120c7add0cbb2210bd862ea4e",
-	"Ice Halls":          "04df68dca1c08236aa6e9203b18540e2f1f9a5e7a88994f87d8ee3295d522c94",
-	"Lava Forge":         "1291547a9a8fecb55879d1143e0a40d11bda847597bf979d1e69aa1d1772d965",
-	"Amethyst Vaults":    "93e0be0186901b17f8d51a6381d660faa09db968ec74b9c514d5770d4aa48c39",
+	"Flooded Caves":      "73403b0f71df63921ac7d708150d9152f5ffab7992cca0e4c044c14c7e84466c",
+	"Ice Halls":          "3fcadb3d399e5344554e1406ab85b25d199a8aa904ae8b456279d1944b12975d",
+	"Lava Forge":         "76d6836391d70e2352e0f8b3aed7ebc46621af8394e3248554dc0fa666b55216",
+	"Amethyst Vaults":    "877cfacb7aebdb92d1bd8df65312f7248d4ecb07f1ad965f206c4a39632effbf",
 	"Clockwork Workshop": "b2fb2fa9c38f8e5b09e0ebe0cc30069eb5b8469b209e2317a3e01f0bdfc4aaa3",
 	"Sky Garden":         "de5e690d2e81a374c515f808f85a980de858969f395043ea9fb1c5ef892df036",
-	"Sandstone Tomb":     "4740d1b768b63813be2dfbd6b1b398d5d1ce3c624ed8e958e8771ed41e1cb116",
+	"Sandstone Tomb":     "a3ddaae900e8270884f12bb4d441449cc238f0536aaa9d7ea81f78d73a492f6a",
 	"Whispering Library": "2fc86663f754fbf0a22edd13ed0aa658b271bb77f5310e398c5b62d671ab2c1d",
 }
 
 // A monster's body stays readable in every world, at the least light a
-// sprite gets: at least 1.5:1 from the fog, and from the world's main wall
-// colour at middle distance, by its body or by its black outline. Every
-// lap's remix is checked too.
+// sprite gets: at least 1.5:1 from the fog, and at middle distance from the
+// world's main wall and floor colours. On a light surface (luminance 0.1
+// or more) the black outline is enough; on a dark one the body itself must
+// stand out. Every lap's remix is checked too.
 func TestMonstersStandOut(t *testing.T) {
 	const want = 1.5
 	r := New(192, 120)
-	outline := luminance(pal.Black)
+	against := func(body, surface float64) float64 {
+		c := contrast(body, surface)
+		if surface >= outlineLight {
+			c = max(c, contrast(luminance(pal.Black), surface))
+		}
+		return c
+	}
 	for i := range proc.Themes {
 		for lap := range 3 {
 			th := proc.Themes[i].Remix(lap)
@@ -107,15 +115,19 @@ func TestMonstersStandOut(t *testing.T) {
 			// Middle distance is half the light's reach.
 			mid := lightLevel(0.5)
 			wall := luminance(pal.All[r.shade[mid][mainColour(th.WallTex(0, 0))]])
+			floor := luminance(pal.All[r.shade[mid][mainColour(th.FloorTex(0))]])
 			for hue := range proc.MonsterHues() {
 				body := pal.Index(proc.MonsterBody(hue))
-				far := luminance(pal.All[r.spriteShade[spriteMinLevel][body]])
+				far := luminance(pal.All[r.spriteShade[r.spriteLevel][body]])
 				if c := contrast(far, fog); c < want {
 					t.Errorf("%s lap %d hue %d: body against the fog %.2f, want %.1f", th.Name, lap, hue, c, want)
 				}
 				near := luminance(pal.All[r.spriteShade[mid][body]])
-				if c := max(contrast(near, wall), contrast(outline, wall)); c < want {
+				if c := against(near, wall); c < want {
 					t.Errorf("%s lap %d hue %d: body against the wall %.2f, want %.1f", th.Name, lap, hue, c, want)
+				}
+				if c := against(near, floor); c < want {
+					t.Errorf("%s lap %d hue %d: body against the floor %.2f, want %.1f", th.Name, lap, hue, c, want)
 				}
 			}
 		}
@@ -146,9 +158,10 @@ func TestRenderDoesNotAllocate(t *testing.T) {
 	}
 }
 
-// No world costs more than twice The Crypt's frame time.
+// No world costs more than twice The Crypt's frame time. Shared CI
+// machines are too noisy for timings, so it only runs locally.
 func TestWorldsCostTheSame(t *testing.T) {
-	if testing.Short() || raceEnabled {
+	if testing.Short() || raceEnabled || os.Getenv("CI") != "" {
 		t.Skip("timing test")
 	}
 	median := func(i int) time.Duration {
@@ -240,8 +253,8 @@ func TestSlowFall(t *testing.T) {
 	}
 }
 
-// BenchmarkRenderWorlds draws a frame of each world, sprites and particles
-// included.
+// BenchmarkRenderWorlds draws a frame of each world with the floor's
+// monsters and props, and its particles.
 func BenchmarkRenderWorlds(b *testing.B) {
 	for i := range proc.Themes {
 		s := sceneFor(i)
@@ -251,7 +264,7 @@ func BenchmarkRenderWorlds(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for k := range b.N {
-				s.draw(r, nil, uint64(k))
+				s.draw(r, s.sprites, uint64(k))
 			}
 		})
 	}
@@ -267,6 +280,27 @@ func TestLinearTable(t *testing.T) {
 		}
 		if math.Abs(linear[v]-want) > 1e-12 {
 			t.Errorf("linear[%d] = %v, want %v", v, linear[v], want)
+		}
+	}
+}
+
+// Particles never draw over a sprite that stands in front of them.
+func TestParticlesHideBehindSprites(t *testing.T) {
+	s := sceneFor(4) // the Lava Forge, full of embers
+	r := New(192, 120)
+	r.SetWorld(s.theme)
+	// A wall of sprite right in front of the camera covers the view.
+	img := proc.NewIndexed(8, 8)
+	img.Rect(0, 0, 8, 8, pal.White)
+	near := []Sprite{{X: s.cam.X + s.cam.DirX*0.3, Y: s.cam.Y + s.cam.DirY*0.3, Img: img, Size: 3, Lift: -1}}
+	for tick := uint64(0); tick < 600; tick += 30 {
+		r.Render(s.level, s.tex, s.cam, near, tick)
+		before := slices.Clone(r.Img.Pix)
+		r.DrawParticles(s.cam, tick)
+		for o := 0; o < len(before); o += 4 {
+			if r.spriteAt[o/4] == r.frame && !slices.Equal(before[o:o+4], r.Img.Pix[o:o+4]) {
+				t.Fatalf("tick %d: a particle drew over the sprite at pixel %d", tick, o/4)
+			}
 		}
 	}
 }

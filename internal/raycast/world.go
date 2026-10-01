@@ -9,13 +9,9 @@ import (
 	"github.com/halpworld/halpwords/pkg/proc"
 )
 
-// spriteMinLight is the least light a sprite gets, however far away, so
-// monsters never sink fully into the fog.
-const spriteMinLight = 0.35
-
-// spriteMinLevel is the lowest light level dithering gives a sprite at
-// spriteMinLight: 0.35 × (levels-1), rounded down.
-const spriteMinLevel = 2
+// outlineLight is the least luminance a wall or floor needs for a
+// sprite's black outline to count as standing out from it.
+const outlineLight = 0.1
 
 // spriteContrast is the luminance contrast against the fog that SetWorld
 // lifts sprite colours to where it can.
@@ -40,8 +36,10 @@ func (r *Renderer) SetWorld(t *proc.Theme) {
 			r.shade[lv][i] = pal.Index(shadeColour(c, tint, fog, float64(lv)/(levels-1)))
 		}
 	}
+	r.spriteLight = t.SpriteMinLight()
+	r.spriteLevel = int(r.spriteLight * (levels - 1))
 	r.spriteShade = r.shade
-	r.liftSprites(tint, fog, mainColour(t.WallTex(0, 0)))
+	r.liftSprites(tint, fog, mainColour(t.WallTex(0, 0)), mainColour(t.FloorTex(0)))
 }
 
 // shadeColour is colour c under light of the given tint at strength k in
@@ -56,21 +54,32 @@ func shadeColour(c, tint, fog color.RGBA, k float64) color.RGBA {
 
 // liftSprites keeps each sprite colour standing out from the fog, so a
 // dark monster in black fog or a blue one in blue fog stays visible, and
-// from the world's main wall colour, either itself or by its black
-// outline. Where a colour falls short, it takes the brighter level that
-// stands out best; failing that, it fades towards black and shows as a
-// silhouette, which reads well in bright fog, or as a last resort moves
-// towards the light's colour, which reads well in dark fog. Levels below
-// the sprite minimum light are never used.
-func (r *Renderer) liftSprites(tint, fog color.RGBA, wall uint8) {
+// from the world's main wall and floor colours: on a light surface its
+// black outline is enough, on a dark one the colour itself must stand out.
+// Where a colour falls short, it takes the brighter level that stands out
+// best; failing that, it fades towards black and shows as a silhouette,
+// which reads well in bright fog, or as a last resort moves towards the
+// light's colour, which reads well in dark fog. Levels below the world's
+// sprite light are never used.
+func (r *Renderer) liftSprites(tint, fog color.RGBA, surfaces ...uint8) {
 	fogL := luminance(fog)
-	var wallL [levels]float64
+	var surfL [levels][]float64
 	for lv := range levels {
-		wallL[lv] = luminance(pal.All[r.shade[lv][wall]])
+		for _, s := range surfaces {
+			surfL[lv] = append(surfL[lv], luminance(pal.All[r.shade[lv][s]]))
+		}
 	}
 	stands := func(c uint8, lv int) float64 {
 		l := luminance(pal.All[c])
-		return min(contrast(l, fogL), max(contrast(l, wallL[lv]), contrast(0, wallL[lv])))
+		worst := contrast(l, fogL)
+		for _, sl := range surfL[lv] {
+			c := contrast(l, sl)
+			if sl >= outlineLight {
+				c = max(c, contrast(0, sl))
+			}
+			worst = min(worst, c)
+		}
+		return worst
 	}
 	outline := pal.Index(pal.Black)
 	for i, c := range pal.All {
@@ -82,11 +91,11 @@ func (r *Renderer) liftSprites(tint, fog color.RGBA, wall uint8) {
 			}
 			continue
 		}
-		for lv := spriteMinLevel; lv < levels; lv++ {
+		for lv := r.spriteLevel; lv < levels; lv++ {
 			r.spriteShade[lv][i] = r.liftColour(c, uint8(i), lv, tint, fog, func(c uint8) float64 { return stands(c, lv) })
 		}
-		for lv := range spriteMinLevel {
-			r.spriteShade[lv][i] = r.spriteShade[spriteMinLevel][i]
+		for lv := range r.spriteLevel {
+			r.spriteShade[lv][i] = r.spriteShade[r.spriteLevel][i]
 		}
 	}
 }
@@ -294,8 +303,8 @@ func mix64(x uint64) uint64 {
 func unit(x uint64) float64 { return float64(x>>11) / (1 << 53) }
 
 // DrawParticles draws the world's particles into the view, after Render
-// with the same camera. They are hidden behind walls and never touch
-// anything outside the view. With Calm set it draws nothing.
+// with the same camera. They are hidden behind walls and sprites, and
+// never touch anything outside the view. With Calm set it draws nothing.
 func (r *Renderer) DrawParticles(cam Camera, tick uint64) {
 	if r.Calm || r.level == nil || r.particles == proc.NoParticles || int(r.particles) >= len(particleStyles) {
 		return
@@ -331,13 +340,13 @@ func (r *Renderer) DrawParticles(cam Camera, tick uint64) {
 		}
 		sx := int(float64(r.W) / 2 * (1 + tx/ty))
 		sy := int(horizon + (0.5-z)*k/ty)
-		if sx < 0 || sx >= r.W || sy < 0 || sy >= r.H || ty >= r.zbuf[sx] {
+		if sx < 0 || sx >= r.W || sy < 0 || sy >= r.H || ty >= r.zbuf[sx] || r.behindSprite(sx, sy, ty) {
 			continue
 		}
 		c := cols[int(unit(h4)*float64(len(cols)))]
 		b := r.brightness(ty, wx, wy)
 		r.put(sx, sy, c, b, st.glow)
-		if st.big && ty < 1.5 && sx+1 < r.W && ty < r.zbuf[sx+1] {
+		if st.big && ty < 1.5 && sx+1 < r.W && ty < r.zbuf[sx+1] && !r.behindSprite(sx+1, sy, ty) {
 			r.put(sx+1, sy, c, b, st.glow)
 		}
 	}

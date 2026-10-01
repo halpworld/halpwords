@@ -35,6 +35,10 @@ type Theme struct {
 	Height float64      // ceiling height in wall heights; 0 means 1
 	Sky    []color.RGBA // when set, open sky replaces the ceiling, top to horizon
 
+	// SpriteLight is the least light monsters and props get, however far
+	// away, so they never sink into the fog; 0 means 0.35.
+	SpriteLight float64
+
 	Prop      func(seed uint64) *Indexed // a decoration standing on the floor
 	PropSize  float64                    // its height in wall heights, at most 0.4
 	PropRooms float64                    // props per room, on average
@@ -145,14 +149,17 @@ var Themes = []Theme{
 			Base: []color.RGBA{pal.Navy, pal.Steel, pal.Ice, pal.White},
 		}},
 		Ceiling: Surface{Paint: CeilIce, Look: Look{
-			Base:   []color.RGBA{pal.Indigo, pal.Navy, pal.Steel},
+			Base:   []color.RGBA{pal.Navy, pal.Blue, pal.Steel},
 			Accent: []color.RGBA{pal.Navy, pal.Cyan, pal.Ice, pal.White},
 		}},
 		Frame:  []color.RGBA{pal.Black, pal.Black, pal.Night, pal.Navy, pal.Indigo, pal.Navy},
 		Fog:    rgb(40, 50, 100),
 		Light:  rgb(220, 235, 255),
+		Reach:  1.15,
 		Height: 1.5,
-		Prop:   PropIce, PropSize: 0.4, PropRooms: 0.5,
+		// The bat and other dark monsters stay clear of the blue fog.
+		SpriteLight: 0.45,
+		Prop:        PropIce, PropSize: 0.4, PropRooms: 0.5,
 		Particles: ParticleSnow,
 	},
 	{
@@ -176,7 +183,9 @@ var Themes = []Theme{
 		Frame: []color.RGBA{pal.Black, pal.Mahogany, pal.Red, pal.Orange, pal.Yellow, pal.White},
 		Fog:   rgb(60, 14, 10),
 		Light: rgb(255, 210, 170),
-		Prop:  PropAnvil, PropSize: 0.35, PropRooms: 0.4,
+		// Dark monsters stay clear of the basalt.
+		SpriteLight: 0.45,
+		Prop:        PropAnvil, PropSize: 0.35, PropRooms: 0.4,
 		Particles: ParticleEmbers,
 	},
 	{
@@ -201,6 +210,7 @@ var Themes = []Theme{
 		Frame: []color.RGBA{pal.Black, pal.Plum, pal.Purple, pal.Pink, pal.White, pal.Ice},
 		Fog:   rgb(40, 16, 56),
 		Light: rgb(245, 220, 255),
+		Reach: 1.25,
 		Prop:  PropCrystals, PropSize: 0.4, PropRooms: 0.5,
 		Particles: ParticleSparkles,
 	},
@@ -220,7 +230,7 @@ var Themes = []Theme{
 			Base:   []color.RGBA{pal.Black, pal.Night, pal.Slate},
 			Accent: []color.RGBA{pal.Mahogany, pal.Bronze, pal.Tan, pal.Yellow},
 		}},
-		Frame:  []color.RGBA{pal.Mahogany, pal.Brown, pal.Bronze, pal.Tan, pal.Yellow, pal.White},
+		Frame:  []color.RGBA{pal.Black, pal.Brown, pal.Bronze, pal.Tan, pal.Yellow, pal.White},
 		Fog:    rgb(36, 26, 16),
 		Light:  rgb(255, 245, 210),
 		Height: 1.25,
@@ -391,6 +401,14 @@ func (t *Theme) CeilHeight() float64 {
 		return 1
 	}
 	return t.Height
+}
+
+// SpriteMinLight is the least light a sprite gets in this world.
+func (t *Theme) SpriteMinLight() float64 {
+	if t.SpriteLight == 0 {
+		return 0.35
+	}
+	return t.SpriteLight
 }
 
 // FrameRamp returns the ramp for door frames and stair steps.

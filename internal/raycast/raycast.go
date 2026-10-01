@@ -99,10 +99,21 @@ type Renderer struct {
 	reach     float64 // multiplies Light
 	ceilH     float64 // ceiling height in wall heights
 	particles proc.Particles
-	invLight  float64 // 1 / (Light × reach), for this frame
+	// spriteLight is the least light a sprite gets, and spriteLevel the
+	// lowest light level dithering gives it.
+	spriteLight float64
+	spriteLevel int
+	invLight    float64 // 1 / (Light × reach), for this frame
 
 	skyCol []int  // the sky panorama column of each view column
 	items  []item // sprites to draw, reused between frames
+
+	// The depth of the nearest sprite at each pixel, valid where
+	// spriteAt holds this frame's number, so particles hide behind
+	// monsters without clearing a buffer every frame.
+	spriteZ  []float32
+	spriteAt []uint32
+	frame    uint32
 
 	level    *dungeon.Level
 	torchMap []float64 // light from wall torches at each cell
@@ -115,6 +126,7 @@ func New(w, h int) *Renderer {
 	r := &Renderer{
 		W: w, H: h, Img: image.NewRGBA(image.Rect(0, 0, w, h)), Light: 5.5,
 		zbuf: make([]float64, w), skyCol: make([]int, w),
+		spriteZ: make([]float32, w*h), spriteAt: make([]uint32, w*h),
 	}
 	for i, c := range pal.All {
 		r.rgba[i] = [4]byte{c.R, c.G, c.B, 0xff}
@@ -157,6 +169,22 @@ func light(x, y int, b float64) int {
 		return 0
 	}
 	return lv
+}
+
+// nextFrame starts a new frame number for the sprite depths.
+func (r *Renderer) nextFrame() {
+	r.frame++
+	if r.frame == 0 { // wrapped: forget every old frame
+		clear(r.spriteAt)
+		r.frame = 1
+	}
+}
+
+// behindSprite reports whether depth d at (x, y) is behind a sprite drawn
+// there this frame.
+func (r *Renderer) behindSprite(x, y int, d float64) bool {
+	o := y*r.W + x
+	return r.spriteAt[o] == r.frame && float64(r.spriteZ[o]) < d
 }
 
 // plot writes palette index c at (x, y) as it is.
@@ -233,6 +261,7 @@ const seeRange = 7
 // floors.
 func (r *Renderer) Render(l *dungeon.Level, tex *Textures, cam Camera, sprites []Sprite, tick uint64) {
 	r.prepare(l)
+	r.nextFrame()
 	r.invLight = 1 / (r.Light * r.reach)
 	w, h := r.W, r.H
 	k := float64(w) / (2 * hypot(cam.PlaneX, cam.PlaneY)) // pixels per map unit at distance 1
@@ -461,7 +490,7 @@ func (r *Renderer) drawSprites(cam Camera, sprites []Sprite, k, horizon float64)
 		bottom := horizon + (0.5-s.Lift)*k/it.depth
 		top := bottom - hgt
 		left := it.sx - wid/2
-		b := max(spriteMinLight, r.brightness(it.depth, s.X, s.Y))
+		b := max(r.spriteLight, r.brightness(it.depth, s.X, s.Y))
 		x0 := max(0, int(math.Ceil(left-0.5)))
 		x1 := min(r.W, int(math.Ceil(left+wid-0.5)))
 		y0 := max(0, int(math.Ceil(top-0.5)))
@@ -481,6 +510,8 @@ func (r *Renderer) drawSprites(cam Camera, sprites []Sprite, k, horizon float64)
 					c, glow = white, true
 				}
 				r.putSprite(x, y, c, b, glow)
+				o := y*r.W + x
+				r.spriteZ[o], r.spriteAt[o] = float32(it.depth), r.frame
 			}
 		}
 	}

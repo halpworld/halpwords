@@ -258,10 +258,10 @@ func TestWorldTexturesPinned(t *testing.T) {
 		"The Crypt":          "a65d15bdeb62608658f63fe22c1a70156bae2d929174c1c4680594a393c40a0d",
 		"Mossy Cellars":      "c26c6287c42315cd041dbb956f25247e6782c3454e7cd215702f202885c2156b",
 		"Flooded Caves":      "36fc164a2554538bb1c6a72083e2649ada1c886cc05767ee8721637b652282b2",
-		"Ice Halls":          "e9d8567d83659bca2298a99f45e094bc26ada6def2913de0634426dbd968beea",
-		"Lava Forge":         "c31f9bb6c27a9c35da164bc9eddbd248829700f078321f3988e8912bc9de5690",
+		"Ice Halls":          "a1218217ddee39bcfcdfe319a1ba6a7bc6fbea3ab44bb468ba3fc314524307dc",
+		"Lava Forge":         "b69ff3e67027a092cb6639d145eb4bd04fa6b36740798bb1b4072c59cb99e508",
 		"Amethyst Vaults":    "b1f6129d6c878456e61693568b22ae66cd5b4ca89e22d638c30a771777b445eb",
-		"Clockwork Workshop": "e71c4e4d6aa4c8586cba57da4b761d4589c01122e27a1f51964f2d2588209750",
+		"Clockwork Workshop": "087266f7f35489791a6edeed68fb8cbd0b13172da4b0bf79f419b1dd3658092a",
 		"Sky Garden":         "69893c58e642807076f83828a4828aa9702c6f27d88d63b24de6c4ef5e01c6ba",
 		"Sandstone Tomb":     "82f312a7dc1e0978a7b634c129a9ddfc8d4d72dbcf61503711f320edc8033b59",
 		"Whispering Library": "2da9cfb946d95448db0c85408396b69be168c7840225f59acf5dc72d1bc6dfc1",
@@ -297,33 +297,33 @@ func contrast(a, b float64) float64 {
 // Doors, sealed doors and stairs stand out at least 3:1 from what is
 // around them: a door's frame from the wall it is set in, and a stairwell's
 // lit rim or its dark depths from the floor. The Crypt keeps today's
-// textures, which the server also draws, so it is held only to today's
-// numbers.
+// textures, which the server also draws, so it is held to today's numbers:
+// at least 1.55:1 for the door frame and 2.36:1 for the stairs over
+// these seeds and laps (1.58:1 and 2.54:1 at seed 1).
 func TestDoorsAndStairsStandOut(t *testing.T) {
-	const want, crypt = 3.0, 1.5
 	for i := range Themes {
 		for lap := range 3 {
 			th := Themes[i].Remix(lap)
-			need := want
+			door, stairs := 3.0, 3.0
 			if th.Name == "The Crypt" {
-				need = crypt
+				door, stairs = 1.55, 2.36
 			}
 			f := th.FrameRamp()
 			for seed := range uint64(3) {
 				wall := meanLuminance(th.WallTex(seed, 0), 0, 0, TexSize, TexSize)
 				for _, sealed := range []bool{false, true} {
-					door := th.DoorTex(seed, sealed)
+					m := th.DoorTex(seed, sealed)
 					// The frame is the door texture's outer arch.
-					frame := luminance(pal.All[door.At(4, TexSize-1)])
-					if c := contrast(frame, wall); c < need {
-						t.Errorf("%s lap %d seed %d: door frame (sealed %v) contrast %.2f, want %.1f", th.Name, lap, seed, sealed, c, need)
+					frame := luminance(pal.All[m.At(4, TexSize-1)])
+					if c := contrast(frame, wall); c < door {
+						t.Errorf("%s lap %d seed %d: door frame (sealed %v) contrast %.3f, want %.2f", th.Name, lap, seed, sealed, c, door)
 					}
 				}
 				floor := meanLuminance(th.FloorTex(seed), 0, 0, TexSize, TexSize)
 				rim := contrast(luminance(f[len(f)-1]), floor)
 				depths := contrast(luminance(f[0]), floor)
-				if c := max(rim, depths); c < need {
-					t.Errorf("%s lap %d seed %d: stairs contrast %.2f, want %.1f", th.Name, lap, seed, c, need)
+				if c := max(rim, depths); c < stairs {
+					t.Errorf("%s lap %d seed %d: stairs contrast %.3f, want %.2f", th.Name, lap, seed, c, stairs)
 				}
 			}
 		}
@@ -362,5 +362,28 @@ func TestWorld(t *testing.T) {
 	}
 	if n := testing.AllocsPerRun(10, func() { World(4, 2) }); n != 0 {
 		t.Errorf("World allocates %v times", n)
+	}
+}
+
+// Lava glows without glaring: its hottest yellow is only a thin core down
+// the cracks, at most a tenth of the floor in any frame.
+func TestLavaDoesNotGlare(t *testing.T) {
+	th := ThemeFor(4)
+	if th.Name != "Lava Forge" {
+		t.Fatalf("floor 4 is %s", th.Name)
+	}
+	yellow := pal.Index(pal.Yellow)
+	for seed := range uint64(32) {
+		for f, m := range th.FloorFrames(seed) {
+			n := 0
+			for _, p := range m.Pix {
+				if p == yellow {
+					n++
+				}
+			}
+			if share := float64(n) / float64(len(m.Pix)); share > 0.10 {
+				t.Errorf("seed %d frame %d: %.0f%% of the lava floor is yellow", seed, f, share*100)
+			}
+		}
 	}
 }
