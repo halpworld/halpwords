@@ -30,6 +30,10 @@ type Result struct {
 	Expected string
 	// MarkError is set when the only problem was diacritics.
 	MarkError bool
+	// ArticleError is set when articles are optional, both the typed text
+	// and the answer have one, and they differ ("la chien" for "le chien").
+	// The tier is then at most AccentSlip, so the gender is not learnt wrong.
+	ArticleError bool
 }
 
 const (
@@ -83,6 +87,13 @@ func Grade(typed string, e Entry, lang *Language, rules Rules, usedBackspace boo
 				r.Tier = Graze
 			}
 		}
+		// Optional articles may be left out, but one that is typed must
+		// be the right one.
+		if r.Tier > AccentSlip && !rules.ArticlesRequired && lang != nil && lang.Code != English.Code {
+			if ia, aa := articleOf(in, lang), articleOf(ans, lang); ia != "" && aa != "" && ia != aa {
+				r.Tier, r.ArticleError = AccentSlip, true
+			}
+		}
 		if r.Tier > best.Tier || (r.Tier == best.Tier && r.MarkError && !best.MarkError) {
 			best = r
 		}
@@ -108,6 +119,16 @@ func normalize(s string, rules Rules) string {
 		s = strings.ToLower(s)
 	}
 	return norm.NFC.String(s)
+}
+
+// articleOf is the leading article of s, or "".
+func articleOf(s string, lang *Language) string {
+	for _, a := range lang.Articles {
+		if len(s) > len(a) && strings.HasPrefix(s, a) {
+			return a
+		}
+	}
+	return ""
 }
 
 func stripArticle(s string, lang *Language) string {

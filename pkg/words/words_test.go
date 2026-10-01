@@ -67,6 +67,14 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestWrongArticleFlag(t *testing.T) {
+	fr := lang(t, "fr")
+	r := Grade("la chien", Entry{Prompt: "x", Answers: []string{"le chien"}}, fr, fr.Defaults, false)
+	if r.Tier != AccentSlip || !r.ArticleError || r.MarkError {
+		t.Fatalf("%+v", r)
+	}
+}
+
 func TestGrade(t *testing.T) {
 	fr, la, grc, ga := lang(t, "fr"), lang(t, "la"), lang(t, "grc"), lang(t, "ga")
 	e := func(answers ...string) Entry { return Entry{Prompt: "x", Answers: answers} }
@@ -95,6 +103,13 @@ func TestGrade(t *testing.T) {
 		{"fr two errors", "le shein", e("le chien"), fr, fr.Defaults, false, Miss},
 		{"fr graze sub", "le chiem", e("le chien"), fr, fr.Defaults, false, Graze},
 		{"fr alternative", "l'amie", e("l'ami", "l'amie"), fr, fr.Defaults, false, Perfect},
+		{"fr wrong article", "la chien", e("le chien"), fr, fr.Defaults, false, AccentSlip},
+		{"fr plural for singular", "les chien", e("le chien"), fr, fr.Defaults, false, AccentSlip},
+		{"fr indefinite for definite", "un chien", e("le chien"), fr, fr.Defaults, false, AccentSlip},
+		{"fr le for l'", "le ami", e("l'ami"), fr, fr.Defaults, false, AccentSlip},
+		{"fr wrong article backspace", "la chien", e("le chien"), fr, fr.Defaults, true, AccentSlip},
+		{"fr right article extra", "le chien", e("chien"), fr, fr.Defaults, false, Perfect},
+		{"en article swap ok", "a dog", Entry{Prompt: "x", Answers: []string{"the dog"}}, English, English.Defaults, false, Perfect},
 		{"fr wrong", "le chat", e("le chien"), fr, fr.Defaults, false, Miss},
 		{"fr empty", "  ", e("le chien"), fr, fr.Defaults, false, Miss},
 		{"la macron ignored", "amicus", e("amīcus"), la, la.Defaults, false, Perfect},
