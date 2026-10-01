@@ -424,6 +424,9 @@ func (c *Client) Close() {
 	if c.parkedUnsaved {
 		c.writeParked()
 	}
+	if c.stateUnsaved && c.saveState() == nil {
+		c.stateUnsaved = false
+	}
 	c.mu.Unlock()
 	// An unlink the server hasn't heard about yet gets a moment too.
 	waited := make(chan struct{})

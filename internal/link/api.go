@@ -232,19 +232,26 @@ type tokens struct {
 	RefreshExpiresIn int    `json:"refresh_expires_in"`
 }
 
-// keep stores a new pair of tokens, on disk before they are used: the old
-// refresh token no longer works. If they can't be written, they aren't
-// used either, and it returns the error: a restart must never find
-// tokens older than the ones in use. c.mu is held.
+// keep stores a new pair of tokens, on disk before they are used where
+// it can. They are used even when they can't be written (the old refresh
+// token no longer works), as signedIn does: it returns the error as a
+// warning (errUnsaved), and Close tries to write them again. A game that
+// stops before then finds the old pair, which the server still takes
+// for a minute (its grace window); later, it is unlinked and keeps its
+// events for the learner. c.mu is held.
 func (c *Client) keep(t tokens) error {
-	old := c.st
 	c.setTokens(t)
 	if err := c.saveState(); err != nil {
-		c.st = old
-		return fmt.Errorf("link: saving new tokens: %w", err)
+		c.stateUnsaved = true
+		return fmt.Errorf("%w: %w", errUnsaved, err)
 	}
+	c.stateUnsaved = false
 	return nil
 }
+
+// errUnsaved is keep's warning that new tokens are in use but not on
+// disk.
+var errUnsaved = errors.New("link: new tokens in use but not saved")
 
 // setTokens sets a new pair of tokens, without saving them. c.mu is held.
 func (c *Client) setTokens(t tokens) {
@@ -302,7 +309,10 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 	if c.gen != gen {
 		return ErrNotLinked
 	}
-	return c.keep(t)
+	// New tokens that couldn't be saved still work: keep's error is a
+	// warning, and Close tries again.
+	_ = c.keep(t)
+	return nil
 }
 
 // authed makes a request as the device, refreshing the access token when

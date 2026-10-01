@@ -2,6 +2,7 @@ package link
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -238,24 +239,33 @@ func (s *fullStore) WritePrivate(name string, data []byte) error {
 	return s.memStore.WritePrivate(name, data)
 }
 
-// TestRefreshNotUsedUnlessSaved: new tokens that can't be written to
-// disk aren't used, so a restart never finds tokens older than the ones
-// in use.
-func TestRefreshNotUsedUnlessSaved(t *testing.T) {
-	_, c, st, _ := linked(t)
+// TestRefreshUsedThoughNotSaved: new tokens that can't be written to
+// disk are still used (the old refresh token no longer works), and
+// written when the game quits.
+func TestRefreshUsedThoughNotSaved(t *testing.T) {
+	f, c, st, _ := linked(t)
 	fs := &fullStore{memStore: st, full: true}
 	c.mu.Lock()
 	c.o.Store = fs
 	c.st.AccessExp = time.Time{}
 	refresh := c.st.Refresh
 	c.mu.Unlock()
-	if err := c.Sync(context.Background()); err == nil {
-		t.Fatal("synced without saving the tokens")
-	}
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	c.Sync(context.Background())
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.st.Refresh != refresh || !c.st.linked() {
-		t.Errorf("refresh token %q, want %q", c.st.Refresh, refresh)
+	now, linked := c.st.Refresh, c.st.linked()
+	c.mu.Unlock()
+	if now == refresh || !linked {
+		t.Fatalf("refresh token %q, linked %v: the new pair was dropped", now, linked)
+	}
+	if n := len(f.eventsOf("answers")); n != 1 {
+		t.Errorf("%d answers stored", n)
+	}
+	fs.full = false
+	c.Close()
+	var saved state
+	if err := json.Unmarshal(st.files[stateFile], &saved); err != nil || saved.Refresh != now {
+		t.Errorf("saved refresh token %q, want %q (%v)", saved.Refresh, now, err)
 	}
 }
 

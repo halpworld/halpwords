@@ -311,6 +311,9 @@ type Client struct {
 	// parkedUnsaved: the parked events couldn't be written; Close tries
 	// again.
 	parkedUnsaved bool
+	// stateUnsaved: new tokens are in use but couldn't be written; Close
+	// tries again.
+	stateUnsaved bool
 	// gen counts links and unlinks. A sync that started under another
 	// generation throws away what it got.
 	gen int
