@@ -191,6 +191,7 @@ func (c *Context) UnlockLearner(id, secret string) (bool, error) {
 // switchLearner switches without asking for a lock: the callers have
 // opened it, or the learner is playing already.
 func (c *Context) switchLearner(id string) error {
+	c.adopting = "" // a sign-in for another folder belongs to the learner left
 	c.EndSession()
 	if old := c.Link; old != nil {
 		c.closeLink(save.Current(), old)
@@ -459,7 +460,9 @@ func (c *Context) notePlayer() {
 		return
 	}
 	name, id := me.Learner.DisplayName, me.Learner.ID
-	if c.adopting != "" && id != "" && c.adopt(l, id) {
+	// Only the learner the sign-in began on is folded into the old folder:
+	// after a switch away, whoever is playing is not the new learner.
+	if c.adopting != "" && c.addedID == l.ID && id != "" && c.adopt(l, id) {
 		return
 	}
 	if name == "" || (l.Name == name && l.LearnerID == id && l.Owner == id) {
@@ -497,6 +500,8 @@ func (c *Context) adopt(n *profile.Learner, serverID string) bool {
 	if target == nil || target.ID == n.ID || owner(target) != serverID {
 		return false
 	}
+	// Play done as the new learner before Me arrived goes with it: only
+	// the link state moves, not the profile files.
 	c.EndSession()
 	old := c.Link
 	c.Link = nil
@@ -506,7 +511,12 @@ func (c *Context) adopt(n *profile.Learner, serverID string) bool {
 		c.switchLearner(n.ID) // stay as the new learner, open again
 		return false
 	}
-	target.Lock, target.NeedsSignIn = n.Lock, n.NeedsSignIn
+	// A sign-in by pairing code or without a lock must not strip the lock
+	// the folder had.
+	if n.Lock != nil {
+		target.Lock = n.Lock
+	}
+	target.NeedsSignIn = n.NeedsSignIn // signed in: the flag clears; a kept lock still asks
 	target.LearnerID, target.Owner = serverID, serverID
 	if err := c.switchLearner(target.ID); err != nil {
 		c.Notify("Couldn't open your progress again")

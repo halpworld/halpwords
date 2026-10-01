@@ -564,7 +564,6 @@ func TestSignInAgainAdoptsSameFolder(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx.SignInFor(old.ID)
 		// The sign-in happens, and the server says who it was.
 		who := "lrn_1"
 		if !same {
@@ -578,6 +577,7 @@ func TestSignInAgainAdoptsSameFolder(t *testing.T) {
 		if err := ctx.switchLearner(added.ID); err != nil {
 			t.Fatal(err)
 		}
+		ctx.SignInFor(old.ID)
 		ctx.notePlayer()
 		if same {
 			if ctx.Learner() != old || ctx.Learners.Find(added.ID) != nil || !ctx.Link.Linked() {
@@ -640,4 +640,77 @@ func TestNoLearnersDoesNotOpenLegacyLogin(t *testing.T) {
 		t.Errorf("playing in %q", save.Current())
 	}
 	save.Use(save.Root)
+}
+
+func linkJSON(who string) []byte {
+	return []byte(`{"Server":"http://127.0.0.1:1","Refresh":"hwr_new","Way":"sso","NextSeq":5,"Me":{"learner":{"id":"` + who + `","display_name":"Sam"}}}`)
+}
+
+// A sign-in begun on a new learner is dropped on a switch to somebody
+// else: when Me arrives for them, they are not folded into the old
+// folder, and the old folder stays as it was (#38).
+func TestSwitchAwayDropsSignInAgain(t *testing.T) {
+	ctx, _, _ := sharedComputer(t)
+	target, _ := ctx.Learners.Add("Sam")
+	target.NeedsSignIn, target.Owner = true, "lrn_1"
+	ctx.Learners.Save()
+	if _, err := ctx.AddLearner(""); err != nil {
+		t.Fatal(err)
+	}
+	ctx.SignInFor(target.ID)
+	// Somebody else, the same server learner, with progress.
+	y, _ := ctx.Learners.Add("Yan")
+	y.Folder().Write("halloffame.json", []byte(`{"Name":"Yan"}`))
+	y.Folder().WritePrivate("link.json", linkJSON("lrn_1"))
+	ctx.Learners.Save()
+	if err := ctx.switchLearner(y.ID); err != nil {
+		t.Fatal(err)
+	}
+	ctx.notePlayer()
+	if ctx.Learner() != y || ctx.Learners.Find(y.ID) == nil {
+		t.Fatalf("playing %+v", ctx.Learner())
+	}
+	if got, _ := y.Folder().Read("halloffame.json"); !strings.Contains(string(got), "Yan") {
+		t.Error("their progress is gone")
+	}
+	if _, err := y.Folder().Read("link.json"); err != nil {
+		t.Error("their login moved")
+	}
+	if !target.NeedsSignIn {
+		t.Error("the old folder changed")
+	}
+	if _, err := target.Folder().Read("link.json"); err == nil {
+		t.Error("the old folder got a login")
+	}
+}
+
+// A sign-in again without a lock (a pairing code, or SSO) keeps the lock
+// the folder had (#38).
+func TestSignInAgainKeepsLock(t *testing.T) {
+	ctx, _, _ := sharedComputer(t)
+	old, _ := ctx.Learners.Add("Sam")
+	var err error
+	if old.Lock, err = profile.NewLock(profile.LockCard, "ABCD"); err != nil {
+		t.Fatal(err)
+	}
+	old.NeedsSignIn, old.Owner = true, "lrn_1"
+	ctx.Learners.Save()
+	added, err := ctx.AddLearner("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.SignInFor(old.ID)
+	ctx.Link.Close()
+	added.Folder().WritePrivate("link.json", linkJSON("lrn_1"))
+	if err := ctx.switchLearner(added.ID); err != nil {
+		t.Fatal(err)
+	}
+	ctx.SignInFor(old.ID)
+	ctx.notePlayer()
+	if ctx.Learner() != old {
+		t.Fatalf("playing %+v", ctx.Learner())
+	}
+	if old.Lock == nil || !ctx.NeedsSignIn(old) {
+		t.Errorf("lock lost: %+v", old)
+	}
 }
