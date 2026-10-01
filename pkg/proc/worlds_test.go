@@ -229,3 +229,123 @@ func TestSkyIsNotTooBright(t *testing.T) {
 		}
 	}
 }
+
+// worldHash hashes everything a world draws at one seed: its walls, floor
+// and its frames, ceiling, doors, torch, stairs, sky and prop, and its
+// remixed walls.
+func worldHash(th *Theme, seed uint64) string {
+	ms := []*Indexed{th.WallTex(seed, 0), th.WallTex(seed, 1), th.WallTex(seed, 2),
+		th.FloorTex(seed), th.CeilTex(seed), th.DoorTex(seed, false), th.DoorTex(seed, true),
+		th.StairsTex(seed), th.Prop(seed)}
+	ms = append(ms, th.FloorFrames(seed)...)
+	for f := range Frames {
+		ms = append(ms, th.TorchTex(seed, f))
+	}
+	if sky := th.SkyTex(seed); sky != nil {
+		ms = append(ms, sky)
+	}
+	for lap := 1; lap <= 2; lap++ {
+		r := th.Remix(lap)
+		ms = append(ms, r.WallTex(seed, 0), r.WallTex(seed, 1), r.WallTex(seed, 2))
+	}
+	return indexedHash(ms...)
+}
+
+// Each world's textures at a fixed seed, so a change to how a world looks
+// is always on purpose. Update a hash only when the new look is meant.
+func TestWorldTexturesPinned(t *testing.T) {
+	want := map[string]string{
+		"The Crypt":          "a65d15bdeb62608658f63fe22c1a70156bae2d929174c1c4680594a393c40a0d",
+		"Mossy Cellars":      "c26c6287c42315cd041dbb956f25247e6782c3454e7cd215702f202885c2156b",
+		"Flooded Caves":      "36fc164a2554538bb1c6a72083e2649ada1c886cc05767ee8721637b652282b2",
+		"Ice Halls":          "e9d8567d83659bca2298a99f45e094bc26ada6def2913de0634426dbd968beea",
+		"Lava Forge":         "c31f9bb6c27a9c35da164bc9eddbd248829700f078321f3988e8912bc9de5690",
+		"Amethyst Vaults":    "b1f6129d6c878456e61693568b22ae66cd5b4ca89e22d638c30a771777b445eb",
+		"Clockwork Workshop": "e71c4e4d6aa4c8586cba57da4b761d4589c01122e27a1f51964f2d2588209750",
+		"Sky Garden":         "69893c58e642807076f83828a4828aa9702c6f27d88d63b24de6c4ef5e01c6ba",
+		"Sandstone Tomb":     "82f312a7dc1e0978a7b634c129a9ddfc8d4d72dbcf61503711f320edc8033b59",
+		"Whispering Library": "2da9cfb946d95448db0c85408396b69be168c7840225f59acf5dc72d1bc6dfc1",
+	}
+	for i := range Themes {
+		th := &Themes[i]
+		if got := worldHash(th, 7); got != want[th.Name] {
+			t.Errorf("%q: %q,", th.Name, got)
+		}
+	}
+}
+
+// meanLuminance is the average luminance of a texture's opaque pixels in
+// the rectangle [x0,x1) × [y0,y1).
+func meanLuminance(m *Indexed, x0, y0, x1, y1 int) float64 {
+	sum, n := 0.0, 0
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			if p := m.At(x, y); p != Transparent {
+				sum += luminance(pal.All[p])
+				n++
+			}
+		}
+	}
+	return sum / float64(n)
+}
+
+// contrast is the WCAG contrast ratio of two luminances.
+func contrast(a, b float64) float64 {
+	return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+}
+
+// Doors, sealed doors and stairs stand out at least 3:1 from what is
+// around them: a door's frame from the wall it is set in, and a stairwell's
+// lit rim or its dark depths from the floor. The Crypt keeps today's
+// textures, which the server also draws, so it is held only to today's
+// numbers.
+func TestDoorsAndStairsStandOut(t *testing.T) {
+	const want, crypt = 3.0, 1.5
+	for i := range Themes {
+		for lap := range 3 {
+			th := Themes[i].Remix(lap)
+			need := want
+			if th.Name == "The Crypt" {
+				need = crypt
+			}
+			f := th.FrameRamp()
+			for seed := range uint64(3) {
+				wall := meanLuminance(th.WallTex(seed, 0), 0, 0, TexSize, TexSize)
+				for _, sealed := range []bool{false, true} {
+					door := th.DoorTex(seed, sealed)
+					// The frame is the door texture's outer arch.
+					frame := luminance(pal.All[door.At(4, TexSize-1)])
+					if c := contrast(frame, wall); c < need {
+						t.Errorf("%s lap %d seed %d: door frame (sealed %v) contrast %.2f, want %.1f", th.Name, lap, seed, sealed, c, need)
+					}
+				}
+				floor := meanLuminance(th.FloorTex(seed), 0, 0, TexSize, TexSize)
+				rim := contrast(luminance(f[len(f)-1]), floor)
+				depths := contrast(luminance(f[0]), floor)
+				if c := max(rim, depths); c < need {
+					t.Errorf("%s lap %d seed %d: stairs contrast %.2f, want %.1f", th.Name, lap, seed, c, need)
+				}
+			}
+		}
+	}
+}
+
+// The runes on a sealed door glow, so it reads as sealed in the dark.
+func TestSealedDoorsGlow(t *testing.T) {
+	for i := range Themes {
+		th := &Themes[i]
+		open, sealed := th.DoorTex(1, false), th.DoorTex(1, true)
+		if indexedHash(open) == indexedHash(sealed) {
+			t.Errorf("%s: sealed door looks open", th.Name)
+		}
+		glow := 0
+		for j, g := range sealed.Glow {
+			if g && (open.Glow == nil || !open.Glow[j]) {
+				glow++
+			}
+		}
+		if glow < 40 {
+			t.Errorf("%s: sealed door has %d glowing rune pixels", th.Name, glow)
+		}
+	}
+}
