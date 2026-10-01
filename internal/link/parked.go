@@ -16,6 +16,17 @@ const parkedFile = "link-parked.json"
 // data: kept no longer than needed.
 var parkedFor = 30 * 24 * time.Hour
 
+// parkedAhead is how far in the future a parked entry may be dated (a
+// clock a little off) before it is taken as expired: dated by a clock
+// that later went back, it would otherwise never expire.
+const parkedAhead = 24 * time.Hour
+
+// parkedExpired reports whether p waited longer than parkedFor, or is
+// dated more than parkedAhead in the future.
+func parkedExpired(p parked, now time.Time) bool {
+	return now.Sub(p.At) > parkedFor || p.At.Sub(now) > parkedAhead
+}
+
 // parked are the events not sent for one learner when the game lost its
 // link, and when.
 type parked struct {
@@ -75,7 +86,7 @@ func (c *Client) unpark(learner string) bool {
 func (c *Client) expireParked() bool {
 	now := c.now()
 	n := len(c.parked)
-	c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return now.Sub(p.At) > parkedFor })
+	c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return parkedExpired(p, now) })
 	return len(c.parked) != n
 }
 
@@ -179,7 +190,8 @@ func withoutSeqs(q queue, seen map[int64]bool) (queue, bool) {
 // SweepParked drops the parked events in the folder f that waited longer
 // than parkedFor for their learner. The game calls it for every learner's
 // folder at start-up, so a learner who never plays again doesn't keep
-// them for ever. A damaged file is left for Open, which starts afresh.
+// them for ever. A file that can't be parsed can never be sent, and is
+// removed.
 func SweepParked(f Store, now time.Time) error {
 	data, err := f.Read(parkedFile)
 	if err != nil {
@@ -187,10 +199,10 @@ func SweepParked(f Store, now time.Time) error {
 	}
 	var ps []parked
 	if json.Unmarshal(data, &ps) != nil {
-		return nil
+		return f.Remove(parkedFile)
 	}
 	n := len(ps)
-	ps = slices.DeleteFunc(ps, func(p parked) bool { return now.Sub(p.At) > parkedFor })
+	ps = slices.DeleteFunc(ps, func(p parked) bool { return parkedExpired(p, now) })
 	switch {
 	case len(ps) == n:
 		return nil

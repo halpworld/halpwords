@@ -101,14 +101,47 @@ func TestSweepParked(t *testing.T) {
 	if st.has(parkedFile) {
 		t.Error("all expired, and the file is left")
 	}
-	// A folder without a parked file, or with a damaged one (Open's
-	// business), is left as it is.
+	// A folder without a parked file is fine; a damaged one can never
+	// be sent, and goes.
 	if err := SweepParked(st, now); err != nil {
 		t.Fatal(err)
 	}
 	st.files[parkedFile] = []byte("{")
-	if err := SweepParked(st, now); err != nil || string(st.files[parkedFile]) != "{" {
-		t.Errorf("damaged file: %v, %q", err, st.files[parkedFile])
+	if err := SweepParked(st, now); err != nil || st.has(parkedFile) {
+		t.Errorf("damaged file: %v, kept %v", err, st.has(parkedFile))
+	}
+	// Kept "in the future" (the clock went back): expired, or it would
+	// never be.
+	ps = []parked{
+		{Learner: "lrn_future", At: now.Add(48 * time.Hour), Queue: queue{Answers: []qAnswer{{Seq: 3}}}},
+		{Learner: "lrn_soon", At: now.Add(time.Hour), Queue: queue{Answers: []qAnswer{{Seq: 4}}}},
+	}
+	data, _ = json.Marshal(ps)
+	st.WritePrivate(parkedFile, data)
+	if err := SweepParked(st, now); err != nil {
+		t.Fatal(err)
+	}
+	got = nil
+	if err := json.Unmarshal(st.files[parkedFile], &got); err != nil || len(got) != 1 || got[0].Learner != "lrn_soon" {
+		t.Errorf("future entries: %+v, %v", got, err)
+	}
+}
+
+// TestParkedFromTheFutureExpires: Open drops parked events dated more
+// than a day ahead (the clock went back), as the sweep does.
+func TestParkedFromTheFutureExpires(t *testing.T) {
+	f, _, st, clk := linked(t)
+	ps := []parked{
+		{Learner: "lrn_1", At: clk.now().Add(48 * time.Hour), Queue: queue{Answers: []qAnswer{{Seq: 90}}}},
+		{Learner: "lrn_2", At: clk.now().Add(time.Hour), Queue: queue{Answers: []qAnswer{{Seq: 91}}}},
+	}
+	data, _ := json.Marshal(ps)
+	st.WritePrivate(parkedFile, data)
+	c := reopen(f, st, clk)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.parked) != 1 || c.parked[0].Learner != "lrn_2" {
+		t.Errorf("parked after opening: %+v", c.parked)
 	}
 }
 
