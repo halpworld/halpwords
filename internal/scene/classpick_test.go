@@ -110,3 +110,26 @@ func TestSavedHeroNamesTheHeroAndFloor(t *testing.T) {
 		t.Fatalf("got %q floor %d ok %v, want Rogue floor 3", hero, floor, ok)
 	}
 }
+
+// The prompt shows what the save is, mode included, and says when a
+// Hardcore or Daily run can't be got back.
+func TestReplaceTextShowsTheModeOfTheSave(t *testing.T) {
+	useTempDir(t)
+	ctx := testContext(t)
+	c := hardcoreCrawl(t, ctx, 4)
+	if !c.writeSave(ctx, true) {
+		t.Fatal("could not suspend")
+	}
+	want := "This replaces your saved adventure: French · Knight · Floor 4 · Hardcore"
+	if got := replaceText(); got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if !savedScored() {
+		t.Fatal("a Hardcore save was not seen as scored")
+	}
+	useTempDir(t)
+	writeTestSave(t, ctx)
+	if savedScored() {
+		t.Fatal("an Adventure save was seen as scored")
+	}
+}

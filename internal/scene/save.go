@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"io/fs"
 	"time"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
@@ -192,7 +193,9 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 func saveSummary() (summary string, ok bool) {
 	data, err := save.Read(saveName)
 	if err != nil {
-		return "", false
+		// Only a missing file is no save: one that can't be read is
+		// still there, and Continue will explain.
+		return "", !errors.Is(err, fs.ErrNotExist)
 	}
 	var s struct {
 		Language   string
@@ -233,7 +236,7 @@ func saveSummary() (summary string, ok bool) {
 func savedHero() (hero string, floor int, ok bool) {
 	data, err := save.Read(saveName)
 	if err != nil {
-		return "", 0, false
+		return "", 0, !errors.Is(err, fs.ErrNotExist)
 	}
 	var s struct {
 		Class   rpg.Class
@@ -352,4 +355,15 @@ func (c *Crawl) afterClose(now time.Time) {
 		save.Remove(saveName)
 		c.run.onDisk = false
 	}
+}
+
+// savedScored reports whether the save slot holds a Hardcore or Daily run,
+// which can't be got back once it is replaced.
+func savedScored() bool {
+	data, err := save.Read(saveName)
+	if err != nil {
+		return false
+	}
+	var s struct{ Mode compete.Mode }
+	return json.Unmarshal(data, &s) == nil && s.Mode.Scored()
 }

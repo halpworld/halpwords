@@ -31,14 +31,18 @@ type ClassPick struct {
 // confirming reports whether the player is being asked to replace a save.
 func (p *ClassPick) confirming() bool { return p.ask }
 
-// replaceText says what starting a new run does to the saved adventure.
+// replaceText says what starting a new run does to the saved adventure,
+// such as "This replaces your saved adventure: Latin · Knight · Floor 4".
 func replaceText() string {
-	hero, floor, _ := savedHero()
-	if hero == "" {
+	sum, _ := saveSummary()
+	if sum == "" {
 		return "This replaces your saved adventure."
 	}
-	return fmt.Sprintf("This replaces your saved adventure: %s, floor %d", hero, floor)
+	return "This replaces your saved adventure: " + sum
 }
+
+// replaceNote is said as well when the saved run can't be got back.
+const replaceNote = "A Hardcore or Daily run can't be got back."
 
 // updateAsk answers the question of replacing the saved adventure. Nothing
 // is replaced unless the player chooses Yes.
@@ -177,11 +181,14 @@ func (p *ClassPick) Draw(dst *ebiten.Image, ctx *game.Context) {
 func (p *ClassPick) drawAsk(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	gfx.FillRect(dst, 0, 0, game.ScreenW, game.ScreenH, pal.Fade(pal.Black, 0.7))
-	const w, h = 520, 140
+	const w, h = 560, 140
 	x, y := game.ScreenW/2-w/2, game.ScreenH/2-h/2
 	gfx.Window(dst, x, y, w, h)
-	f.DrawCentered(dst, "Replace your saved game?", x+w/2, y+14, 2, pal.Yellow)
-	f.DrawCentered(dst, fit(f, replaceText(), w-24, 1), x+w/2, y+50, 1, pal.Ice)
+	f.DrawCentered(dst, "Replace your saved adventure?", x+w/2, y+14, 2, pal.Yellow)
+	f.DrawCentered(dst, fit(f, replaceText(), w-24, 1), x+w/2, y+46, 1, pal.Ice)
+	if savedScored() {
+		f.DrawCentered(dst, replaceNote, x+w/2, y+64, 1, pal.Rose)
+	}
 	for i, label := range []string{"No, go back", "Yes, replace it"} {
 		col := pal.Steel
 		if (i == 1) == p.yes {
@@ -192,5 +199,5 @@ func (p *ClassPick) drawAsk(dst *ebiten.Image, ctx *game.Context) {
 		}
 		f.DrawShadow(dst, label, x+80+i*190, y+92, 1, col)
 	}
-	f.DrawShadow(dst, "←/→ choose   Enter select   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+	f.DrawShadow(dst, "←/→ choose   Enter select   Y yes   N no", 8, game.ScreenH-20, 1, pal.Ash)
 }
