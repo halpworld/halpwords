@@ -580,13 +580,22 @@ in the page's local storage.
 browser the files above (`link.json` with the tokens, `link-queue.json` with
 the answers not yet sent, `link-parked.json`, `learners.json`, the saves and
 `ai.json` with an AI key) are kept in the page's local storage as plain
-text. Nothing there is encrypted or hidden: anyone who can open the browser
-profile, and any script that runs on the same site, can read it, including
-the tokens that let a game send answers for the learner. On a shared
-computer, the child should sign out (Switch learner, then sign out) when they
-finish, and a grown-up should clear the site's data in the browser if a
+text. They include the learner's name, class name and progress. Nothing
+there is encrypted or hidden: anyone who can open the browser profile, and
+any script that runs on the same site, can read it, including the tokens
+that let a game send answers for the learner. On a shared computer, a child
+who signed in at school or with a class code should sign out when they
+finish (Title, *Switch learner*, *Sign out*, or *Account*, *Sign out*). A
+game linked by a parent's pairing code has no sign-out: use *Account*,
+*Unlink*. Signing out or unlinking clears the tokens and the queue, but not
+the learner's name, saves or lock. Clearing the site's data in the browser
+is the only way to remove everything, and a grown-up should do it when a
 computer is handed on. The downloaded game keeps the same files in the user
-folder, readable only by that user.
+folder, as files in the user's folder.
+Moving the web game to a new address carries the saves and `learners.json`
+(the learners' names, class names and the hashes of their locks) to the new
+address, but never `link.json`, `link-queue.json`, `link-parked.json` or
+`ai.json`, in any learner's folder.
 
 **What the learner lock protects.** A learner who signs in at school gets a
 lock on that computer, a login card's code or three pictures out of nine,
