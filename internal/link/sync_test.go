@@ -258,3 +258,39 @@ func TestRefreshNotUsedUnlessSaved(t *testing.T) {
 		t.Errorf("refresh token %q, want %q", c.st.Refresh, refresh)
 	}
 }
+
+// TestMoveStateKeepsParked: when the learner whose link was lost signs in
+// again on a new folder and the game moves that sign-in into their old
+// folder (MoveState), the events kept there are sent, and new ones
+// after them too.
+func TestMoveStateKeepsParked(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	loseLink(t, f, c)
+	c.Close()
+	other := newMemStore()
+	n := reopen(f, other, clk)
+	relink(t, f, n)
+	n.Close()
+	if len(f.eventsOf("answers")) != 0 {
+		t.Fatal("kept events sent from another folder")
+	}
+	if err := MoveState(other, st); err != nil {
+		t.Fatal(err)
+	}
+	c2 := reopen(f, st, clk)
+	defer c2.Close()
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	c2.Answer("fr", cat, "practice", words.Answer{Tier: words.Perfect})
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(f.eventsOf("answers")); n != 2 {
+		t.Errorf("%d answers stored, want 2", n)
+	}
+	if st.has(parkedFile) {
+		t.Error("the kept events weren't cleared once sent")
+	}
+}
