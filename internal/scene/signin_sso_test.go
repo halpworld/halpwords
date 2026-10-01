@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/internal/browser"
+	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/link"
+	"github.com/halpworld/halpwords/internal/pal"
 )
 
 // TestSignInWithSchoolAccount goes through signing in with a school
@@ -137,5 +139,79 @@ func TestSignInSSOKeepsAskingWhenTheServerIsSlow(t *testing.T) {
 	s.polled(ctx, link.ErrSSOPending)
 	if s.failed != 0 {
 		t.Fatal("the backoff stayed after an answer")
+	}
+}
+
+// ssoScreen is a sign-in screen with a code showing, for the polling
+// tests (the server only starts codes).
+func ssoScreen(t *testing.T) (*SignIn, *game.Context) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"device_code": "hwsso_abc", "user_code": "ABCD-EFGH",
+			"verification_uri": "https://halpwords.test/sso/device", "expires_in": 600, "interval": 5})
+	}))
+	t.Cleanup(srv.Close)
+	openPage = func(string) error { return nil }
+	t.Cleanup(func() { openPage = browser.Open })
+	ctx := testContext(t)
+	ctx.Link = link.Open(link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
+	t.Cleanup(ctx.Link.Close)
+	s := NewSignIn(ctx, "").(*SignIn)
+	s.startSSO(ctx)
+	s.answer(ctx, <-s.pending)
+	return s, ctx
+}
+
+// A server that says how long to wait is waited for, up to a limit.
+func TestSignInSSOHonoursRetryAfter(t *testing.T) {
+	s, ctx := ssoScreen(t)
+	ctx.Tick = 1000
+	s.polled(ctx, &link.Error{Status: 429, Code: "rate_limited", RetryAfter: 40 * time.Second})
+	if gap := s.nextPoll - ctx.Tick; gap < ticks(40*time.Second) {
+		t.Fatalf("waited %d ticks, the server said 40s", gap)
+	}
+	s.polled(ctx, &link.Error{Status: 429, Code: "rate_limited", RetryAfter: 10 * time.Minute})
+	if gap := s.nextPoll - ctx.Tick; gap > ticks(70*time.Second) {
+		t.Fatalf("waited %d ticks for a 10 minute Retry-After", gap)
+	}
+	if s.step != siSSO || ctx.Link.PendingSSO() == nil {
+		t.Fatal("gave up")
+	}
+}
+
+// Polls never go further apart than a minute and a bit of jitter, and a
+// code that starts again starts again from the normal interval.
+func TestSignInSSOBackoffIsCappedAndResets(t *testing.T) {
+	s, ctx := ssoScreen(t)
+	for range 12 {
+		s.polled(ctx, context.DeadlineExceeded)
+	}
+	if gap := s.nextPoll - ctx.Tick; gap > ticks(70*time.Second) {
+		t.Fatalf("backed off %d ticks", gap)
+	}
+	s.showSSO(ctx, ctx.Link.PendingSSO())
+	if s.failed != 0 {
+		t.Fatal("a new code began at the old backoff")
+	}
+}
+
+// The error of a poll that got no answer goes away when one does.
+func TestSignInSSOErrorTextClears(t *testing.T) {
+	s, ctx := ssoScreen(t)
+	s.polled(ctx, context.DeadlineExceeded)
+	if s.msg == "" {
+		t.Fatal("no message after a slow poll")
+	}
+	bad := s.msg
+	s.polled(ctx, link.ErrSSOPending)
+	if s.msg == bad || s.msg == "" {
+		t.Fatalf("the error stayed: %q", s.msg)
+	}
+	// A new code replaces an old error too.
+	s.say("Old error.", pal.Rose)
+	s.showSSO(ctx, ctx.Link.PendingSSO())
+	if s.msg == "Old error." {
+		t.Fatal("old error shown with a new code")
 	}
 }

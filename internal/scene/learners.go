@@ -839,7 +839,7 @@ func (s *SignIn) linked(ctx *game.Context, st link.Status) {
 	}
 	ctx.SignedIn(lock)
 	ctx.Sound.Play(audio.Perfect)
-	ctx.Notify("Signed in!")
+	ctx.Notify("Signed in! Lists may take a moment.")
 	ctx.Replace(NewTitle(ctx))
 }
 

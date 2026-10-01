@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,15 +22,31 @@ import (
 // memFiles keeps the link's files in memory.
 type memFiles map[string][]byte
 
+// memFilesMu guards every memFiles: a background sync writes while the
+// test reads.
+var memFilesMu sync.Mutex
+
 func (m memFiles) Read(name string) ([]byte, error) {
+	memFilesMu.Lock()
+	defer memFilesMu.Unlock()
 	if d, ok := m[name]; ok {
 		return d, nil
 	}
 	return nil, fs.ErrNotExist
 }
-func (m memFiles) Write(name string, d []byte) error        { m[name] = d; return nil }
-func (m memFiles) WritePrivate(name string, d []byte) error { m[name] = d; return nil }
-func (m memFiles) Remove(name string) error                 { delete(m, name); return nil }
+func (m memFiles) Write(name string, d []byte) error {
+	memFilesMu.Lock()
+	defer memFilesMu.Unlock()
+	m[name] = d
+	return nil
+}
+func (m memFiles) WritePrivate(name string, d []byte) error { return m.Write(name, d) }
+func (m memFiles) Remove(name string) error {
+	memFilesMu.Lock()
+	defer memFilesMu.Unlock()
+	delete(m, name)
+	return nil
+}
 
 // linkedContext is a test context linked to a server that only links:
 // everything queued stays queued.

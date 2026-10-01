@@ -73,7 +73,7 @@ func TestSignInSSOTakesSlowDown(t *testing.T) {
 	ctx.Tick = s.nextPoll
 	s.updateSSO(ctx)
 	s.polled(ctx, waitPoll(t, s))
-	if s.step != siSSO || s.sso.Every != 10*time.Second || s.nextPoll != ctx.Tick+ticks(10*time.Second) {
+	if s.step != siSSO || s.sso.Every != 10*time.Second || s.nextPoll < ctx.Tick+ticks(10*time.Second) || s.nextPoll > ctx.Tick+ticks(11*time.Second) { // plus jitter
 		t.Fatalf("every %v, next %d, tick %d", s.sso.Every, s.nextPoll, ctx.Tick)
 	}
 }

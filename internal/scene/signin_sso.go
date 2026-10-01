@@ -3,6 +3,7 @@ package scene
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -54,7 +55,7 @@ func (s *SignIn) startSSO(ctx *game.Context) {
 
 // showSSO shows the code and opens the website's page.
 func (s *SignIn) showSSO(ctx *game.Context, code *link.SSOCode) {
-	s.step, s.sso, s.nextPoll = siSSO, code, ctx.Tick+ticks(code.Every)
+	s.step, s.sso, s.nextPoll, s.failed = siSSO, code, ctx.Tick+ticks(jitter(code.Every)), 0
 	if err := openPage(code.VerifyURL); err != nil {
 		s.say("Open the address below in a web browser.", pal.Ice)
 		return
@@ -66,6 +67,12 @@ func (s *SignIn) showSSO(ctx *game.Context, code *link.SSOCode) {
 // that got no answer: twice as long each time, up to a minute.
 func pollBackoff(every time.Duration, n int) time.Duration {
 	return min(every<<min(n, 6), max(time.Minute, every))
+}
+
+// jitter is d plus up to a tenth, so many games started together (a
+// class) don't poll in step.
+func jitter(d time.Duration) time.Duration {
+	return d + rand.N(d/10+1)
 }
 
 // ticks is d in game ticks.
@@ -118,10 +125,10 @@ func (s *SignIn) polled(ctx *game.Context, err error) {
 		ctx.SignedIn(nil)
 		ctx.Link.SyncNow()
 		ctx.Sound.Play(audio.Perfect)
-		ctx.Notify("Signed in!")
+		ctx.Notify("Signed in! Lists may take a moment.")
 		ctx.Replace(NewTitle(ctx))
 	case errors.Is(err, link.ErrSSOPending):
-		if s.msg == "Checking…" {
+		if s.msg == "Checking…" || s.failed > 0 {
 			s.say("Sign in on the website, then come back here.", pal.Ice)
 		}
 		s.failed = 0
@@ -129,13 +136,19 @@ func (s *SignIn) polled(ctx *game.Context, err error) {
 		if p := ctx.Link.PendingSSO(); p != nil {
 			s.sso.Every = p.Every
 		}
-		s.nextPoll = ctx.Tick + ticks(s.sso.Every)
+		s.nextPoll = ctx.Tick + ticks(jitter(s.sso.Every))
 	case ctx.Link.PendingSSO() != nil:
 		// The server couldn't be reached: the code still works until it
 		// runs out, so go on asking, less and less often.
 		s.say(upperFirst(explainSignIn(err))+".", pal.Rose)
 		s.failed++
-		s.nextPoll = ctx.Tick + ticks(pollBackoff(s.sso.Every, s.failed))
+		wait := pollBackoff(s.sso.Every, s.failed)
+		var e *link.Error
+		if errors.As(err, &e) && e.RetryAfter > 0 {
+			// The server said how long to wait: wait that long, within reason.
+			wait = max(wait, min(e.RetryAfter, time.Minute))
+		}
+		s.nextPoll = ctx.Tick + ticks(jitter(wait))
 	default:
 		ctx.Sound.Play(audio.Wrong)
 		s.say(upperFirst(explainSignIn(err))+".", pal.Rose)
