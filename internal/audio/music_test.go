@@ -9,7 +9,7 @@ import (
 func TestEveryMoodComposes(t *testing.T) {
 	for _, m := range Moods {
 		for seed := uint64(0); seed < 20; seed++ {
-			s := Compose(Track{m, seed})
+			s := Compose(Track{Mood: m, Seed: seed})
 			if len(s.Notes) < 20 {
 				t.Fatalf("%s/%d: only %d notes", m, seed, len(s.Notes))
 			}
@@ -33,7 +33,7 @@ func TestEveryMoodComposes(t *testing.T) {
 
 func TestMelodyStaysInKey(t *testing.T) {
 	for _, m := range Moods {
-		s := Compose(Track{m, 7})
+		s := Compose(Track{Mood: m, Seed: 7})
 		in := map[int]bool{}
 		for _, k := range s.Scale {
 			in[k] = true
@@ -51,21 +51,21 @@ func TestMelodyStaysInKey(t *testing.T) {
 }
 
 func TestComposeIsDeterministic(t *testing.T) {
-	a, b := Compose(Track{Fight, 42}), Compose(Track{Fight, 42})
+	a, b := Compose(Track{Mood: Fight, Seed: 42}), Compose(Track{Mood: Fight, Seed: 42})
 	if !slices.Equal(a.Notes, b.Notes) || a.BPM != b.BPM {
 		t.Fatal("the same track composed twice differs")
 	}
-	if c := Compose(Track{Fight, 43}); slices.Equal(a.Notes, c.Notes) {
+	if c := Compose(Track{Mood: Fight, Seed: 43}); slices.Equal(a.Notes, c.Notes) {
 		t.Fatal("different seeds give the same tune")
 	}
-	if c := Compose(Track{Delve, 42}); c.BPM >= a.BPM {
+	if c := Compose(Track{Mood: Delve, Seed: 42}); c.BPM >= a.BPM {
 		t.Errorf("exploring (%.0f bpm) should be slower than fighting (%.0f bpm)", c.BPM, a.BPM)
 	}
 }
 
 func TestRenderLoop(t *testing.T) {
 	for _, m := range Moods {
-		s := Compose(Track{m, 3})
+		s := Compose(Track{Mood: m, Seed: 3})
 		yields := 0
 		out := RenderLoop(s, SampleRate, func() { yields++ })
 		if want := int(math.Round(s.Loop() * SampleRate)); len(out) != want {
@@ -88,7 +88,7 @@ func TestRenderLoop(t *testing.T) {
 }
 
 func TestQuietIsSilent(t *testing.T) {
-	if s := Compose(Track{Quiet, 1}); len(s.Notes) != 0 {
+	if s := Compose(Track{Mood: Quiet, Seed: 1}); len(s.Notes) != 0 {
 		t.Fatalf("quiet has %d notes", len(s.Notes))
 	}
 }

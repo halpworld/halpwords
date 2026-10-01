@@ -23,7 +23,26 @@ func (c *Crawl) Music() audio.Track {
 	case modeCampfire, modeShop, modeShrine:
 		return campMusic
 	}
-	return audio.Track{Mood: audio.Delve, Seed: seed}
+	t := audio.Track{Mood: audio.Delve, Seed: seed}
+	if c.theme != nil {
+		t.Ambience = worldAmbience[c.theme.Name]
+	}
+	return t
+}
+
+// worldAmbience is the quiet sound under the music in each world, by the
+// world's name. A world not listed has none.
+var worldAmbience = map[string]audio.Ambience{
+	"The Crypt":          audio.Dust,
+	"Mossy Cellars":      audio.Crickets,
+	"Flooded Caves":      audio.Drips,
+	"Lava Forge":         audio.Rumble,
+	"Ice Halls":          audio.Wind,
+	"Whispering Library": audio.Pages,
+	"Sky Garden":         audio.Birds,
+	"Clockwork Workshop": audio.Ticking,
+	"Amethyst Vaults":    audio.Chimes,
+	"Sandstone Tomb":     audio.Sand,
 }
 
 var (

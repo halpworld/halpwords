@@ -33,9 +33,15 @@ var Moods = []Mood{Title, Delve, Fight, Boss, Camp, Lament}
 
 // Track names a piece of music. The same track is always the same tune:
 // the seed picks the key, the tempo, the chords and the melody.
+//
+// Ambience is a quiet layer of sound under the Delve music (the other
+// moods ignore it). Track stays comparable, so it still works as a cache
+// key: the same world is the same track and is not rendered again, and a
+// new world is a new track that the sound player cross-fades to.
 type Track struct {
-	Mood Mood
-	Seed uint64
+	Mood     Mood
+	Seed     uint64
+	Ambience Ambience
 }
 
 // Song is a composed track: one loop of notes, ready to render.
@@ -45,6 +51,11 @@ type Song struct {
 	Notes Sound // every note, placed in the loop by its Delay
 	Root  int   // the key, in semitones above A4
 	Scale []int // the scale, in semitones above the root
+
+	// Seed and Ambience are copied from the track, and RenderLoop mixes
+	// the ambience in. Only Delve songs have one.
+	Seed     uint64
+	Ambience Ambience
 }
 
 // Loop is the length of one loop in seconds.
@@ -134,6 +145,10 @@ func Compose(t Track) Song {
 		Bars:  st.bars,
 		Root:  rng.IntN(7) - 3 - st.lower, // around A4
 		Scale: st.scales[rng.IntN(len(st.scales))],
+		Seed:  t.Seed,
+	}
+	if t.Mood == Delve {
+		s.Ambience = t.Ambience
 	}
 	prog := st.progs[rng.IntN(len(st.progs))]
 	c := composer{Song: &s, st: st, rng: rng, step: 60 / s.BPM / 4}
@@ -445,6 +460,9 @@ func RenderLoop(s Song, rate int, yield func()) []float32 {
 	out := make([]float32, n)
 	for i, v := range mix[:n] {
 		out[i] = float32(v * gain)
+	}
+	if s.Ambience != None {
+		mixAmbience(out, s, rate, yield)
 	}
 	return out
 }
