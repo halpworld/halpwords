@@ -695,3 +695,33 @@ func (c *Client) saveState() error {
 
 // errNoStore is returned when a file is needed and there is no store.
 var errNoStore = errors.New("link: nowhere to keep files")
+
+// Peek is what a folder's link.json says, read without opening a link:
+// whether the folder holds a learner's tokens, how they signed in, and
+// whether a sign-in with a school account is waiting.
+type Peek struct {
+	Tokens     bool
+	Way        string
+	PendingSSO bool
+}
+
+// PeekFolder reads link.json in the store f. A missing or damaged file says
+// nothing is there.
+func PeekFolder(f Store) Peek {
+	data, err := f.Read(stateFile)
+	if err != nil {
+		return Peek{}
+	}
+	var st state
+	if json.Unmarshal(data, &st) != nil {
+		return Peek{}
+	}
+	return Peek{Tokens: st.linked(), Way: st.Way, PendingSSO: st.SSO != nil}
+}
+
+// School reports whether the sign-in was made at school: a login card,
+// the class code or a school account.
+func (p Peek) School() bool { return IsSchoolWay(p.Way) }
+
+// IsSchoolWay reports whether a Way is a sign-in at school.
+func IsSchoolWay(w string) bool { return w == WayCard || w == WayClass || w == WaySSO }

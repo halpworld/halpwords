@@ -152,7 +152,18 @@ func (a *Account) Update(ctx *game.Context) error {
 			a.mode = acUnlink
 		case acSchool:
 			ctx.Sound.Play(audio.Select)
-			ctx.Replace(NewSignIn(ctx, ""))
+			// A school sign-in never joins a folder that has another
+			// learner's progress: it gets a learner of its own.
+			prev := ""
+			if l := ctx.Learner(); l != nil && ctx.Learners != nil && !ctx.Pristine(l) {
+				prev = ctx.Learners.Current
+				if _, err := ctx.AddLearner(""); err != nil {
+					ctx.Sound.Play(audio.Wrong)
+					a.say("Couldn't add a learner: "+err.Error(), pal.Rose)
+					break
+				}
+			}
+			ctx.Replace(NewSignIn(ctx, prev))
 		case acBack:
 			a.leave(ctx)
 		}

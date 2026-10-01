@@ -79,6 +79,10 @@ type Context struct {
 	// addedFrom is the learner who played before AddLearner added
 	// the one playing now, for CancelAddLearner.
 	addedFrom string
+	// needWho is set when the game started on a guest, for TakeNeedWho;
+	// leaveErr makes leaveLearner fail, for tests.
+	needWho  bool
+	leaveErr error
 
 	// Full screen changes wait for the one before to finish: on macOS,
 	// changing again during the animation crashes the app.

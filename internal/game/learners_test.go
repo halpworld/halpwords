@@ -62,14 +62,15 @@ func TestSwitchLearners(t *testing.T) {
 	if err := ctx.RemoveLearner(second.ID); err != nil {
 		t.Fatal(err)
 	}
-	if ctx.Learner() != first || ctx.Profile.Name != "Aoife" {
+	// Aoife has played: the next child doesn't land in her Hall of Fame.
+	if cur := ctx.Learner(); cur == first || cur == nil || ctx.Profile.Name != "" {
 		t.Errorf("after removing, playing %v named %q", ctx.Learner(), ctx.Profile.Name)
 	}
 	if names, _ := second.Folder().All(); len(names) > 0 {
 		t.Errorf("removed learner's files are left: %v", names)
 	}
-	if len(ctx.Learners.List) != 1 {
-		t.Errorf("%d learners, want 1", len(ctx.Learners.List))
+	if len(ctx.Learners.List) != 2 {
+		t.Errorf("%d learners, want 2 (Aoife and a new guest)", len(ctx.Learners.List))
 	}
 }
 
@@ -304,5 +305,195 @@ func TestRemoveOtherKeepsPlayer(t *testing.T) {
 	}
 	if ctx.Learner() != first || ctx.Learners.Find(locked.ID) != nil {
 		t.Fatalf("playing %v", ctx.Learner())
+	}
+}
+
+// putTokens gives a learner's folder a sign-in, as a game that linked has.
+func putTokens(t *testing.T, l *profile.Learner, way string) {
+	t.Helper()
+	data := `{"Server":"http://127.0.0.1:1","Refresh":"hwr_x","Way":"` + way + `","NextSeq":1}`
+	if err := l.Folder().WritePrivate("link.json", []byte(data)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A learner holding tokens is signed in whatever LearnerID says (it is
+// filled in only once the server has been heard): removal must not land on
+// them (#38).
+func TestRemoveSkipsTokensWithoutLearnerID(t *testing.T) {
+	ctx, first, _ := sharedComputer(t)
+	putTokens(t, first, "pairing") // lock-free, LearnerID empty
+	other, err := ctx.AddLearner("Cara")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.RemoveLearner(other.ID); err != nil {
+		t.Fatal(err)
+	}
+	if cur := ctx.Learner(); cur == nil || cur.ID == first.ID || hasTokens(cur) {
+		t.Fatalf("playing %+v: a learner with tokens", cur)
+	}
+}
+
+// The next child never lands in someone's hero, name or Hall of Fame: a
+// learner with progress isn't a guest, a pristine one is reused, and
+// guests don't pile up (#38).
+func TestGuestIsPristineAndReused(t *testing.T) {
+	ctx, first, _ := sharedComputer(t)
+	first.Folder().Write("halloffame.json", []byte(`{"Name":"Ada"}`))
+	if ctx.Pristine(first) {
+		t.Fatal("a learner with a Hall of Fame is pristine")
+	}
+	typed, _ := ctx.Learners.Add("Ada") // a name somebody typed
+	if ctx.Pristine(typed) {
+		t.Error("a learner with a typed name is pristine")
+	}
+	a, _ := ctx.AddLearner("Cara")
+	ctx.RemoveLearner(a.ID)
+	g1 := ctx.Learner()
+	if g1 == first || g1 == typed || !ctx.Pristine(g1) {
+		t.Fatalf("landed on %+v", g1)
+	}
+	n := len(ctx.Learners.List)
+	b, _ := ctx.AddLearner("Dan")
+	ctx.RemoveLearner(b.ID)
+	if ctx.Learner() != g1 || len(ctx.Learners.List) != n {
+		t.Errorf("playing %v of %d learners: a second guest was made", ctx.Learner(), len(ctx.Learners.List))
+	}
+}
+
+// Start up on the learner who played last unless they have to sign in:
+// then a guest plays and the Switch learner screen comes first. A
+// grown-up's pairing-code learner resumes (#38).
+func TestStartupRestore(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		setup  func(t *testing.T, l *profile.Learner)
+		resume bool
+	}{
+		{"lock", func(t *testing.T, l *profile.Learner) { l.Lock, _ = profile.NewLock(profile.LockCard, "A") }, false},
+		{"card tokens, no lock", func(t *testing.T, l *profile.Learner) { putTokens(t, l, "card") }, false},
+		{"school account", func(t *testing.T, l *profile.Learner) { putTokens(t, l, "sso") }, false},
+		{"pairing code", func(t *testing.T, l *profile.Learner) { putTokens(t, l, "pairing") }, true},
+		{"plain", func(t *testing.T, l *profile.Learner) {}, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ctx, first, _ := sharedComputer(t)
+			c.setup(t, first)
+			ctx.Learners.Current = first.ID
+			if err := ctx.Learners.Save(); err != nil {
+				t.Fatal(err)
+			}
+			ctx.Link.Close()
+			again := &Context{Sound: &Sound{Muted: true}}
+			again.openLearners()
+			cur := again.Learner()
+			if cur == nil {
+				t.Fatal("nobody playing")
+			}
+			if c.resume != (cur.ID == first.ID) || c.resume == again.TakeNeedWho() {
+				t.Errorf("resume %v: playing %q (first %q)", c.resume, cur.ID, first.ID)
+			}
+			if !c.resume && again.NeedsSignIn(cur) {
+				t.Errorf("started on a learner who has to sign in")
+			}
+		})
+	}
+}
+
+// A learner signed in with a school account has no lock to open them
+// with: nothing switches to them, and they are never a guest (#38).
+func TestSchoolAccountLearnerNotEntered(t *testing.T) {
+	ctx, first, locked := sharedComputer(t)
+	locked.Lock = nil
+	locked.NeedsSignIn = true
+	if err := ctx.SwitchLearner(locked.ID); !errors.Is(err, ErrLearnerLocked) {
+		t.Fatalf("SwitchLearner = %v", err)
+	}
+	if ok, _ := ctx.UnlockLearner(locked.ID, ""); ok {
+		t.Fatal("unlocked a learner with nothing to open them")
+	}
+	other, _ := ctx.AddLearner("Cara")
+	ctx.RemoveLearner(other.ID)
+	if cur := ctx.Learner(); cur == locked || cur == nil || !ctx.Pristine(cur) {
+		t.Fatalf("playing %+v, first %v", cur, first.ID)
+	}
+}
+
+// After a sign-out at school that keeps the progress, the game leaves
+// the learner even without a lock, and they can't be chosen again (#38).
+func TestSignOutKeepAtSchoolLeaves(t *testing.T) {
+	ctx, _, _ := sharedComputer(t)
+	pupil, _ := ctx.Learners.Add("Sam")
+	// The school lets the progress stay.
+	data := `{"Server":"http://127.0.0.1:1","Refresh":"hwr_x","Way":"sso","NextSeq":1,"Me":{"keep_on_sign_out":true}}`
+	if err := pupil.Folder().WritePrivate("link.json", []byte(data)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.switchLearner(pupil.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !ctx.Link.Linked() || !ctx.Link.KeepOnSignOut() {
+		t.Fatal("not linked, or the progress doesn't stay")
+	}
+	done := ctx.SignOut()
+	for !done() {
+	}
+	if cur := ctx.Learner(); cur == nil || cur == pupil || !ctx.Pristine(cur) {
+		t.Fatalf("playing %+v after a school sign-out", cur)
+	}
+	if !ctx.NeedsSignIn(pupil) || ctx.SwitchLearner(pupil.ID) == nil {
+		t.Error("the signed-out pupil can be chosen without signing in")
+	}
+}
+
+// If the game can't switch to a guest, nobody plays: not the learner who
+// signed out (#38).
+func TestFailClosed(t *testing.T) {
+	ctx, _, locked := sharedComputer(t)
+	if _, err := ctx.UnlockLearner(locked.ID, "ABCD"); err != nil {
+		t.Fatal(err)
+	}
+	ctx.leaveErr = errors.New("disk full")
+	done := ctx.SignOut()
+	for !done() {
+	}
+	if ctx.Learner() != nil || ctx.Learners.Current != "" {
+		t.Fatalf("playing %+v", ctx.Learner())
+	}
+	if save.Current() == locked.Folder() {
+		t.Error("still saving in the signed-out learner's folder")
+	}
+	// And removal fails closed too.
+	ctx.leaveErr = nil
+	if err := ctx.SwitchLearner(ctx.Learners.List[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	ctx.leaveErr = errors.New("disk full")
+	if err := ctx.RemoveLearner(ctx.Learners.Current); err == nil || ctx.Learner() != nil {
+		t.Fatalf("remove: %v, playing %v", err, ctx.Learner())
+	}
+}
+
+// A damaged list is made again from the folders, without the locks:
+// learners holding tokens have to sign in again (#38).
+func TestRebuildNeedsSignIn(t *testing.T) {
+	ctx, first, _ := sharedComputer(t)
+	putTokens(t, first, "pairing")
+	ctx.Link.Close()
+	if err := save.Root.Write("learners.json", []byte("{damaged")); err != nil {
+		t.Fatal(err)
+	}
+	again := &Context{Sound: &Sound{Muted: true}}
+	again.openLearners()
+	if again.notice == "" {
+		t.Error("no notice that the data was repaired")
+	}
+	got := again.Learners.Find(first.ID)
+	if got == nil || !got.NeedsSignIn || again.SwitchLearner(got.ID) == nil && again.Learner() == got {
+		t.Errorf("rebuilt learner %+v can be chosen without signing in", got)
+	}
+	if cur := again.Learner(); cur == nil || cur.ID == first.ID {
+		t.Errorf("started on %+v", cur)
 	}
 }

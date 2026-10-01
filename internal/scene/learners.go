@@ -86,8 +86,8 @@ func (s *Learners) Update(ctx *game.Context) error {
 	if s.signingOut != nil {
 		if s.signingOut() {
 			s.signingOut = nil
-			s.sel = 0
-			s.say("Signed out.", pal.Lime)
+			s.sel = len(ctx.Learners.List) // the add row
+			s.say("Signed out. Pick your name, or choose + Add a learner.", pal.Lime)
 		}
 		return nil
 	}
@@ -108,8 +108,7 @@ func (s *Learners) Update(ctx *game.Context) error {
 	s.sel = min(s.sel, n-1)
 	switch {
 	case input.Back():
-		ctx.Sound.Play(audio.Back)
-		ctx.Replace(NewTitle(ctx))
+		s.leave(ctx)
 	case input.Up():
 		ctx.Sound.Play(audio.Blip)
 		s.sel = (s.sel + n - 1) % n
@@ -122,23 +121,39 @@ func (s *Learners) Update(ctx *game.Context) error {
 		case lrPick:
 			s.pick(ctx, r.learner)
 		case lrAdd:
-			ctx.Sound.Play(audio.Select)
-			prev := ctx.Learners.Current
-			if _, err := ctx.AddLearner(""); err != nil {
-				ctx.Sound.Play(audio.Wrong)
-				s.say("Couldn't add a learner: "+err.Error(), pal.Rose)
-				return nil
-			}
-			ctx.Replace(NewSignIn(ctx, prev))
+			s.add(ctx)
 		case lrSignOut, lrRemove:
 			ctx.Sound.Play(audio.Select)
 			s.confirm = r.action
 		case lrBack:
-			ctx.Sound.Play(audio.Back)
-			ctx.Replace(NewTitle(ctx))
+			s.leave(ctx)
 		}
 	}
 	return nil
+}
+
+// leave goes back to the title, if somebody is playing: after a switch
+// that failed nobody is, and the game doesn't play until someone is.
+func (s *Learners) leave(ctx *game.Context) {
+	if ctx.Learner() == nil {
+		ctx.Sound.Play(audio.Wrong)
+		s.say("Choose who is playing first.", pal.Rose)
+		return
+	}
+	ctx.Sound.Play(audio.Back)
+	ctx.Replace(NewTitle(ctx))
+}
+
+// add starts the sign-in of another learner.
+func (s *Learners) add(ctx *game.Context) {
+	ctx.Sound.Play(audio.Select)
+	prev := ctx.Learners.Current
+	if _, err := ctx.AddLearner(""); err != nil {
+		ctx.Sound.Play(audio.Wrong)
+		s.say("Couldn't add a learner: "+err.Error(), pal.Rose)
+		return
+	}
+	ctx.Replace(NewSignIn(ctx, prev))
 }
 
 // pick switches to a learner: at once, or after their sign-in when
@@ -152,6 +167,12 @@ func (s *Learners) pick(ctx *game.Context, l *profile.Learner) {
 	if l.Lock != nil {
 		ctx.Sound.Play(audio.Select)
 		ctx.Replace(newUnlock(ctx, l))
+		return
+	}
+	if ctx.NeedsSignIn(l) {
+		// Signed in at school with nothing local to open them: they sign
+		// in again, as a new learner.
+		s.add(ctx)
 		return
 	}
 	switchTo(ctx, l)
@@ -222,13 +243,17 @@ func (s *Learners) Draw(dst *ebiten.Image, ctx *game.Context) {
 		case lrPick:
 			label = r.learner.Name
 			switch {
+			case r.learner.ID == ctx.Learners.Current && ctx.Pristine(r.learner):
+				note = "playing now (guest)"
 			case r.learner.ID == ctx.Learners.Current:
 				note = "playing now"
-			case r.learner.Lock != nil:
+			case r.learner.Lock != nil || ctx.NeedsSignIn(r.learner):
 				note = "sign in to play"
+			case ctx.Pristine(r.learner):
+				note = "(guest)"
 			}
 		case lrAdd:
-			label = "+ Add a learner"
+			label = "+ Sign in / add a learner"
 		case lrSignOut:
 			label = "Sign out " + r.learner.Name
 		case lrRemove:
@@ -857,7 +882,7 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 	case siName:
 		s.drawNames(dst, ctx, x, y, w)
-		hint = "↑/↓ or a letter choose   Enter select   Esc back"
+		hint = "↑/↓ move   Type a first letter   Enter select   Esc back"
 	case siUsername, siPlayName:
 		gfx.Window(dst, x, y, w, 120)
 		prompt := "Type your username:"
