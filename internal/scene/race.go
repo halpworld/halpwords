@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/dungeon"
@@ -167,7 +168,13 @@ type RaceEnd struct {
 	bg   *ebiten.Image
 	rr   *raceRun
 	last race.Report // the player's final report, sent until it goes
+	// asked is when Esc was first pressed while reconnecting: a second Esc
+	// soon after leaves. One stray key must not drop the final report.
+	asked time.Time
 }
+
+// leaveConfirm is how long the second Esc may take.
+const leaveConfirm = 4 * time.Second
 
 func newRaceEnd(ctx *game.Context, r *run, at dungeon.Point) *RaceEnd {
 	ctx.EndSession()
@@ -185,7 +192,11 @@ func (e *RaceEnd) Update(ctx *game.Context) error {
 	if !e.rr.over(st) {
 		e.rr.play.Report(e.last)
 	}
-	switch e.act(st, input.Confirm(), input.Back()) {
+	other := input.Confirm() || len(ctx.Input.Chars) > 0
+	for _, k := range inpututil.AppendJustPressedKeys(nil) {
+		other = other || k != ebiten.KeyEscape
+	}
+	switch e.act(st, time.Now(), other, input.Confirm(), input.Back()) {
 	case raceEndLobby:
 		// Back to the room once the server has the result, so the lobby
 		// can't start the same race again.
@@ -216,11 +227,18 @@ const (
 )
 
 // act is what the keys pressed do in the room as it is now.
-func (e *RaceEnd) act(st link.PlayState, confirm, back bool) raceEndAct {
+func (e *RaceEnd) act(st link.PlayState, now time.Time, other, confirm, back bool) raceEndAct {
+	rejoining := st.Phase == link.PlayRejoining && !e.settled(st)
+	if !rejoining || other || (!e.asked.IsZero() && now.Sub(e.asked) > leaveConfirm) {
+		e.asked = time.Time{}
+	}
 	switch {
-	case st.Phase == link.PlayRejoining && !e.settled(st):
-		if back {
+	case rejoining:
+		if back && !e.asked.IsZero() {
 			return raceEndLeave
+		}
+		if back {
+			e.asked = now
 		}
 	case (confirm || back) && e.settled(st):
 		return raceEndLobby
@@ -234,6 +252,9 @@ func (e *RaceEnd) hint(st link.PlayState) string {
 	case st.Phase == link.PlayOff:
 		return "Enter continue"
 	case st.Phase == link.PlayRejoining && !e.settled(st):
+		if !e.asked.IsZero() {
+			return "Esc again to leave"
+		}
 		return "Reconnecting… Esc to leave"
 	case e.settled(st):
 		return "Enter back to the room"

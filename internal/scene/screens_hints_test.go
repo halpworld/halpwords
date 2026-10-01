@@ -3,6 +3,7 @@ package scene
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -69,11 +70,15 @@ func TestAIIntroFits(t *testing.T) {
 // Every Hall of Fame tab says C checks a code.
 func TestHallOfFameHelpHasCheck(t *testing.T) {
 	ctx := rankContext(t)
+	withFont(t, ctx)
 	h := NewHallOfFame(ctx).(*HallOfFame)
 	for mi := 0; mi < h.tabs(ctx); mi++ {
 		h.mi = mi
-		if !strings.Contains(h.help(ctx), "C check") {
+		if !strings.Contains(h.help(ctx), "C check a") {
 			t.Errorf("tab %d: %q", mi, h.help(ctx))
+		}
+		if w := ctx.Font.Width(h.help(ctx), 1); w > 640-16 {
+			t.Errorf("tab %d: hint is %dpx wide", mi, w)
 		}
 	}
 	if h.mi != len(fameModes) || !h.ranking() {
@@ -90,20 +95,34 @@ func TestRaceEndReconnecting(t *testing.T) {
 	if got := e.hint(st); got != "Reconnecting… Esc to leave" {
 		t.Errorf("hint %q", got)
 	}
-	if got := e.act(st, false, true); got != raceEndLeave {
-		t.Errorf("Esc: %v, want leave", got)
+	t0 := time.Now()
+	if got := e.act(st, t0, false, false, true); got != raceEndStay || e.hint(st) != "Esc again to leave" {
+		t.Errorf("first Esc: %v, hint %q", got, e.hint(st))
 	}
-	if got := e.act(st, true, false); got != raceEndStay {
+	if got := e.act(st, t0.Add(time.Second), false, false, true); got != raceEndLeave {
+		t.Errorf("second Esc: %v, want leave", got)
+	}
+	// Another key, or too long a wait, starts again.
+	e.act(st, t0.Add(2*time.Second), true, false, false)
+	if e.hint(st) != "Reconnecting… Esc to leave" {
+		t.Errorf("after another key: %q", e.hint(st))
+	}
+	e.act(st, t0, false, false, true)
+	if got := e.act(st, t0.Add(leaveConfirm+time.Second), false, false, true); got != raceEndStay {
+		t.Errorf("Esc after the wait: %v, want stay", got)
+	}
+	e.asked = time.Time{}
+	if got := e.act(st, t0, false, true, false); got != raceEndStay {
 		t.Errorf("Enter: %v, want stay", got)
 	}
 
 	// Still racing in the room: waiting, nothing to press. Settled: back.
 	st.Phase = link.PlayInRoom
-	if e.hint(st) != "" || e.act(st, true, true) != raceEndStay {
+	if e.hint(st) != "" || e.act(st, t0, false, true, true) != raceEndStay {
 		t.Error("waiting in the room should show no hint and ignore keys")
 	}
 	racing.Racers[0].Status = link.RacerFinished
-	if e.hint(st) != "Enter back to the room" || e.act(st, false, true) != raceEndLobby {
+	if e.hint(st) != "Enter back to the room" || e.act(st, t0, false, false, true) != raceEndLobby {
 		t.Error("a settled race should go back to the room")
 	}
 }

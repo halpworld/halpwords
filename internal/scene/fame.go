@@ -218,7 +218,7 @@ func (h *HallOfFame) help(ctx *game.Context) string {
 	case h.checking:
 		return "Type the share code · Enter check · Esc close"
 	case h.ranking():
-		return "←/→ language · ↑/↓ board · Tab table · C check a code · Esc back"
+		return "←/→ language · ↑/↓ board · Tab table · C check a friend's code · Esc back"
 	case h.tabs(ctx) > len(fameModes):
 		return "←/→ language · Tab table or Rankings · C check a code · Esc back"
 	}
