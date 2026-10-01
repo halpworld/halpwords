@@ -138,6 +138,47 @@ version as its release notes.
   is the new `source:` header. `List.Format` (still grouped by tag)
   writes the new lines too.
 
+### Fixed
+
+- **A sign-out on a shared computer no longer opens another child's
+  progress.** After a sign-out or removal at school, the game plays as a
+  new guest (no lock, no sign-in, a name it gave), or as one who played
+  before with no lock and no account. Nobody with a lock is ever opened
+  without the card or pictures. If it can't, nobody plays and the Switch
+  learner screen comes next. At start-up a learner with a lock, or signed
+  in at school, is not resumed; a grown-up's pairing-code learner is.
+  (#38)
+- **Sign in again keeps to its learner.** Signing in again to a learner
+  who needs it opens that learner's folder and keeps their lock; the same
+  server learner reopens it, another gets a new learner. Switching away
+  cancels a sign-in again that was waiting. A damaged `link.json` or
+  `learners.json` fails closed. Learners without a lock stay pickable, as
+  before. (#38)
+- **Typing S or W in the class name list picks the name you typed.** The
+  list moves with the arrow keys only, so the letter jump no longer moves
+  the selection a second time. (#46)
+- **The keypad's number keys match the sign-in pictures.** Keypad 1 is
+  the picture labelled 1, and so on. (#47, item 1; the rest of #47 is
+  still open)
+- **A lost refresh reply no longer throws away unsent answers.** Only
+  `invalid_token` and `token_reused` from `/token` end the link, and a
+  refresh is tried up to three times after no answer or a server error.
+  When the link is lost, the answers not sent are kept for that learner
+  in `link-parked.json` and sent when the same learner links again,
+  never as another learner. They expire after 30 days (checked at
+  start-up), and are not part of an export. The same events are never
+  kept in the queue and the parked file twice. (#39)
+- **New link tokens are used even when they can't be saved.** A full disk
+  or local storage no longer leaves a used refresh token behind. The game
+  writes them again on quitting. (#39)
+- **Answers after a quit are no longer dropped as duplicates.** The next
+  sequence number is saved after every upload, and when the server says
+  the device's `last_seq` in `/me`, the game starts above it (a value
+  below 0 or above 2^53 is ignored). The sign-in state is also written on
+  close. (#54)
+- **A school sign-in code survives a 403 `not_linkable`**, so the pupil
+  doesn't start again. (#39)
+
 ## v1.0.0
 
 The first release: every milestone in [PLAN.md](PLAN.md) is done.
