@@ -2,6 +2,7 @@ package link
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -99,5 +100,161 @@ func TestMeLastSeq(t *testing.T) {
 	defer c2.mu.Unlock()
 	if c2.st.NextSeq != seq {
 		t.Errorf("NextSeq %d, want %d", c2.st.NextSeq, seq)
+	}
+}
+
+// loseLink makes the server answer the game's next sync with
+// token_reused, as after a refresh whose answer was lost: the game
+// unlinks itself.
+func loseLink(t *testing.T, f *fake, c *Client) {
+	t.Helper()
+	f.mu.Lock()
+	f.used[f.refresh] = true
+	f.mu.Unlock()
+	f.failNext("/api/v1/me", 401)
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+}
+
+// relink links the game again with a new pairing code and syncs.
+func relink(t *testing.T, f *fake, c *Client) {
+	t.Helper()
+	f.mu.Lock()
+	f.code = "QRST-VWXY"
+	f.mu.Unlock()
+	if err := c.LinkNow(context.Background(), "QRSTVWXY"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestLostLinkKeepsQueue: a game that loses its link keeps the events it
+// hadn't sent, even across a restart, and sends them once the same
+// learner links it again (halpworld/halpwords#39).
+func TestLostLinkKeepsQueue(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	c.Session(Session{Start: clk.now(), Mode: "practice", Lang: "fr", Secs: 60})
+	loseLink(t, f, c)
+	if s := c.Status(); s.Linked || s.Pending != 0 || s.Note == "" {
+		t.Errorf("status: %+v", s)
+	}
+	if !st.has(parkedFile) || !st.private[parkedFile] {
+		t.Fatal("the events not sent weren't kept, privately")
+	}
+	c.Close()
+	c2 := reopen(f, st, clk)
+	relink(t, f, c2)
+	if len(f.eventsOf("answers")) != 1 || len(f.eventsOf("sessions")) != 1 {
+		t.Errorf("stored %d answers and %d sessions, want 1 and 1", len(f.eventsOf("answers")), len(f.eventsOf("sessions")))
+	}
+	if st.has(parkedFile) || c2.Status().Pending != 0 {
+		t.Error("the kept events weren't cleared once sent")
+	}
+}
+
+// TestLostLinkQueueNotForAnotherLearner: kept events are never sent as
+// another learner.
+func TestLostLinkQueueNotForAnotherLearner(t *testing.T) {
+	f, c, st, _ := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	loseLink(t, f, c)
+	f.mu.Lock()
+	f.me["learner"] = map[string]any{"id": "lrn_2", "display_name": "Brian", "avatar": map[string]any{"class": "knight", "colour": "#aabbcc"}, "languages": []string{"fr"}}
+	f.mu.Unlock()
+	relink(t, f, c)
+	if n := len(f.eventsOf("answers")); n != 0 {
+		t.Errorf("%d answers sent as another learner", n)
+	}
+	if !st.has(parkedFile) {
+		t.Error("the first learner's events were thrown away")
+	}
+}
+
+// TestLostLinkQueueExpires: kept events are thrown away after
+// parkedFor.
+func TestLostLinkQueueExpires(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	loseLink(t, f, c)
+	c.Close()
+	clk.add(parkedFor + time.Hour)
+	c2 := reopen(f, st, clk)
+	if st.has(parkedFile) {
+		t.Error("expired events kept on disk")
+	}
+	relink(t, f, c2)
+	if n := len(f.eventsOf("answers")); n != 0 {
+		t.Errorf("%d expired answers sent", n)
+	}
+	// Expired while the game runs: dropped before they would be sent.
+	c2.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	loseLink(t, f, c2)
+	clk.add(parkedFor + time.Hour)
+	relink(t, f, c2)
+	if n := len(f.eventsOf("answers")); n != 0 {
+		t.Errorf("%d expired answers sent", n)
+	}
+}
+
+// TestOther401FromTokenIsRetried: only invalid_token and token_reused end
+// the link; any other 401 from POST /api/v1/token (a proxy, say) is a
+// failure to try again later.
+func TestOther401FromTokenIsRetried(t *testing.T) {
+	f, c, _, _ := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	c.mu.Lock()
+	c.st.AccessExp = time.Time{}
+	c.mu.Unlock()
+	f.failNext("/api/v1/token", 401) // unauthenticated
+	if err := c.Sync(context.Background()); err == nil || errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	if s := c.Status(); !s.Linked || s.Pending != 1 || s.Note != "" {
+		t.Fatalf("status: %+v", s)
+	}
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(f.eventsOf("answers")); n != 1 {
+		t.Errorf("%d answers stored", n)
+	}
+}
+
+// fullStore is a store whose private files can't be written, as with a
+// full disk or local storage.
+type fullStore struct {
+	*memStore
+	full bool
+}
+
+func (s *fullStore) WritePrivate(name string, data []byte) error {
+	if s.full {
+		return errors.New("disk full")
+	}
+	return s.memStore.WritePrivate(name, data)
+}
+
+// TestRefreshNotUsedUnlessSaved: new tokens that can't be written to
+// disk aren't used, so a restart never finds tokens older than the ones
+// in use.
+func TestRefreshNotUsedUnlessSaved(t *testing.T) {
+	_, c, st, _ := linked(t)
+	fs := &fullStore{memStore: st, full: true}
+	c.mu.Lock()
+	c.o.Store = fs
+	c.st.AccessExp = time.Time{}
+	refresh := c.st.Refresh
+	c.mu.Unlock()
+	if err := c.Sync(context.Background()); err == nil {
+		t.Fatal("synced without saving the tokens")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.st.Refresh != refresh || !c.st.linked() {
+		t.Errorf("refresh token %q, want %q", c.st.Refresh, refresh)
 	}
 }

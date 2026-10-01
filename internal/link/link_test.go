@@ -855,14 +855,28 @@ func TestRetries(t *testing.T) {
 	if c.Status().Pending != 0 || c.Status().Err != nil {
 		t.Error("the answer wasn't sent later")
 	}
-	// A refresh is never tried twice.
+	// A refresh is tried again after a server error (the server takes
+	// the same refresh token again for a minute), at most tries times.
 	c.mu.Lock()
 	c.st.AccessExp = time.Time{}
 	c.mu.Unlock()
 	f.failNext("/api/v1/token", 503)
 	before := f.count("/api/v1/token")
-	c.Sync(context.Background())
-	if n := f.count("/api/v1/token") - before; n != 1 {
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count("/api/v1/token") - before; n != 2 {
+		t.Errorf("token asked %d times", n)
+	}
+	c.mu.Lock()
+	c.st.AccessExp = time.Time{}
+	c.mu.Unlock()
+	f.failNext("/api/v1/token", 503, 503, 503)
+	before = f.count("/api/v1/token")
+	if err := c.Sync(context.Background()); err == nil {
+		t.Fatal("no error")
+	}
+	if n := f.count("/api/v1/token") - before; n != tries {
 		t.Errorf("token asked %d times", n)
 	}
 	if !c.Linked() {

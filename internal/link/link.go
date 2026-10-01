@@ -304,6 +304,9 @@ type Client struct {
 	st    state
 	q     queue
 	dirty bool // the queue changed since it was written
+	// parked are events kept after the link was lost, for the learner
+	// they belong to (parked.go).
+	parked []parked
 	// gen counts links and unlinks. A sync that started under another
 	// generation throws away what it got.
 	gen int
@@ -387,8 +390,14 @@ func Open(o Options) *Client {
 		if data, err := o.Store.Read(queueFile); err == nil {
 			json.Unmarshal(data, &c.q)
 		}
+		if data, err := o.Store.Read(parkedFile); err == nil {
+			json.Unmarshal(data, &c.parked)
+		}
+		if c.expireParked() {
+			c.saveParked()
+		}
 	}
-	c.st.NextSeq = max(c.st.NextSeq, c.q.maxSeq()+1, 1)
+	c.st.NextSeq = max(c.st.NextSeq, c.q.maxSeq()+1, maxParkedSeq(c.parked)+1, 1)
 	if c.st.linked() && c.st.Server != "" && c.st.Server != c.server {
 		// Linked to another server (HALPWORDS_SERVER changed): talk to
 		// the one the tokens are for.

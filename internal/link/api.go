@@ -233,8 +233,21 @@ type tokens struct {
 }
 
 // keep stores a new pair of tokens, on disk before they are used: the old
-// refresh token no longer works. c.mu is held.
-func (c *Client) keep(t tokens) {
+// refresh token no longer works. If they can't be written, they aren't
+// used either, and it returns the error: a restart must never find
+// tokens older than the ones in use. c.mu is held.
+func (c *Client) keep(t tokens) error {
+	old := c.st
+	c.setTokens(t)
+	if err := c.saveState(); err != nil {
+		c.st = old
+		return fmt.Errorf("link: saving new tokens: %w", err)
+	}
+	return nil
+}
+
+// setTokens sets a new pair of tokens, without saving them. c.mu is held.
+func (c *Client) setTokens(t tokens) {
 	now := c.now()
 	c.st.Server = c.server
 	if t.DeviceID != "" {
@@ -242,12 +255,13 @@ func (c *Client) keep(t tokens) {
 	}
 	c.st.Access, c.st.AccessExp = t.AccessToken, now.Add(time.Duration(t.ExpiresIn)*time.Second)
 	c.st.Refresh, c.st.RefreshExp = t.RefreshToken, now.Add(time.Duration(t.RefreshExpiresIn)*time.Second)
-	c.saveState()
 }
 
 // refresh swaps the refresh token for new tokens. A refresh token the
-// server no longer takes means the game was unlinked on the website: the
-// game unlinks itself too. syncMu is held.
+// server no longer takes (invalid_token, token_reused) means the game was
+// unlinked on the website: the game unlinks itself too, keeping the
+// events not sent for the learner. Any other 401 (a proxy, say) is a
+// failure like any other, tried again at the next sync. syncMu is held.
 func (c *Client) refresh(ctx context.Context, gen int) error {
 	c.mu.Lock()
 	rt := c.st.Refresh
@@ -256,14 +270,27 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 		return ErrNotLinked
 	}
 	var t tokens
-	// Never tried twice: a refresh token works once, and one the server
-	// has seen before unlinks the game.
 	payload, _ := json.Marshal(map[string]string{"refresh_token": rt})
-	_, _, err := c.once(ctx, http.MethodPost, "/api/v1/token", "", nil, payload, &t)
+	// Tried again soon after no answer or a server error. A refresh
+	// token works once, but the server takes it again for a minute
+	// after its first use, in case the answer was lost
+	// (halpwords-server#67); an older server unlinks the game for it,
+	// as the next sync would have done anyway.
+	var err error
+	for n := 1; ; n++ {
+		t = tokens{}
+		if _, _, err = c.once(ctx, http.MethodPost, "/api/v1/token", "", nil, payload, &t); err == nil {
+			break
+		}
+		again, wait := retryable(err)
+		if !again || n >= tries || ctx.Err() != nil {
+			break
+		}
+		c.sleep(max(wait, retryWait(n)))
+	}
 	var e *Error
-	if errors.As(err, &e) && e.Status == http.StatusUnauthorized {
-		// invalid_token, token_reused, or anything else a 401 says: these
-		// tokens are finished.
+	if errors.As(err, &e) && e.Status == http.StatusUnauthorized && (e.Code == codeInvalidToken || e.Code == codeTokenReused) {
+		// These tokens are finished.
 		c.lost(gen)
 		return ErrUnlinked
 	}
@@ -275,8 +302,7 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 	if c.gen != gen {
 		return ErrNotLinked
 	}
-	c.keep(t)
-	return nil
+	return c.keep(t)
 }
 
 // authed makes a request as the device, refreshing the access token when

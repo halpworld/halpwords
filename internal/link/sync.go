@@ -84,7 +84,10 @@ func (c *Client) signedIn(t tokens, way string) {
 	c.st = state{NextSeq: c.st.NextSeq, LinkedAt: c.now(), Way: way}
 	c.q = queue{}
 	c.dirty = true
-	c.keep(t)
+	// Used even if it can't be saved: the code is spent, and the game
+	// works until it quits.
+	c.setTokens(t)
+	c.saveState()
 	c.failures, c.note = 0, ""
 	c.loadLists()
 	c.changes++
@@ -167,10 +170,27 @@ func (c *Client) syncMe(ctx context.Context, gen int) error {
 	}
 	me := got.Me
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.gen != gen {
+		c.mu.Unlock()
 		return ErrNotLinked
 	}
+	if c.unpark(me.Learner.ID) {
+		// Events kept when this learner's link was lost: written to
+		// the queue before they leave the parked file, so a crash
+		// between the two can only send them twice (which the server
+		// ignores), never lose them.
+		c.mu.Unlock()
+		if err := c.saveQueue(); err != nil {
+			return err
+		}
+		c.mu.Lock()
+		c.saveParked()
+		if c.gen != gen {
+			c.mu.Unlock()
+			return ErrNotLinked
+		}
+	}
+	defer c.mu.Unlock()
 	c.aiOff = false // the learner, as the server says now
 	save := false
 	if got.LastSeq != nil && *got.LastSeq+1 > c.st.NextSeq {
@@ -464,12 +484,16 @@ func (c *Client) tellUnlinked(ctx context.Context, access, refresh string, exp t
 }
 
 // lost unlinks the game because the server no longer takes its tokens.
+// The events not sent are kept for the learner (park), not forgotten.
 func (c *Client) lost(gen int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.gen != gen || !c.st.linked() {
 		return
 	}
+	// The events not sent wait for this learner to link again; the
+	// server may only have lost track of a refresh (a lost answer).
+	c.park()
 	c.unlink()
 	c.note = "This game was unlinked on the website. Your progress is still here."
 }
