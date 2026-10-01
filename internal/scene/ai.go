@@ -423,7 +423,11 @@ func (c *Crawl) arrive() {
 func (c *Crawl) lateScript(sc *llm.Script) {
 	dress(c.level, sc)
 	c.lore = append([]string(nil), sc.Lore...)
-	c.startArrival()
+	if c.arriveT > 0 {
+		c.arrival = c.arrivalCard() // the card is still up: it gets the name
+	} else {
+		c.showBanner(fmt.Sprintf("Floor %d", c.run.depth), sc.Name)
+	}
 	c.run.say("The dungeon stirs. This is "+sc.Name+".", pal.Yellow)
 	if sc.Intro != "" {
 		c.run.say(sc.Intro, pal.Cyan)

@@ -5,13 +5,16 @@ import (
 	"image"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/llm"
+	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/pkg/proc"
 )
@@ -81,7 +84,7 @@ func TestArrivalTaglines(t *testing.T) {
 
 // The key that skips the card does nothing else; movement is not blocked.
 func TestArrivalSkipKeyDoesNotAct(t *testing.T) {
-	for _, key := range []ebiten.Key{ebiten.KeySpace, ebiten.KeyEnter, ebiten.KeyEscape} {
+	for _, key := range []ebiten.Key{ebiten.KeySpace, ebiten.KeyEnter} {
 		held := 0
 		input.FakeKeys(t, func(k ebiten.Key) int {
 			if k == key {
@@ -198,5 +201,123 @@ func TestCalmOptionDefaultsOffAndRoundTrips(t *testing.T) {
 func TestRaidIsInTheMossyCellars(t *testing.T) {
 	if th := raidTheme(); th.Name != "Mossy Cellars" {
 		t.Errorf("raid theme %q", th.Name)
+	}
+}
+
+// A late Director script after the card is gone is a banner, as before; and
+// starting a card never wipes a banner that is up.
+func TestArrivalLateScriptAfterCardUsesBanner(t *testing.T) {
+	ctx := testContext(t)
+	c := testCrawl(t, ctx)
+	c.theme = &proc.Themes[1]
+	c.arriveT = 0
+	c.run.ai = &runAI{scripts: map[int]*llm.Script{1: {Name: "The Late Pantry"}}}
+	c.lateScript(&llm.Script{Name: "The Late Pantry"})
+	if c.arriveT != 0 || c.banner != "Floor 1" || c.sub != "The Late Pantry" || c.bannerT == 0 {
+		t.Errorf("card %d banner %q/%q", c.arriveT, c.banner, c.sub)
+	}
+	c.showBanner("LEVEL UP!", "Level 2")
+	c.startArrival()
+	if c.banner != "LEVEL UP!" || c.bannerT == 0 {
+		t.Errorf("startArrival wiped the banner: %q", c.banner)
+	}
+}
+
+// The card counts down in explore mode only, and goes when the hero opens
+// a menu, a battle or a puzzle.
+func TestArrivalLeavesWithExploreMode(t *testing.T) {
+	input.FakeKeys(t, func(ebiten.Key) int { return 0 })
+	ctx := testContext(t)
+	withFont(t, ctx)
+	ctx.Input = &input.State{}
+	c := testCrawl(t, ctx)
+	c.theme = &proc.Themes[0]
+	c.startArrival()
+	c.Update(ctx)
+	if c.arriveT != arrivalTicks-1 {
+		t.Fatalf("explore did not count down: %d", c.arriveT)
+	}
+	for _, m := range []mode{modeBattle, modePuzzle, modeShop, modeCampfire, modeShrine, modeMap, modeDead, modePause} {
+		c.mode = modeExplore
+		c.startArrival()
+		c.enter(m)
+		if c.arriveT != 0 {
+			t.Errorf("mode %d keeps the card", m)
+		}
+	}
+}
+
+// A quest floor's wall note goes to the log and leaves the card up; a boss
+// banner takes the card's place once, at the start of the fight.
+func TestArrivalWithNoteAndBossBanner(t *testing.T) {
+	ctx := testContext(t)
+	c := questRun(t)
+	c.run.sound = &game.Sound{Muted: true}
+	c.startArrival()
+	c.level.Notes = map[dungeon.Point]string{c.pos.Step(c.facing): "Mind the gap."}
+	c.arrive()
+	if c.arriveT != arrivalTicks || c.banner != "" {
+		t.Errorf("a note disturbed the card: %d %q", c.arriveT, c.banner)
+	}
+	c.showBanner("Boss", "guards the stairs!")
+	if c.arriveT != 0 || c.banner != "Boss" {
+		t.Errorf("banner and card both up: %d %q", c.arriveT, c.banner)
+	}
+	_ = ctx
+}
+
+func TestArrivalLongNamesWrapAndFit(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
+	view := image.Rect(viewX, viewY, viewX+vw, viewY+vh)
+	names := []string{
+		"The Marvellous Kingdom of the Forgotten Clockwork Gardens",
+		"Η Μεγάλη Βιβλιοθήκη τῶν Ἀθηναίων καὶ τῶν Ἑλλήνων ἁπάντων τοῦ κόσμου",
+		strings.Repeat("ἀ", 80),
+	}
+	for _, name := range names {
+		placed, box := layoutArrival(ctx.Font, arrivalLines(3, name, "Sky Garden", true), vw, vh)
+		if !box.In(view) || box.Max.Y > panelY {
+			t.Errorf("%.12q: box %v outside the view", name, box)
+		}
+		head := 0
+		for _, p := range placed {
+			if p.scale == 2 || (p.col == pal.White && p.scale == 1 && p.text != "Sky Garden" && p.text != taglines["Sky Garden"]) {
+				head++
+				if r := []rune(p.text); unicode.Is(unicode.M, r[0]) {
+					t.Errorf("line starts with a combining mark: %q", p.text)
+				}
+			}
+			if w := ctx.Font.Width(p.text, p.scale); w > box.Dx() {
+				t.Errorf("%q wider than the box", p.text)
+			}
+		}
+		if head > 2 {
+			t.Errorf("%.12q takes %d lines", name, head)
+		}
+	}
+	// A middling name wraps at full size onto two lines rather than shrinking.
+	placed, _ := layoutArrival(ctx.Font, arrivalLines(3, "The Great Hall of Clockwork Wonders", "Sky Garden", true), vw, vh)
+	n := 0
+	for _, p := range placed {
+		if p.scale == 2 {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("middling name has %d full-size lines, want 2", n)
+	}
+}
+
+// Letters keep their accents when a name is cut.
+func TestArrivalClustersKeepMarks(t *testing.T) {
+	for _, cl := range clusters("ἀ\u0301b" + "ε\u0308") {
+		if len([]rune(cl)) == 0 {
+			t.Fatal("empty cluster")
+		}
+	}
+	if got := clusters("e\u0301x"); len(got) != 2 || got[0] != "\u00e9" {
+		t.Errorf("clusters %q", got)
 	}
 }

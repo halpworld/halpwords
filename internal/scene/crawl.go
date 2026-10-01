@@ -313,7 +313,9 @@ func (c *Crawl) Update(ctx *game.Context) error {
 	if c.bannerT > 0 {
 		c.bannerT--
 	}
-	if c.arriveT > 0 {
+	if c.mode != modeExplore {
+		c.arriveT = 0
+	} else if c.arriveT > 0 {
 		c.arriveT--
 	}
 	for i := 0; i < len(c.floats); i++ {
@@ -396,7 +398,7 @@ func (c *Crawl) explore(ctx *game.Context) {
 		c.pause(ctx)
 		return
 	case input.Pressed(ebiten.KeyM):
-		c.mode = modeMap
+		c.enter(modeMap)
 		return
 	case input.Pressed(ebiten.KeyP):
 		c.drinkPotion()
@@ -662,7 +664,7 @@ func (c *Crawl) descend(ctx *game.Context) {
 }
 
 func (c *Crawl) die() {
-	c.mode = modeDead
+	c.enter(modeDead)
 	c.battle, c.puzzle = nil, nil
 	c.run.hero.HP = 0
 	c.play(audio.Fall)

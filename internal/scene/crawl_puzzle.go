@@ -44,7 +44,7 @@ type lockPuzzle struct {
 
 func (c *Crawl) startPuzzle(at dungeon.Point, lock puzzle.Lock) {
 	c.puzzle = &lockPuzzle{lock: lock, at: at}
-	c.mode = modePuzzle
+	c.enter(modePuzzle)
 	c.muted = true
 	c.queued = actNone
 	c.dealPuzzle()

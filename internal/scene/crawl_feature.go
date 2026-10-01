@@ -60,7 +60,7 @@ func (c *Crawl) useFeature(ctx *game.Context, ft *dungeon.Feature) {
 	switch ft.Kind {
 	case dungeon.Shrine:
 		c.play(audio.Select)
-		c.mode = modeShrine
+		c.enter(modeShrine)
 	case dungeon.Campfire:
 		c.rest(ft)
 	case dungeon.Merchant:
@@ -149,7 +149,7 @@ func (c *Crawl) rest(ft *dungeon.Feature) {
 		e := r.deck.Entries()[id]
 		c.weakest = append(c.weakest, logLine{e.Prompt + " = " + e.Answers[0], pal.White})
 	}
-	c.mode = modeCampfire
+	c.enter(modeCampfire)
 }
 
 // A campfire's Scroll of Insight shows memory tips the AI wrote for up to

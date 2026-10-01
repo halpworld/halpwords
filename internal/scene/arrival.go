@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"strings"
+	"unicode"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
@@ -29,8 +32,8 @@ var taglines = map[string]string{
 	"Lava Forge":         "The forge glows warm and bright.",
 	"Amethyst Vaults":    "Crystals hum a quiet tune.",
 	"Clockwork Workshop": "Clocks tick. Gears turn.",
-	"Sky Garden":         "Climb high above the clouds.",
-	"Sandstone Tomb":     "Sunlit sand and secret doors.",
+	"Sky Garden":         "Hedges, flowers and open sky.",
+	"Sandstone Tomb":     "Cool sand and glowing glyphs.",
 	"Whispering Library": "Books whisper. Listen closely.",
 }
 
@@ -39,6 +42,7 @@ type arrivalLine struct {
 	text  string
 	scale int
 	col   color.RGBA
+	wrap  bool // may take two lines before it is shrunk
 }
 
 // arrivalLines is what the card says: the floor, its headline name, the
@@ -46,34 +50,44 @@ type arrivalLine struct {
 // tagline for a generated floor.
 func arrivalLines(depth int, headline, world string, generated bool) []arrivalLine {
 	lines := []arrivalLine{
-		{fmt.Sprintf("Floor %d", depth), 3, pal.Yellow},
-		{headline, 2, pal.White},
+		{fmt.Sprintf("Floor %d", depth), 3, pal.Yellow, false},
+		{headline, 2, pal.White, true},
 	}
 	if headline != world && world != "" {
-		lines = append(lines, arrivalLine{world, 1, pal.Tan})
+		lines = append(lines, arrivalLine{world, 1, pal.White, false})
 	}
 	if t := taglines[world]; generated && t != "" {
-		lines = append(lines, arrivalLine{t, 1, pal.Tan})
+		lines = append(lines, arrivalLine{t, 1, pal.White, false})
 	}
 	return lines
 }
 
-// arrivalHeadline is the name the card leads with: the quest map's title,
-// else the Director's name for the floor, else the world's name.
-func (c *Crawl) arrivalHeadline() string { return c.floorName() }
-
-// startArrival shows the arrival card for the floor.
-func (c *Crawl) startArrival() {
-	c.banner, c.sub, c.bannerT = "", "", 0
+// arrivalCard is the card for the floor the hero is on.
+func (c *Crawl) arrivalCard() []arrivalLine {
 	generated := c.run.questMap(c.run.depth) == nil
-	c.arrival = arrivalLines(c.run.depth, c.arrivalHeadline(), c.theme.Name, generated)
+	return arrivalLines(c.run.depth, c.floorName(), c.theme.Name, generated)
+}
+
+// startArrival shows the arrival card for the floor. A banner already up
+// is left alone.
+func (c *Crawl) startArrival() {
+	c.arrival = c.arrivalCard()
 	c.arriveT = arrivalTicks
 }
 
-// skipArrival ends the card at once, when a key to skip it was pressed.
-// The key does nothing else. It reports whether it did.
+// enter changes the mode. The arrival card does not outlive explore mode.
+func (c *Crawl) enter(m mode) {
+	c.mode = m
+	if m != modeExplore {
+		c.arriveT = 0
+	}
+}
+
+// skipArrival ends the card at once when Space or Enter is pressed, and
+// the key does nothing else. Esc is the menu key and is left alone: it
+// opens the menu, which clears the card. It reports whether it skipped.
 func (c *Crawl) skipArrival() bool {
-	if c.arriveT > 0 && c.mode == modeExplore && input.Pressed(ebiten.KeySpace, ebiten.KeyEnter, ebiten.KeyNumpadEnter, ebiten.KeyEscape) {
+	if c.arriveT > 0 && c.mode == modeExplore && input.Pressed(ebiten.KeySpace, ebiten.KeyEnter, ebiten.KeyNumpadEnter) {
 		c.arriveT = 0
 		return true
 	}
@@ -83,17 +97,88 @@ func (c *Crawl) skipArrival() bool {
 // calm reports whether the player asked for calm effects.
 func (c *Crawl) calm(ctx *game.Context) bool { return ctx.Calm() }
 
-// fitText shortens s with an ellipsis until it is at most w wide.
-func fitText(f *gfx.Font, s string, scale, w int) string {
-	r := []rune(s)
-	for len(r) > 1 && f.Width(string(r), scale) > w {
-		r = r[:len(r)-1]
-		s = string(r) + "…"
-		if f.Width(s, scale) <= w {
-			return s
+// clusters splits s into user-visible letters: a base rune with the
+// combining marks after it, so accents are never cut off.
+func clusters(s string) []string {
+	var out []string
+	for _, r := range norm.NFC.String(s) {
+		if len(out) > 0 && unicode.Is(unicode.M, r) {
+			out[len(out)-1] += string(r)
+			continue
+		}
+		out = append(out, string(r))
+	}
+	return out
+}
+
+// wrapText breaks s into lines at most w wide at scale, at spaces where it
+// can and between letters where a word is too long.
+func wrapText(f *gfx.Font, s string, scale, w int) []string {
+	var lines []string
+	cur := ""
+	add := func(word string) {
+		try := word
+		if cur != "" {
+			try = cur + " " + word
+		}
+		if f.Width(try, scale) <= w {
+			cur = try
+			return
+		}
+		if cur != "" {
+			lines = append(lines, cur)
+			cur = ""
+		}
+		for _, cl := range clusters(word) {
+			if cur != "" && f.Width(cur+cl, scale) > w {
+				lines = append(lines, cur)
+				cur = ""
+			}
+			cur += cl
 		}
 	}
-	return string(r)
+	for _, word := range strings.Fields(s) {
+		add(word)
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return lines
+}
+
+// ellipsis cuts s to fit w at scale and ends it with "…".
+func ellipsis(f *gfx.Font, s string, scale, w int) string {
+	cl := clusters(s)
+	for len(cl) > 0 && f.Width(strings.Join(cl, "")+"…", scale) > w {
+		cl = cl[:len(cl)-1]
+	}
+	return strings.Join(cl, "") + "…"
+}
+
+// fitLines sets l in at most maxLines lines of at most w: first at its own
+// scale, then smaller, and at last cut short with an ellipsis.
+func fitLines(f *gfx.Font, l arrivalLine, w int) []arrivalLine {
+	maxLines := 1
+	if l.wrap {
+		maxLines = 2
+	}
+	var parts []string
+	for sc := l.scale; sc >= 1; sc-- {
+		l.scale = sc
+		if parts = wrapText(f, l.text, sc, w); len(parts) <= maxLines {
+			break
+		}
+	}
+	if len(parts) > maxLines {
+		parts[maxLines-1] = ellipsis(f, strings.Join(parts[maxLines-1:], " "), l.scale, w)
+		parts = parts[:maxLines]
+	}
+	out := make([]arrivalLine, len(parts))
+	for i, p := range parts {
+		l.text = p
+		out[i] = l
+	}
+	return out
 }
 
 // placedLine is a line of the card with its place, in screen pixels.
@@ -107,16 +192,16 @@ type placedLine struct {
 func layoutArrival(f *gfx.Font, lines []arrivalLine, vw, vh int) ([]placedLine, image.Rectangle) {
 	const pad, gap = 8, 4
 	maxW := vw - 2*pad - 8
-	placed := make([]placedLine, len(lines))
+	var placed []placedLine
 	w, h := 0, 0
-	for i, l := range lines {
-		l.scale = f.FitScale(l.text, maxW, l.scale)
-		l.text = fitText(f, l.text, l.scale, maxW)
-		placed[i].arrivalLine = l
-		w = max(w, f.Width(l.text, l.scale))
-		h += gfx.LineHeight * l.scale
-		if i > 0 {
-			h += gap
+	for _, l := range lines {
+		for _, p := range fitLines(f, l, maxW) {
+			placed = append(placed, placedLine{arrivalLine: p})
+			w = max(w, f.Width(p.text, p.scale))
+			h += gfx.LineHeight * p.scale
+			if len(placed) > 1 {
+				h += gap
+			}
 		}
 	}
 	box := image.Rect(0, 0, w+2*pad, h+2*pad)
@@ -139,7 +224,7 @@ func (c *Crawl) drawArrival(view *ebiten.Image, ctx *game.Context) {
 	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
 	a := min(1, float64(c.arriveT)/arrivalFade)
 	placed, box := layoutArrival(ctx.Font, c.arrival, vw, vh)
-	gfx.FillRect(view, box.Min.X, box.Min.Y, box.Dx(), box.Dy(), pal.Fade(pal.Black, 0.55*a))
+	gfx.FillRect(view, box.Min.X, box.Min.Y, box.Dx(), box.Dy(), pal.Fade(pal.Black, 0.7*a))
 	for _, l := range placed {
 		ctx.Font.DrawOutline(view, l.text, l.x, l.y, l.scale, pal.Fade(l.col, a), pal.Fade(pal.Black, a))
 	}

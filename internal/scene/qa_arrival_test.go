@@ -56,8 +56,9 @@ func TestQAArrivalLateScript(t *testing.T) {
 	c.arriveT = 20
 	c.run.ai = &runAI{scripts: map[int]*llm.Script{1: {Name: "The Late Pantry"}}}
 	c.lateScript(&llm.Script{Name: "The Late Pantry"})
-	if c.arriveT != arrivalTicks {
-		t.Errorf("late script did not restart card: %d", c.arriveT)
+	// A card still up gets the name, and its time is left alone.
+	if c.arriveT != 20 {
+		t.Errorf("late script changed the card's time: %d", c.arriveT)
 	}
 	got := arrivalTexts(c.arrival)
 	if len(got) < 2 || got[1] != "The Late Pantry" {
@@ -79,11 +80,11 @@ func TestQAArrivalGoneInBattleAndStaysGone(t *testing.T) {
 		t.Fatal("not in battle")
 	}
 	if c.arriveT != 0 {
-		t.Skip("bug: arrival card is only hidden while in battle (draw checks mode); arriveT stays >0 and the card reappears when the battle ends")
+		t.Fatalf("the card outlives the battle start: %d", c.arriveT)
 	}
 }
 
-func TestQAArrivalEscapeDoesNotPause(t *testing.T) {
+func TestQAArrivalEscapeSkipsAndPauses(t *testing.T) {
 	ticks := 0
 	input.FakeKeys(t, func(k ebiten.Key) int {
 		if k == ebiten.KeyEscape {
@@ -101,23 +102,8 @@ func TestQAArrivalEscapeDoesNotPause(t *testing.T) {
 	if err := c.Update(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if c.mode == modePause || c.arriveT != 0 {
-		t.Fatalf("tick 1: mode %d arriveT %d", c.mode, c.arriveT)
-	}
-	ticks = 2 // key still held, not a new press
-	if err := c.Update(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if c.mode == modePause {
-		t.Error("held Esc paused on the next tick")
-	}
-	// A fresh Esc press afterwards does pause.
-	ticks = 0
-	c.Update(ctx)
-	ticks = 1
-	c.Update(ctx)
-	if c.mode != modePause {
-		t.Errorf("a later Esc does not pause: mode %d", c.mode)
+	if c.mode != modePause || c.arriveT != 0 {
+		t.Fatalf("Esc: mode %d arriveT %d, want the menu and no card", c.mode, c.arriveT)
 	}
 }
 
@@ -154,4 +140,3 @@ func TestQAArrivalQuestFloor(t *testing.T) {
 		}
 	}
 }
-

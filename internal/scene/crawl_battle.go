@@ -88,7 +88,7 @@ func runes(s string) int { return utf8.RuneCountInString(s) }
 // startBattle fights m. After an ambush the monster strikes first.
 func (c *Crawl) startBattle(ctx *game.Context, m *dungeon.Monster, ambush bool) {
 	m.Awake = true
-	c.mode = modeBattle
+	c.enter(modeBattle)
 	c.muted = true
 	c.queued = actNone
 	f := typing.NewField(c.run.lang)
