@@ -304,3 +304,17 @@ func TestMoveStateKeepsParked(t *testing.T) {
 		t.Error("the kept events weren't cleared once sent")
 	}
 }
+
+// Quitting while offline with answers queued waits no longer than the
+// close timeout, retries included.
+func TestCloseOfflineDoesNotOutstayCloseTimeout(t *testing.T) {
+	f, c, _, _ := linked(t)
+	c.sleep = nil // the real, context-aware wait
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	f.failNext("/api/v1/events", 503, 503, 503, 503, 503, 503, 503, 503)
+	start := time.Now()
+	c.Close()
+	if d := time.Since(start); d > closeTimeout+time.Second {
+		t.Fatalf("Close took %v", d)
+	}
+}

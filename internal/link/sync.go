@@ -502,8 +502,8 @@ func (c *Client) tellUnlinked(ctx context.Context, access, refresh string, exp t
 // The events not sent are kept for the learner (park), not forgotten.
 func (c *Client) lost(gen int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.gen != gen || !c.st.linked() {
+		c.mu.Unlock()
 		return
 	}
 	// The events not sent wait for this learner to link again; the
@@ -512,6 +512,10 @@ func (c *Client) lost(gen int) {
 	_ = c.park()
 	c.unlink()
 	c.note = "This game was unlinked on the website. Your progress is still here."
+	play := c.play
+	c.mu.Unlock()
+	// As Unlink does: a game that isn't linked has no room to be in.
+	play.Leave()
 }
 
 // unlink does Unlink. c.mu is held.

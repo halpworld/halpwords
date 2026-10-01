@@ -12,6 +12,7 @@
 package link
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -341,7 +342,7 @@ type Client struct {
 	kick    chan struct{}
 	stop    chan struct{}
 	stopped chan struct{}
-	sleep   func(time.Duration) // between retries; tests make it instant
+	sleep   func(time.Duration) // between retries; nil waits for real (stopping with the context); tests make it instant
 
 	bg sync.WaitGroup // telling the server about an unlink
 
@@ -376,7 +377,6 @@ func Open(o Options) *Client {
 		memories: map[string]*fetched{},
 		batch:    MaxBatch,
 		kick:     make(chan struct{}, 1),
-		sleep:    time.Sleep,
 	}
 	if c.hc == nil {
 		c.hc = &http.Client{Timeout: requestTimeout}
@@ -788,3 +788,17 @@ func (p Peek) School() bool { return IsSchoolWay(p.Way) }
 
 // IsSchoolWay reports whether a Way is a sign-in at school.
 func IsSchoolWay(w string) bool { return w == WayCard || w == WayClass || w == WaySSO }
+
+// pause waits d between retries, or less when ctx ends first.
+func (c *Client) pause(ctx context.Context, d time.Duration) {
+	if c.sleep != nil {
+		c.sleep(d)
+		return
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+	case <-ctx.Done():
+	}
+}

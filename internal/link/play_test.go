@@ -4,8 +4,10 @@ package link
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -381,5 +383,25 @@ func TestDialChecksTheHandshake(t *testing.T) {
 	st := waitFor(t, c.Play(), "the lobby", func(s PlayState) bool { return s.Phase == PlayOff && s.Problem != "" })
 	if st.Problem != "Can't reach the server." {
 		t.Fatalf("problem %q", st.Problem)
+	}
+}
+
+// The website unlinking the game takes the game out of its room too.
+func TestPlayLeftWhenUnlinkedOnTheWebsite(t *testing.T) {
+	f, c, conns := playing(t)
+	s := joinRoom(t, f, c, conns)
+	f.mu.Lock()
+	f.used[f.refresh] = true
+	f.mu.Unlock()
+	f.failNext("/api/v1/me", 401)
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	if c.Linked() {
+		t.Fatal("still linked")
+	}
+	s.expect("leave")
+	if st := c.Play().State(); st.Phase != PlayOff {
+		t.Fatalf("still in the room: %+v", st)
 	}
 }

@@ -128,7 +128,7 @@ func (c *Client) call(ctx context.Context, method, path, token string, hdr http.
 		if !again || n >= tries || ctx.Err() != nil {
 			return status, h, err
 		}
-		c.sleep(max(wait, retryWait(n)))
+		c.pause(ctx, max(wait, retryWait(n)))
 	}
 }
 
@@ -293,7 +293,7 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 		if !again || n >= tries || ctx.Err() != nil {
 			break
 		}
-		c.sleep(max(wait, retryWait(n)))
+		c.pause(ctx, max(wait, retryWait(n)))
 	}
 	var e *Error
 	if errors.As(err, &e) && e.Status == http.StatusUnauthorized && (e.Code == codeInvalidToken || e.Code == codeTokenReused) {
