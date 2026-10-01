@@ -99,7 +99,7 @@ func (c *canvas) line(x0, y0, x1, y1, width float64, p uint8) {
 		if l2 > 0 {
 			t = math.Max(0, math.Min(1, ((x-x0)*dx+(y-y0)*dy)/l2))
 		}
-		return math.Hypot(x-x0-t*dx, y-y0-t*dy) <= width/2
+		return hypot(x-x0-t*dx, y-y0-t*dy) <= width/2
 	})
 }
 
@@ -375,3 +375,10 @@ func shadeMonster(c *canvas, look monsterLook) *Indexed {
 	outline(m)
 	return m
 }
+
+// MonsterHues is the number of monster colourings; Kind.Hue picks one.
+func MonsterHues() int { return len(monsterLooks) }
+
+// MonsterBody returns the main body colour of a monster colouring, the
+// middle of its body ramp, for readability checks.
+func MonsterBody(hue int) color.RGBA { return monsterLooks[hue%len(monsterLooks)].ramp[2] }
