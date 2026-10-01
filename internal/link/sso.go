@@ -156,8 +156,11 @@ func (c *Client) PollSSO(ctx context.Context) error {
 		c.mu.Unlock()
 		return nil
 	}
-	if again {
-		return err // the code may still work: try again later
+	if again || errors.Is(err, ErrNotLinkable) {
+		// The code may still work: try again later. A pupil who can't
+		// be linked yet (no consent, say) may be by the time it runs
+		// out, once a grown-up sees to it on the website.
+		return err
 	}
 	c.CancelSSO()
 	return err
@@ -179,6 +182,8 @@ func explainSSO(err error) error {
 		return ErrSSORefused
 	case codeSSOOff:
 		return ErrSSOOff
+	case codeNotLinkable:
+		return ErrNotLinkable
 	}
 	return err
 }

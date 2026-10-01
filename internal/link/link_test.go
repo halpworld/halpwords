@@ -97,26 +97,33 @@ type fake struct {
 	access   string
 	refresh  string
 	used     map[string]bool // refresh tokens already swapped
-	n        int             // tokens handed out
-	expires  int             // expires_in of access tokens
-	lists    []wireList
-	quests   []byte // the answer to GET /api/v1/assignments; nil is none
-	etag     string
-	memory   map[string]*words.Memory
-	me       map[string]any
-	events   map[int64]event
-	lastSeq  int64
-	batches  int
-	calls    map[string]int
-	notMod   int              // 304 answers
-	fail     map[string][]int // statuses to answer on the next calls to a path
-	refuse   map[int64]string
-	tooLarge int // answer 413 to batches bigger than this; 0 never
-	agents   []string
-	clients  []string        // X-Halpwords-Client headers
-	unlinked int             // devices unlinked by the game
-	tickets  map[string]bool // play tickets not used yet
-	locked   bool            // sign-ins answer 403 locked
+	// grace: the last refresh token swapped is taken once more, as the
+	// server does inside its grace window for a reply that was lost.
+	grace    bool
+	lastUsed string
+	// loseReply is how many refreshes to make, then answer 503 to, as
+	// if the reply was lost on its way.
+	loseReply int
+	n         int // tokens handed out
+	expires   int // expires_in of access tokens
+	lists     []wireList
+	quests    []byte // the answer to GET /api/v1/assignments; nil is none
+	etag      string
+	memory    map[string]*words.Memory
+	me        map[string]any
+	events    map[int64]event
+	lastSeq   int64
+	batches   int
+	calls     map[string]int
+	notMod    int              // 304 answers
+	fail      map[string][]int // statuses to answer on the next calls to a path
+	refuse    map[int64]string
+	tooLarge  int // answer 413 to batches bigger than this; 0 never
+	agents    []string
+	clients   []string        // X-Halpwords-Client headers
+	unlinked  int             // devices unlinked by the game
+	tickets   map[string]bool // play tickets not used yet
+	locked    bool            // sign-ins answer 403 locked
 	// meSeq makes GET /api/v1/me say last_seq, as newer servers do.
 	meSeq bool
 
@@ -278,6 +285,9 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		json.Unmarshal(body, &req)
 		switch {
+		case f.grace && req.RefreshToken != "" && req.RefreshToken == f.lastUsed:
+			f.lastUsed = "" // once
+			writeJSON(w, 200, f.tokens())
 		case f.used[req.RefreshToken]:
 			f.access, f.refresh = "", ""
 			writeErr(w, 401, "token_reused")
@@ -285,7 +295,14 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 401, "invalid_token")
 		default:
 			f.used[req.RefreshToken] = true
-			writeJSON(w, 200, f.tokens())
+			f.lastUsed = req.RefreshToken
+			t := f.tokens()
+			if f.loseReply > 0 {
+				f.loseReply--
+				writeErr(w, 503, "internal")
+				return
+			}
+			writeJSON(w, 200, t)
 		}
 	case r.Method == "POST" && path == "/api/v1/unlink":
 		if auth() {

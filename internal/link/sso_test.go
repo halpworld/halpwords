@@ -20,8 +20,11 @@ type ssoServer struct {
 	signedIn bool
 	refused  bool
 	off      bool
-	used     bool
-	name     string
+	// notLinkable answers 403 not_linkable, as for a pupil whose school
+	// hasn't given consent yet; the code stays good.
+	notLinkable bool
+	used        bool
+	name        string
 }
 
 func (f *ssoServer) serve(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +49,8 @@ func (f *ssoServer) serve(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, codeExpiredToken)
 		case f.refused:
 			writeErr(w, http.StatusForbidden, codeAccessDenied)
+		case f.notLinkable:
+			writeErr(w, http.StatusForbidden, codeNotLinkable)
 		case !f.signedIn:
 			writeErr(w, http.StatusBadRequest, codeAuthorizationPending)
 		default:
@@ -148,5 +153,43 @@ func TestSSORefusedAndExpired(t *testing.T) {
 	f.off = true
 	if _, err := c.StartSSO(ctx, ""); !errors.Is(err, ErrSSOOff) || Explain(err) == "" {
 		t.Fatalf("off: %v", err)
+	}
+}
+
+// TestSSONotLinkableKeepsCode: a pupil who can't be linked yet (403
+// not_linkable) keeps the code until it runs out: once a grown-up sorts
+// it out on the website, the next poll signs in.
+func TestSSONotLinkableKeepsCode(t *testing.T) {
+	f, c, _, clk := ssoSetup(t)
+	ctx := context.Background()
+	if _, err := c.StartSSO(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.signedIn, f.notLinkable = true, true
+	if err := c.PollSSO(ctx); !errors.Is(err, ErrNotLinkable) {
+		t.Fatalf("not linkable: %v", err)
+	}
+	if c.PendingSSO() == nil || c.Linked() {
+		t.Fatal("the code was forgotten")
+	}
+	f.notLinkable = false
+	if err := c.PollSSO(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !c.Linked() {
+		t.Fatal("not linked once linkable")
+	}
+	// Until it runs out.
+	c.Unlink()
+	f.used, f.notLinkable = false, true
+	if _, err := c.StartSSO(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.PollSSO(ctx); !errors.Is(err, ErrNotLinkable) {
+		t.Fatalf("not linkable: %v", err)
+	}
+	clk.add(11 * time.Minute)
+	if err := c.PollSSO(ctx); !errors.Is(err, ErrSSOExpired) || c.PendingSSO() != nil {
+		t.Fatalf("expired: %v", err)
 	}
 }

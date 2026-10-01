@@ -3,6 +3,7 @@ package link
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -108,5 +109,47 @@ func TestSweepParked(t *testing.T) {
 	st.files[parkedFile] = []byte("{")
 	if err := SweepParked(st, now); err != nil || string(st.files[parkedFile]) != "{" {
 		t.Errorf("damaged file: %v, %q", err, st.files[parkedFile])
+	}
+}
+
+// TestLostRefreshReplyWithGrace: the server swapped the refresh token but
+// its reply was lost. The game asks again with the same token, which the
+// server takes once inside its grace window: the game stays linked and
+// sends its answers (halpworld/halpwords-server#67).
+func TestLostRefreshReplyWithGrace(t *testing.T) {
+	f, c, st, _ := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	f.mu.Lock()
+	f.grace, f.loseReply = true, 1
+	f.mu.Unlock()
+	c.mu.Lock()
+	c.st.AccessExp = time.Time{}
+	c.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if s := c.Status(); !s.Linked || s.Pending != 0 || s.Note != "" {
+		t.Errorf("status: %+v", s)
+	}
+	if n := len(f.eventsOf("answers")); n != 1 {
+		t.Errorf("%d answers stored", n)
+	}
+	if st.has(parkedFile) {
+		t.Error("parked while still linked")
+	}
+	// Without the grace window, the same lost reply ends the link, and
+	// the answers wait for the learner.
+	f.mu.Lock()
+	f.grace, f.loseReply = false, 1
+	f.mu.Unlock()
+	c.Answer("fr", cat, "practice", words.Answer{Tier: words.Perfect})
+	c.mu.Lock()
+	c.st.AccessExp = time.Time{}
+	c.mu.Unlock()
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	if !st.has(parkedFile) {
+		t.Error("the answer not sent wasn't kept")
 	}
 }
