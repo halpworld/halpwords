@@ -85,9 +85,9 @@ func (c *Client) signedIn(t tokens, way string) {
 	c.q = queue{}
 	c.dirty = true
 	// Used even if it can't be saved: the code is spent, and the game
-	// works until it quits.
+	// works until it quits, which tries to write them again.
 	c.setTokens(t)
-	c.saveState()
+	c.stateUnsaved = c.saveState() != nil
 	c.failures, c.note = 0, ""
 	c.loadLists()
 	c.changes++

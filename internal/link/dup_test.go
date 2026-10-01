@@ -209,3 +209,25 @@ func TestMeLastSeqOutOfRange(t *testing.T) {
 		}
 	}
 }
+
+// TestSignInWrittenOnClose: brand-new tokens that couldn't be written
+// when linking are written when the game quits.
+func TestSignInWrittenOnClose(t *testing.T) {
+	_, c, st, _ := setup(t)
+	fs := &fullStore{memStore: st, full: true}
+	c.mu.Lock()
+	c.o.Store = fs
+	c.mu.Unlock()
+	if err := c.LinkNow(context.Background(), "abcd efgh"); err != nil {
+		t.Fatal(err)
+	}
+	if st.has(stateFile) {
+		t.Fatal("written to a full disk")
+	}
+	fs.full = false
+	c.Close()
+	var saved state
+	if err := json.Unmarshal(st.files[stateFile], &saved); err != nil || !saved.linked() || saved.Refresh != c.st.Refresh {
+		t.Errorf("saved %+v: %v", saved, err)
+	}
+}
