@@ -26,10 +26,18 @@ type parked struct {
 
 // park keeps the queue for the linked learner before the link is
 // forgotten. Without a learner (the server never said who), there is no
-// one to send it as later, and it is dropped. c.mu is held.
-func (c *Client) park() {
+// one to send it as later, and it is dropped. c.mu is held. When the
+// parked file can't be written, the events stay in memory, and Close
+// tries again.
+//
+// Accepted: a batch the server took whose answer was lost, followed by
+// the link being lost before the game sent it again, is parked and later
+// sent once more after the learner links the game again, on a new device
+// whose sequence numbers the server hasn't seen. Those few events are
+// then counted twice. This is rare, and better than losing them.
+func (c *Client) park() error {
 	if c.q.len() == 0 || c.st.Me == nil || c.st.Me.Learner.ID == "" {
-		return
+		return nil
 	}
 	c.expireParked()
 	id := c.st.Me.Learner.ID
@@ -40,8 +48,10 @@ func (c *Client) park() {
 	}
 	p := &c.parked[i]
 	p.At = c.now()
-	p.Queue = mergeQueues(p.Queue, c.q)
-	c.saveParked()
+	// The queue's copy of an event is the newer one (totals grow).
+	p.Queue = mergeQueues(c.q, p.Queue)
+	p.Queue.sending = nil
+	return c.writeParked()
 }
 
 // unpark adds the events kept for the learner to the queue, and reports
@@ -67,6 +77,30 @@ func (c *Client) expireParked() bool {
 	n := len(c.parked)
 	c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return now.Sub(p.At) > parkedFor })
 	return len(c.parked) != n
+}
+
+// writeParked saves the parked events, and remembers when that failed so
+// Close tries again. c.mu is held.
+func (c *Client) writeParked() error {
+	err := c.saveParked()
+	c.parkedUnsaved = err != nil
+	return err
+}
+
+// dropQueued removes from the parked events those already in the queue
+// (a game that stopped after writing the queue and before the parked
+// file), and reports whether it removed any. c.mu is held.
+func (c *Client) dropQueued() bool {
+	seen := c.q.seqs()
+	changed := false
+	for i := range c.parked {
+		var n bool
+		c.parked[i].Queue, n = withoutSeqs(c.parked[i].Queue, seen)
+		changed = changed || n
+	}
+	n := len(c.parked)
+	c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return p.Queue.len() == 0 })
+	return changed || len(c.parked) != n
 }
 
 // saveParked writes parkedFile, or removes it when nothing is kept. c.mu
@@ -95,17 +129,49 @@ func maxParkedSeq(ps []parked) int64 {
 }
 
 // mergeQueues returns the events of a and b, each kind in the order of
-// its sequence numbers.
+// its sequence numbers. An event of b whose sequence number is already in
+// a (the same event, kept twice) is left out: a's copy is kept.
 func mergeQueues(a, b queue) queue {
+	b, dup := withoutSeqs(b, a.seqs())
+	folded := a.Folded + b.Folded
+	if dup && b.len() == 0 {
+		folded = a.Folded // b was all copies of a
+	}
 	q := queue{
 		Answers:  slices.Concat(a.Answers, b.Answers),
 		Sessions: slices.Concat(a.Sessions, b.Sessions),
 		Totals:   slices.Concat(a.Totals, b.Totals),
-		Folded:   a.Folded + b.Folded,
+		Folded:   folded,
 		sending:  a.sending,
 	}
 	slices.SortStableFunc(q.Answers, func(x, y qAnswer) int { return cmp.Compare(x.Seq, y.Seq) })
 	slices.SortStableFunc(q.Sessions, func(x, y qSession) int { return cmp.Compare(x.Seq, y.Seq) })
 	slices.SortStableFunc(q.Totals, func(x, y qTotals) int { return cmp.Compare(x.Seq, y.Seq) })
 	return q
+}
+
+// seqs are the sequence numbers of the queued events, of every kind (one
+// counter numbers them all).
+func (q *queue) seqs() map[int64]bool {
+	m := make(map[int64]bool, q.len())
+	for _, a := range q.Answers {
+		m[a.Seq] = true
+	}
+	for _, s := range q.Sessions {
+		m[s.Seq] = true
+	}
+	for _, t := range q.Totals {
+		m[t.Seq] = true
+	}
+	return m
+}
+
+// withoutSeqs returns q without the events whose sequence numbers are in
+// seen, and reports whether it left any out. q's slices aren't changed.
+func withoutSeqs(q queue, seen map[int64]bool) (queue, bool) {
+	n := q.len()
+	q.Answers = slices.DeleteFunc(slices.Clone(q.Answers), func(a qAnswer) bool { return seen[a.Seq] })
+	q.Sessions = slices.DeleteFunc(slices.Clone(q.Sessions), func(s qSession) bool { return seen[s.Seq] })
+	q.Totals = slices.DeleteFunc(slices.Clone(q.Totals), func(t qTotals) bool { return seen[t.Seq] })
+	return q, q.len() != n
 }

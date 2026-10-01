@@ -177,14 +177,19 @@ func (c *Client) syncMe(ctx context.Context, gen int) error {
 	if c.unpark(me.Learner.ID) {
 		// Events kept when this learner's link was lost: written to
 		// the queue before they leave the parked file, so a crash
-		// between the two can only send them twice (which the server
-		// ignores), never lose them.
+		// between the two never loses them; the next start keeps one
+		// copy of each (dropQueued, mergeQueues).
 		c.mu.Unlock()
 		if err := c.saveQueue(); err != nil {
 			return err
 		}
 		c.mu.Lock()
-		c.saveParked()
+		if err := c.writeParked(); err != nil {
+			// The events are in the queue file and still in the parked
+			// file: the next start keeps one copy (dropQueued).
+			c.mu.Unlock()
+			return err
+		}
 		if c.gen != gen {
 			c.mu.Unlock()
 			return ErrNotLinked
@@ -415,6 +420,11 @@ func (c *Client) Close() {
 		}
 	}
 	c.saveQueue()
+	c.mu.Lock()
+	if c.parkedUnsaved {
+		c.writeParked()
+	}
+	c.mu.Unlock()
 	// An unlink the server hasn't heard about yet gets a moment too.
 	waited := make(chan struct{})
 	go func() { c.bg.Wait(); close(waited) }()
@@ -493,7 +503,8 @@ func (c *Client) lost(gen int) {
 	}
 	// The events not sent wait for this learner to link again; the
 	// server may only have lost track of a refresh (a lost answer).
-	c.park()
+	// When they can't be written now, Close tries again.
+	_ = c.park()
 	c.unlink()
 	c.note = "This game was unlinked on the website. Your progress is still here."
 }

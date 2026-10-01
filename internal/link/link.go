@@ -308,6 +308,9 @@ type Client struct {
 	// parked are events kept after the link was lost, for the learner
 	// they belong to (parked.go).
 	parked []parked
+	// parkedUnsaved: the parked events couldn't be written; Close tries
+	// again.
+	parkedUnsaved bool
 	// gen counts links and unlinks. A sync that started under another
 	// generation throws away what it got.
 	gen int
@@ -394,8 +397,9 @@ func Open(o Options) *Client {
 		if data, err := o.Store.Read(parkedFile); err == nil {
 			json.Unmarshal(data, &c.parked)
 		}
-		if c.expireParked() {
-			c.saveParked()
+		expired := c.expireParked()
+		if c.dropQueued() || expired {
+			c.writeParked()
 		}
 	}
 	c.st.NextSeq = max(c.st.NextSeq, c.q.maxSeq()+1, maxParkedSeq(c.parked)+1, 1)
