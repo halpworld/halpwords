@@ -196,6 +196,12 @@ var options = []option{
 		set:     func(o *profile.Options, i int) { o.Shake = i == 0 },
 	},
 	{
+		name: "Calm effects", about: "Fewer moving sparkles, still water and steady torches.",
+		choices: []string{"on", "off"},
+		get:     func(o *profile.Options) int { return onOff(o.Calm) },
+		set:     func(o *profile.Options, i int) { o.Calm = i == 0 },
+	},
+	{
 		name: "Say words", about: "After a miss, say the word, when your account's plan includes pronunciation.",
 		choices: []string{"on", "off"},
 		get:     func(o *profile.Options) int { return onOff(o.SayWords()) },

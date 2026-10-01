@@ -81,6 +81,10 @@ type Options struct {
 	// Shake shakes the view when the hero is hit. Some players find it
 	// uncomfortable.
 	Shake bool
+	// Calm turns off moving sparkles and flicker in the dungeon: still
+	// water and steady torches. It is a "yes" that is off by default, so
+	// settings saved before it keep the old look.
+	Calm bool `json:",omitempty"`
 	// Quiet turns off saying a word after a miss, which a game linked to
 	// a plan with pronunciation does (Say). It is a "no" so settings
 	// saved before it say words.
