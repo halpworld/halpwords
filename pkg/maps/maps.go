@@ -231,8 +231,9 @@ func (m *Map) At(x, y int) Cell {
 // Level returns the floor depth the map plays like: Depth, or 1.
 func (m *Map) Level() int { return max(1, m.Depth) }
 
-// Themes are the floor looks a map can have, in the order of the game's
-// proc.Themes (the tests keep the two the same).
+// Themes are the floor looks a map can have: the first six of the game's
+// proc.Themes, in the same order (the tests check it). The game has more
+// worlds since #72; maps keep the original six.
 var Themes = []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Ice Halls", "Lava Forge", "Amethyst Vaults"}
 
 // ThemeIndex returns the index in Themes of the map's theme, ignoring

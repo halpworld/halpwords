@@ -12,13 +12,32 @@ import (
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
+// Map themes are indices into the game's proc.Themes, which only ever
+// grows at the end, so maps.Themes must be a prefix of it.
 func TestThemesMatchTheGame(t *testing.T) {
 	var names []string
 	for _, th := range proc.Themes {
 		names = append(names, th.Name)
 	}
-	if !slices.Equal(names, maps.Themes) {
-		t.Errorf("maps.Themes is %v, the game has %v", maps.Themes, names)
+	if len(names) < len(maps.Themes) || !slices.Equal(names[:len(maps.Themes)], maps.Themes) {
+		t.Errorf("maps.Themes is %v, not a prefix of the game's %v", maps.Themes, names)
+	}
+}
+
+// The first six themes keep their names and indices: saved maps and
+// Director scripts store them, and the server reads them.
+func TestThemesPinned(t *testing.T) {
+	want := []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Ice Halls", "Lava Forge", "Amethyst Vaults"}
+	if !slices.Equal(maps.Themes, want) {
+		t.Errorf("maps.Themes is %v, want %v", maps.Themes, want)
+	}
+	for i, name := range want {
+		if proc.Themes[i].Name != name {
+			t.Errorf("proc.Themes[%d] is %s, want %s", i, proc.Themes[i].Name, name)
+		}
+		if got := (&maps.Map{Theme: strings.ToLower(name)}).ThemeIndex(); got != i {
+			t.Errorf("ThemeIndex of %q = %d, want %d", name, got, i)
+		}
 	}
 }
 
