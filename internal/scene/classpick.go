@@ -23,6 +23,55 @@ type ClassPick struct {
 	setup runSetup
 	heros []*ebiten.Image
 	sel   int
+	// ask is set while the player is asked whether a new run may replace
+	// the saved adventure; yes is the answer chosen, and starts as No.
+	ask, yes bool
+}
+
+// confirming reports whether the player is being asked to replace a save.
+func (p *ClassPick) confirming() bool { return p.ask }
+
+// replaceText says what starting a new run does to the saved adventure.
+func replaceText() string {
+	hero, floor, _ := savedHero()
+	if hero == "" {
+		return "This replaces your saved adventure."
+	}
+	return fmt.Sprintf("This replaces your saved adventure: %s, floor %d", hero, floor)
+}
+
+// updateAsk answers the question of replacing the saved adventure. Nothing
+// is replaced unless the player chooses Yes.
+func (p *ClassPick) updateAsk(ctx *game.Context) {
+	switch {
+	case input.Pressed(ebiten.KeyY):
+		p.yes = true
+		fallthrough
+	case input.Confirm() || input.Pressed(ebiten.KeySpace):
+		if p.yes {
+			p.begin(ctx)
+			return
+		}
+		ctx.Sound.Play(audio.Back)
+		p.ask = false
+	case input.Back() || input.Pressed(ebiten.KeyN):
+		ctx.Sound.Play(audio.Back)
+		p.ask, p.yes = false, false
+	case input.Up() || input.Down() || input.Repeat(ebiten.KeyArrowLeft) || input.Repeat(ebiten.KeyArrowRight) ||
+		input.Repeat(ebiten.KeyA) || input.Repeat(ebiten.KeyD):
+		ctx.Sound.Play(audio.Blip)
+		p.yes = !p.yes
+	}
+}
+
+// begin starts the run with the hero chosen.
+func (p *ClassPick) begin(ctx *game.Context) {
+	r := newRun(ctx, p.lang, rpg.Classes[p.sel], p.setup)
+	if r.quest != nil {
+		ctx.Replace(questIntro(r))
+		return
+	}
+	ctx.Replace(newCrawl(r))
 }
 
 // NewClassPick creates the class picker for an adventure in lang.
@@ -36,6 +85,10 @@ func NewClassPick(lang *words.Language, setup runSetup) game.Scene {
 
 // Update implements game.Scene.
 func (p *ClassPick) Update(ctx *game.Context) error {
+	if p.ask {
+		p.updateAsk(ctx)
+		return nil
+	}
 	n := len(rpg.Classes)
 	switch {
 	case input.Back() && p.setup.quest != nil && p.setup.quest.Language != "":
@@ -59,13 +112,14 @@ func (p *ClassPick) Update(ctx *game.Context) error {
 		ctx.Sound.Play(audio.Blip)
 		p.sel = (p.sel + 1) % n
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
-		ctx.Sound.Play(audio.Select)
-		r := newRun(ctx, p.lang, rpg.Classes[p.sel], p.setup)
-		if r.quest != nil {
-			ctx.Replace(questIntro(r))
+		if _, _, ok := savedHero(); ok {
+			// There is one save slot, and the new run takes it.
+			ctx.Sound.Play(audio.Blip)
+			p.ask, p.yes = true, false
 			return nil
 		}
-		ctx.Replace(newCrawl(r))
+		ctx.Sound.Play(audio.Select)
+		p.begin(ctx)
 	}
 	return nil
 }
@@ -111,5 +165,32 @@ func (p *ClassPick) Draw(dst *ebiten.Image, ctx *game.Context) {
 			f.DrawCentered(dst, line, x+w/2, y+184+k*16, 1, pal.Tan)
 		}
 	}
+	if p.ask {
+		p.drawAsk(dst, ctx)
+		return
+	}
 	f.DrawShadow(dst, "←/→ choose   Enter begin   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+}
+
+// drawAsk draws the question of replacing the saved adventure over the
+// class cards.
+func (p *ClassPick) drawAsk(dst *ebiten.Image, ctx *game.Context) {
+	f := ctx.Font
+	gfx.FillRect(dst, 0, 0, game.ScreenW, game.ScreenH, pal.Fade(pal.Black, 0.7))
+	const w, h = 520, 140
+	x, y := game.ScreenW/2-w/2, game.ScreenH/2-h/2
+	gfx.Window(dst, x, y, w, h)
+	f.DrawCentered(dst, "Replace your saved game?", x+w/2, y+14, 2, pal.Yellow)
+	f.DrawCentered(dst, fit(f, replaceText(), w-24, 1), x+w/2, y+50, 1, pal.Ice)
+	for i, label := range []string{"No, go back", "Yes, replace it"} {
+		col := pal.Steel
+		if (i == 1) == p.yes {
+			col = pal.White
+			if ctx.Tick/20%2 == 0 {
+				f.Draw(dst, "►", x+60+i*190, y+92, 1, pal.Yellow)
+			}
+		}
+		f.DrawShadow(dst, label, x+80+i*190, y+92, 1, col)
+	}
+	f.DrawShadow(dst, "←/→ choose   Enter select   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
 }

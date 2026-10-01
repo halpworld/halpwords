@@ -226,6 +226,29 @@ func saveSummary() (summary string, ok bool) {
 	return summary, true
 }
 
+// savedHero names the hero in the save slot, such as "Knight", and the
+// floor they are on. ok is false when there is no save. A save that can't
+// be read still counts, with no hero named: starting a run would replace it.
+func savedHero() (hero string, floor int, ok bool) {
+	data, err := save.Read(saveName)
+	if err != nil {
+		return "", 0, false
+	}
+	var s struct {
+		Class   rpg.Class
+		Shrine  struct{ Depth int }
+		Suspend *struct{ Depth int }
+	}
+	if json.Unmarshal(data, &s) != nil {
+		return "", 0, true
+	}
+	floor = s.Shrine.Depth
+	if s.Suspend != nil {
+		floor = s.Suspend.Depth
+	}
+	return s.Class.String(), floor, true
+}
+
 // loadCrawl resumes the saved adventure. A suspended game is deleted from
 // the save as it is loaded.
 func loadCrawl(ctx *game.Context) (*Crawl, error) {
