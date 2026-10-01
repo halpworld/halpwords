@@ -305,9 +305,24 @@ quarter turn at a time.
 - **Locked doors** gate parts of the floor. The generator guarantees solvability
   by placing locks only on tree edges, so there is always a route to the stairs
   (some doors guard the stairs, some guard optional loot).
-- **Floors:** each floor goes deeper, with a palette and theme change (Crypt →
-  Flooded Caves → Ice Halls → Lava Forge → …) and a boss before the stairs.
+- **Floors:** each floor goes deeper into a different world (Crypt → Mossy
+  Cellars → Flooded Caves → Lava Forge → Ice Halls → …) and has a boss before
+  the stairs.
+  *Now (#72, done):* every floor is its own world, ten in a fixed order
+  (`proc.FloorOrder`): The Crypt, Mossy Cellars, Flooded Caves, Lava Forge,
+  Ice Halls, Whispering Library, Sky Garden, Clockwork Workshop, Amethyst
+  Vaults, Sandstone Tomb. From floor 11 the order repeats as a remix
+  (`proc.Lap`): the same names, other wall variants and more props. Reaching
+  a floor shows an arrival card (world name, a tagline, "Space to skip";
+  Space or Enter skips it, Esc skips it and opens the menu). Director floors
+  get the remix too. A quest map with no theme keeps the old two floors per
+  theme (`questTheme`), and Boss Raid stays on Mossy Cellars. Props
+  (`raycast.Decor`) are visual only: not in the level or in saves, and they
+  block nothing. Design and as-built notes: `docs/worlds.md`.
 - **Light:** the hero's torch fades with distance, with dithered darkness.
+  *Now (#72, done):* the darkness fades to the world's fog colour, not
+  always black, with a light tint and a reach per world (a shade table built
+  once per floor, so it costs nothing per frame).
 - **Automap:** cells the raycaster sees (up to 7 cells away) are remembered and
   drawn in the map window with walls, torches, doors, sealed doors, chests,
   stairs, nearby monsters, and the hero with an arrow for facing. `M` opens
@@ -651,6 +666,22 @@ shrine save, suspend save, Hall of Fame, and settings. Word lists go in the
 **Palette:** a fixed 32-colour retro palette. Each floor theme remaps it (cold
 blues for the Ice Halls, reds for the Forge). Palette cycling animates fire and
 water.
+*Now (#72, done):* a world is a recipe, not a palette swap: a surface
+family for the walls, floor and ceiling (bricks, cave, ice, basalt, metal,
+crystal, earth, sandstone, books, hedge, water, lava, grass and more), modifiers
+on top (moss, cracks, cobwebs, frost, drips, veins, gears, flowers, vines,
+soot, glow cracks, sand drifts), fog and light, light reach, ceiling height, an
+open sky (Sky Garden), and one prop and one particle kind (snow, petals,
+embers, dust, sparkles and more). Water and lava have four animation frames.
+Particles draw behind sprites and stop while paused. Monster sprites get a
+minimum light (`SpriteLight`) so they never sink into the fog. The **Calm
+effects** option (Sound & Screen) stops particles, floor animation and torch
+flicker. Everything is generated on the CPU in the 32 colours, with no new
+shader. `Render` at 192×120 with sprites takes 0.29 to 0.31 ms on desktop
+(Sky Garden 0.17) and 1.36 to 1.43 ms in wasm (Sky Garden 0.84), 0 allocations
+a frame, against budgets of 0.6 and 3.0 ms. Visual code never touches the
+dungeon RNG or `run.rng`, and golden hashes pin dungeon generation and every
+world's textures and rendered view.
 
 **Textures** (generated at startup, per floor, for the 3D view):
 - Walls: brick or stone patterns with value noise, ordered dithering, and
@@ -719,6 +750,10 @@ embedding exception.
   time), keeps four, loops it through its own `oto` player and cross-fades
   over half a second. Scenes implement `game.Musical`; a scene without it
   plays the music of the scene under it, or the title's.
+  *Now (#72, done):* each world also has a procedural ambient sound bed
+  (`internal/audio/ambience.go`: crickets, dripping water, a rumble, wind,
+  page rustle, birdsong, ticking, chimes), mixed under the floor music.
+  Music itself is still per floor, not per world.
 
 **AI art overrides:** if `overrides/monster_<family>.png` or
 `overrides/title.png` exists, it is used instead of the procedural version. AI

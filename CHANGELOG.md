@@ -7,6 +7,39 @@ version as its release notes.
 
 ### Added
 
+- **Every floor is a different world.** Ten of them, in this order: The
+  Crypt, Mossy Cellars, Flooded Caves, Lava Forge, Ice Halls, Whispering
+  Library, Sky Garden, Clockwork Workshop, Amethyst Vaults and Sandstone
+  Tomb. Each has its own walls, floor and ceiling, its own fog and light,
+  a prop that stands in a few rooms, and its own drifting snow, petals,
+  embers, dust or sparkles. Water and lava ripple, and the Sky Garden has
+  an open sky. From floor 11 the list starts again with a remix: the same
+  names, but different wall variants and more props. The Crypt looks
+  exactly as before. Monsters, doors and stairs are no harder to see in
+  any world.
+- **Arrival card.** Reaching a new floor shows the world's name and a
+  short line about it, with "Space to skip". Space or Enter skips it, and
+  Esc skips it and opens the menu.
+- **A sound for every world.** Each world has its own soft background
+  sound, such as crickets, dripping water or a ticking workshop, mixed
+  under the floor's music.
+- **Calm effects.** A new option in Sound & Screen turns off the drifting
+  particles, the moving water and lava, and the torch flicker.
+- `pkg/proc`: the worlds. `Themes` has four new worlds appended at indices 6
+  to 9 (the list only ever grows), and `Theme` gains `Walls`, `Variants`,
+  `Floors`, `Ceiling`, `Frame`, `Fog`, `Light`, `Reach`, `Height`, `Sky`,
+  `SpriteLight`, `Prop`, `PropSize`, `PropRooms` and `Particles`, with
+  `Look`, `Surface`, `Particles` and the `Prop*` sprites. `ThemeFor` now
+  follows `FloorOrder` floor by floor instead of changing every two floors.
+  New: `World`, `Lap`, `FloorOrder`, `Theme.Remix`, the texture methods
+  (`WallTex`, `FloorTex`, `FloorFrames`, `CeilTex`, `SkyTex`, `DoorTex`,
+  `StairsTex`, `TorchTex`), `CeilHeight`, `LightReach`, `LightTint`,
+  `SpriteMinLight`, `FrameRamp`, `MonsterHues`, `MonsterBody`, `Frames`,
+  `SkyW`, `SkyH`, `PropSizePx` and `Transparent`. The Crypt's textures,
+  and the door image halpwords-server draws, are byte for byte what they
+  were. `pkg/maps` keeps its six themes, so hand-made maps and older games
+  are unaffected.
+
 - **Hear the word after a miss.** A game linked to an account whose plan
   includes pronunciation downloads an audio pack for each assigned list,
   and says the word after a miss in battle and in practice. "Say words"
