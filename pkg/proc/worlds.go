@@ -316,15 +316,22 @@ func Lap(depth int) int { return max(depth-1, 0) / len(FloorOrder) }
 // From the second lap on, it returns the world's remix (see Remix), so
 // floor 11 never looks exactly like floor 1.
 func ThemeFor(depth int) *Theme {
-	i := FloorOrder[max(depth-1, 0)%len(FloorOrder)]
-	if lap := Lap(depth); lap > 0 {
+	return World(FloorOrder[max(depth-1, 0)%len(FloorOrder)], Lap(depth))
+}
+
+// World returns world i (an index into Themes) as it looks on the given
+// lap: Themes[i] itself on lap 0, and its remix after that. It never
+// allocates, so it is safe to call every frame.
+func World(i, lap int) *Theme {
+	if lap > 0 {
 		return &remixes[(lap-1)%len(remixes)][i]
 	}
 	return &Themes[i]
 }
 
 // remixes holds the second and third lap of every world; later laps repeat
-// them.
+// them. They are a snapshot of Themes taken at package init: changing
+// Themes after that does not reach the remixes.
 var remixes = [2][]Theme{remixAll(1), remixAll(2)}
 
 func remixAll(lap int) []Theme {

@@ -349,3 +349,18 @@ func TestSealedDoorsGlow(t *testing.T) {
 		}
 	}
 }
+
+// World gives the same worlds as ThemeFor, without allocating.
+func TestWorld(t *testing.T) {
+	for depth := 1; depth <= 40; depth++ {
+		if World(FloorOrder[(depth-1)%len(FloorOrder)], Lap(depth)) != ThemeFor(depth) {
+			t.Errorf("World and ThemeFor differ at depth %d", depth)
+		}
+	}
+	if World(3, 0) != &Themes[3] || World(3, 1) == &Themes[3] || World(3, 1) != World(3, 3) {
+		t.Error("World should be the world itself on lap 0 and a shared remix after")
+	}
+	if n := testing.AllocsPerRun(10, func() { World(4, 2) }); n != 0 {
+		t.Errorf("World allocates %v times", n)
+	}
+}

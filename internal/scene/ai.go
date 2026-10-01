@@ -11,6 +11,7 @@ import (
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/pkg/maps"
 	"github.com/halpworld/halpwords/pkg/proc"
 	"github.com/halpworld/halpwords/pkg/puzzle"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -345,19 +346,27 @@ func (r *run) script() *llm.Script {
 	return r.ai.scripts[r.depth]
 }
 
-// themeFor is the look of the run's current floor: the Director's choice,
-// or the usual one for the depth.
+// themeFor is the look of the run's current floor: the quest map's or the
+// Director's choice, or the usual one for the depth.
 func (r *run) themeFor() *proc.Theme {
 	if m := r.questMap(r.depth); m != nil {
 		if i := m.ThemeIndex(); i >= 0 && i < len(proc.Themes) {
 			return &proc.Themes[i]
 		}
-		return proc.ThemeFor(m.Level())
+		return questTheme(m.Level())
 	}
 	if sc := r.script(); sc != nil && sc.Theme >= 0 && sc.Theme < len(proc.Themes) {
-		return &proc.Themes[sc.Theme]
+		return proc.World(sc.Theme, proc.Lap(r.depth))
 	}
 	return proc.ThemeFor(r.depth)
+}
+
+// questTheme is the look of a quest map that names no theme: the one such
+// maps always had, cycling through the six map themes every two levels,
+// so teachers' maps keep looking as they did before every floor got its
+// own world.
+func questTheme(level int) *proc.Theme {
+	return &proc.Themes[((max(level, 1)-1)/2)%len(maps.Themes)]
 }
 
 // floorName is the name the floor's banner shows.
