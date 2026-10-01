@@ -192,13 +192,15 @@ type Crawl struct {
 	banner      string
 	sub         string // smaller line under the banner
 	bannerT     int
+	arrival     []arrivalLine // the floor-arrival card
+	arriveT     int           // ticks of the card left
 	floats      []floater
 }
 
 // newCrawl starts the floor r.depth.
 func newCrawl(r *run) *Crawl {
 	c := crawlOn(r, r.floor(r.depth))
-	c.showBanner(fmt.Sprintf("Floor %d", r.depth), c.floorName())
+	c.startArrival()
 	c.arrive()
 	r.ai.startFloor(r)
 	return c
@@ -227,6 +229,7 @@ func crawlOn(r *run, l *dungeon.Level) *Crawl {
 
 func (c *Crawl) showBanner(text, sub string) {
 	c.banner, c.sub, c.bannerT = text, sub, 150
+	c.arriveT = 0 // a newer message takes the place of the card
 }
 
 func (c *Crawl) play(id audio.ID) { c.run.sound.Play(id) }
@@ -310,6 +313,9 @@ func (c *Crawl) Update(ctx *game.Context) error {
 	if c.bannerT > 0 {
 		c.bannerT--
 	}
+	if c.arriveT > 0 {
+		c.arriveT--
+	}
 	for i := 0; i < len(c.floats); i++ {
 		if c.floats[i].t++; c.floats[i].t > 50 {
 			c.floats = append(c.floats[:i], c.floats[i+1:]...)
@@ -326,6 +332,10 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		if b := c.battle; b != nil && (b.phase == phaseAttack || b.phase == phaseDefend) {
 			b.start = ctx.Tick // the clock starts once the hero can type
 		}
+	}
+
+	if c.skipArrival() {
+		return nil // the key that skips the card does nothing else
 	}
 
 	if c.anim.active() {

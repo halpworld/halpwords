@@ -154,7 +154,7 @@ func TestDungeonDirector(t *testing.T) {
 	pump(t, c, "floor 2's script", func() bool { return r.ai.scripts[2] != nil })
 	r.depth++
 	c2 := newCrawl(r)
-	if c2.floorName() != "The Test Pantry" || c2.theme != &proc.Themes[3] || c2.sub != "The Test Pantry" {
+	if c2.floorName() != "The Test Pantry" || c2.theme != &proc.Themes[3] || c2.arrival[1].text != "The Test Pantry" {
 		t.Fatalf("floor 2: %q, theme %q", c2.floorName(), c2.theme.Name)
 	}
 	if !hasLog(r, "Crumbs cover the floor.") {

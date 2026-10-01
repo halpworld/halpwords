@@ -119,7 +119,7 @@ func (s *RaidScreen) stage(seed uint64) {
 			room = r
 		}
 	}
-	th := proc.ThemeFor(3)
+	th := raidTheme()
 	y := float64(room.Y+room.H/2) + 0.5
 	s.level, s.tex = l, raycast.NewTextures(th, l.Seed)
 	s.view, s.img = raycast.New(viewW, viewH), ebiten.NewImage(viewW, viewH)

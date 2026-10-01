@@ -371,6 +371,16 @@ func (c *Crawl) floorName() string {
 	return c.theme.Name
 }
 
+// floorLine is "Floor N · name", with the world's name after a name of the
+// Director's or a quest's.
+func (c *Crawl) floorLine() string {
+	line := fmt.Sprintf("Floor %d · %s", c.run.depth, c.floorName())
+	if n := c.floorName(); n != c.theme.Name {
+		line += " · " + c.theme.Name
+	}
+	return line
+}
+
 // dress gives the floor's monsters the names in the Director's script.
 func dress(l *dungeon.Level, sc *llm.Script) {
 	if sc == nil {
@@ -413,7 +423,7 @@ func (c *Crawl) arrive() {
 func (c *Crawl) lateScript(sc *llm.Script) {
 	dress(c.level, sc)
 	c.lore = append([]string(nil), sc.Lore...)
-	c.showBanner(fmt.Sprintf("Floor %d", c.run.depth), sc.Name)
+	c.startArrival()
 	c.run.say("The dungeon stirs. This is "+sc.Name+".", pal.Yellow)
 	if sc.Intro != "" {
 		c.run.say(sc.Intro, pal.Cyan)

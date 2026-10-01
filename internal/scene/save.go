@@ -274,14 +274,14 @@ func loadCrawl(ctx *game.Context) (*Crawl, error) {
 			return nil, fmt.Errorf("could not update the save")
 		}
 		s.run.onDisk = false
-		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.floorName()))
+		c.showBanner("Welcome back!", c.floorLine())
 		s.run.say("Welcome back! Your Hardcore run continues.", pal.Yellow)
 		return c, nil
 	case s.suspended:
 		if !c.writeSave(ctx, false) {
 			return nil, fmt.Errorf("could not update the save")
 		}
-		c.showBanner("Welcome back!", fmt.Sprintf("Floor %d · %s", s.run.depth, c.floorName()))
+		c.showBanner("Welcome back!", c.floorLine())
 		s.run.say("Welcome back! Your adventure continues.", pal.Yellow)
 	default:
 		c.showBanner("Welcome back!", "You wake at the shrine")
