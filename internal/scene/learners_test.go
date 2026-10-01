@@ -3,6 +3,7 @@ package scene
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/hajimehoshi/ebiten/v2"
 	"strings"
 	"testing"
 
@@ -86,6 +87,44 @@ func TestUpdateNameLetterSelects(t *testing.T) {
 		s.updateName(ctx)
 		if s.sel != c.want {
 			t.Fatalf("after %q: selected %d, want %d", c.chars, s.sel, c.want)
+		}
+	}
+}
+
+// Typing S or W jumps to the name and stays there: the keys are Down and
+// Up in menus, but in the name list they only type (#46). The arrow keys
+// still move.
+func TestUpdateNameSWOnlyJump(t *testing.T) {
+	var class link.Class
+	if err := json.Unmarshal([]byte(`{"learners":[{"id":"a","display_name":"Aoife"},{"id":"b","display_name":"Brian"},{"id":"s","display_name":"Sam"},{"id":"w","display_name":"Will"}]}`), &class); err != nil {
+		t.Fatal(err)
+	}
+	var held ebiten.Key = -1
+	input.FakeKeys(t, func(k ebiten.Key) int {
+		if k == held {
+			return 1
+		}
+		return 0
+	})
+	ctx := testContext(t)
+	ctx.Input = &input.State{}
+	for _, c := range []struct {
+		key   ebiten.Key
+		chars string
+		from  int
+		want  int
+	}{
+		{ebiten.KeyS, "s", 0, 2},
+		{ebiten.KeyW, "w", 0, 3},
+		{ebiten.KeyArrowDown, "", 1, 2},
+		{ebiten.KeyArrowUp, "", 1, 0},
+	} {
+		held = c.key
+		ctx.Input.Chars = []rune(c.chars)
+		s := &SignIn{step: siName, class: &class, sel: c.from}
+		s.updateName(ctx)
+		if s.sel != c.want {
+			t.Errorf("key %v typing %q from %d: selected %d, want %d", c.key, c.chars, c.from, s.sel, c.want)
 		}
 	}
 }
