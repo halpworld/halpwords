@@ -14,6 +14,7 @@ package link
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"runtime"
@@ -704,3 +705,79 @@ func (c *Client) saveState() error {
 
 // errNoStore is returned when a file is needed and there is no store.
 var errNoStore = errors.New("link: nowhere to keep files")
+
+// Peek is what a folder's link.json says, read without opening a link:
+// whether the folder holds a learner's tokens, how they signed in, and
+// whether a sign-in with a school account is waiting.
+type Peek struct {
+	Tokens     bool
+	Way        string
+	PendingSSO bool
+	// SSOStarted is when the waiting sign-in started, if it says.
+	SSOStarted time.Time
+	// LearnerID is the learner's ID on the server, if link.json knows it.
+	LearnerID string
+	// Damaged is a link.json that can't be read or parsed in full. It
+	// counts as holding tokens: Open uses whatever it can read of it, so
+	// anything else would let a damaged file hide a sign-in.
+	Damaged bool
+}
+
+// PeekFolder reads link.json in the store f like Open does: a file that
+// is there but can't be read or parsed in full still counts as holding
+// tokens, and gives what could be read of it.
+func PeekFolder(f Store) Peek {
+	data, err := f.Read(stateFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Peek{}
+	}
+	if err != nil {
+		return Peek{Tokens: true, Damaged: true}
+	}
+	var st state
+	p := Peek{}
+	if json.Unmarshal(data, &st) != nil {
+		p.Tokens, p.Damaged = true, true
+	}
+	p.Tokens = p.Tokens || st.linked()
+	p.Way, p.PendingSSO = st.Way, st.SSO != nil
+	if st.SSO != nil {
+		p.SSOStarted = st.SSO.Started
+	}
+	if st.Me != nil {
+		p.LearnerID = st.Me.Learner.ID
+	}
+	return p
+}
+
+// MoveState moves the sign-in in from's link.json into to's, for a
+// learner who signs in again on a folder of their own: the lists and
+// what was fetched are left behind to be fetched again, and the event
+// numbers never go back. from must not be open.
+func MoveState(from, to Store) error {
+	data, err := from.Read(stateFile)
+	if err != nil {
+		return err
+	}
+	var in, old state
+	if err := json.Unmarshal(data, &in); err != nil {
+		return err
+	}
+	if data, err := to.Read(stateFile); err == nil {
+		json.Unmarshal(data, &old)
+	}
+	in.NextSeq = max(in.NextSeq, old.NextSeq)
+	in.ListsETag, in.Lists, in.Quests = "", nil, nil
+	out, err := json.MarshalIndent(in, "", "  ")
+	if err != nil {
+		return err
+	}
+	return to.WritePrivate(stateFile, out)
+}
+
+// School reports whether the sign-in was made at school: a login card,
+// the class code or a school account.
+func (p Peek) School() bool { return IsSchoolWay(p.Way) }
+
+// IsSchoolWay reports whether a Way is a sign-in at school.
+func IsSchoolWay(w string) bool { return w == WayCard || w == WayClass || w == WaySSO }

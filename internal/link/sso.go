@@ -44,6 +44,8 @@ type SSOCode struct {
 	URL        string    `json:"verification_uri"`
 	VerifyURL  string    `json:"verification_uri_complete"`
 	Expires    time.Time `json:"expires"`
+	// Started is when the game asked for the code.
+	Started time.Time `json:"started,omitempty"`
 	// Every is how often the game may poll.
 	Every time.Duration `json:"every"`
 }
@@ -78,6 +80,7 @@ func (c *Client) StartSSO(ctx context.Context, returnTo string) (*SSOCode, error
 		return nil, errors.New("link: the server sent no code")
 	}
 	code := &SSOCode{DeviceCode: out.DeviceCode, UserCode: out.UserCode, URL: out.URL, VerifyURL: out.VerifyURL,
+		Started: c.now(),
 		Expires: c.now().Add(time.Duration(out.ExpiresIn) * time.Second),
 		Every:   max(time.Duration(out.Interval)*time.Second, minPoll)}
 	if !strings.HasPrefix(code.VerifyURL, "http") {

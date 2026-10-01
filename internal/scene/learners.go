@@ -39,6 +39,7 @@ const (
 	lrAdd
 	lrSignOut
 	lrRemove
+	lrRemoveOther // a learner who isn't playing and has nothing to open them
 	lrBack
 )
 
@@ -52,6 +53,23 @@ type Learners struct {
 	signingOut func() bool
 	msg        string
 	msgCol     color.RGBA
+	// victim is the learner a lrRemoveOther waits to remove.
+	victim *profile.Learner
+
+	// The rows and the notes beside them are worked out when the screen
+	// opens and the list changes, not on every draw: each takes reading
+	// the learner's folder.
+	built bool
+	key   lrKey
+	cache []lrRow
+	notes map[string]string
+}
+
+// lrKey is what the rows depend on, to see when they change.
+type lrKey struct {
+	n      int
+	cur    string
+	linked bool
 }
 
 // NewLearners creates the Switch learner screen.
@@ -59,10 +77,34 @@ func NewLearners(ctx *game.Context) game.Scene {
 	return &Learners{bg: backdrop(12, 1.2), confirm: lrPick}
 }
 
+// rows is the rows of the screen, kept until the list changes.
 func (s *Learners) rows(ctx *game.Context) []lrRow {
+	key := lrKey{len(ctx.Learners.List), ctx.Learners.Current, ctx.Link.Linked()}
+	if !s.built || key != s.key {
+		s.build(ctx, key)
+	}
+	return s.cache
+}
+
+// changed makes the rows work themselves out again at the next look.
+func (s *Learners) changed() { s.built = false }
+
+func (s *Learners) build(ctx *game.Context, key lrKey) {
+	s.built, s.key = true, key
+	s.notes = map[string]string{}
 	var rows []lrRow
 	for _, l := range ctx.Learners.List {
 		rows = append(rows, lrRow{learner: l})
+		switch {
+		case l.ID == ctx.Learners.Current && ctx.Pristine(l):
+			s.notes[l.ID] = "playing now (guest)"
+		case l.ID == ctx.Learners.Current:
+			s.notes[l.ID] = "playing now"
+		case l.Lock != nil || ctx.NeedsSignIn(l):
+			s.notes[l.ID] = "sign in to play"
+		case ctx.Pristine(l):
+			s.notes[l.ID] = "(guest)"
+		}
 	}
 	rows = append(rows, lrRow{action: lrAdd})
 	if cur := ctx.Learner(); cur != nil {
@@ -72,7 +114,13 @@ func (s *Learners) rows(ctx *game.Context) []lrRow {
 			rows = append(rows, lrRow{learner: cur, action: lrRemove})
 		}
 	}
-	return append(rows, lrRow{action: lrBack})
+	// Stranded folders: nothing here opens them, so they can only go.
+	for _, l := range ctx.Learners.List {
+		if l.ID != ctx.Learners.Current && l.Lock == nil && ctx.NeedsSignIn(l) {
+			rows = append(rows, lrRow{learner: l, action: lrRemoveOther})
+		}
+	}
+	s.cache = append(rows, lrRow{action: lrBack})
 }
 
 func (s *Learners) say(msg string, c color.RGBA) { s.msg, s.msgCol = msg, c }
@@ -86,8 +134,9 @@ func (s *Learners) Update(ctx *game.Context) error {
 	if s.signingOut != nil {
 		if s.signingOut() {
 			s.signingOut = nil
-			s.sel = 0
-			s.say("Signed out.", pal.Lime)
+			s.changed()
+			s.sel = len(ctx.Learners.List) // the add row
+			s.say("Signed out. Pick your name, or choose + Add a learner.", pal.Lime)
 		}
 		return nil
 	}
@@ -108,8 +157,7 @@ func (s *Learners) Update(ctx *game.Context) error {
 	s.sel = min(s.sel, n-1)
 	switch {
 	case input.Back():
-		ctx.Sound.Play(audio.Back)
-		ctx.Replace(NewTitle(ctx))
+		s.leave(ctx)
 	case input.Up():
 		ctx.Sound.Play(audio.Blip)
 		s.sel = (s.sel + n - 1) % n
@@ -122,23 +170,44 @@ func (s *Learners) Update(ctx *game.Context) error {
 		case lrPick:
 			s.pick(ctx, r.learner)
 		case lrAdd:
+			s.add(ctx, nil)
+		case lrSignOut, lrRemove, lrRemoveOther:
 			ctx.Sound.Play(audio.Select)
-			prev := ctx.Learners.Current
-			if _, err := ctx.AddLearner(""); err != nil {
-				ctx.Sound.Play(audio.Wrong)
-				s.say("Couldn't add a learner: "+err.Error(), pal.Rose)
-				return nil
-			}
-			ctx.Replace(NewSignIn(ctx, prev))
-		case lrSignOut, lrRemove:
-			ctx.Sound.Play(audio.Select)
-			s.confirm = r.action
+			s.confirm, s.victim = r.action, r.learner
 		case lrBack:
-			ctx.Sound.Play(audio.Back)
-			ctx.Replace(NewTitle(ctx))
+			s.leave(ctx)
 		}
 	}
 	return nil
+}
+
+// leave goes back to the title, if somebody is playing: after a switch
+// that failed nobody is, and the game doesn't play until someone is.
+func (s *Learners) leave(ctx *game.Context) {
+	if ctx.Learner() == nil {
+		ctx.Sound.Play(audio.Wrong)
+		s.say("Choose who is playing first.", pal.Rose)
+		return
+	}
+	ctx.Sound.Play(audio.Back)
+	ctx.Replace(NewTitle(ctx))
+}
+
+// add starts the sign-in of another learner. again is a learner who
+// has to sign in again, or nil: if the same learner signs in, their
+// folder is the one that opens.
+func (s *Learners) add(ctx *game.Context, again *profile.Learner) {
+	ctx.Sound.Play(audio.Select)
+	prev := ctx.Learners.Current
+	if _, err := ctx.AddLearner(""); err != nil {
+		ctx.Sound.Play(audio.Wrong)
+		s.say("Couldn't add a learner: "+err.Error(), pal.Rose)
+		return
+	}
+	if again != nil {
+		ctx.SignInFor(again.ID)
+	}
+	ctx.Replace(NewSignIn(ctx, prev))
 }
 
 // pick switches to a learner: at once, or after their sign-in when
@@ -154,6 +223,12 @@ func (s *Learners) pick(ctx *game.Context, l *profile.Learner) {
 		ctx.Replace(newUnlock(ctx, l))
 		return
 	}
+	if ctx.NeedsSignIn(l) {
+		// Nothing local opens them: they sign in again, and if it is the
+		// same learner, this folder opens.
+		s.add(ctx, l)
+		return
+	}
 	switchTo(ctx, l)
 }
 
@@ -164,6 +239,11 @@ func switchTo(ctx *game.Context, l *profile.Learner) {
 		ctx.Notify("Couldn't switch: " + err.Error())
 		return
 	}
+	switched(ctx, l)
+}
+
+// switched greets l, now playing, and goes to the title.
+func switched(ctx *game.Context, l *profile.Learner) {
 	ctx.Sound.Play(audio.Perfect)
 	ctx.Notify("Hello, " + l.Name + "!")
 	ctx.Replace(NewTitle(ctx))
@@ -179,6 +259,18 @@ func (s *Learners) doConfirmed(ctx *game.Context) {
 			s.say("Couldn't remove: "+err.Error(), pal.Rose)
 			return
 		}
+		s.changed()
+		s.sel = 0
+		s.say("Removed.", pal.Lime)
+	case lrRemoveOther:
+		if s.victim == nil || s.victim.ID == ctx.Learners.Current {
+			return
+		}
+		if err := ctx.RemoveLearner(s.victim.ID); err != nil {
+			s.say("Couldn't remove: "+err.Error(), pal.Rose)
+			return
+		}
+		s.changed()
 		s.sel = 0
 		s.say("Removed.", pal.Lime)
 	}
@@ -215,19 +307,16 @@ func (s *Learners) Draw(dst *ebiten.Image, ctx *game.Context) {
 		label, note := "", ""
 		switch r.action {
 		case lrPick:
-			label = r.learner.Name
-			switch {
-			case r.learner.ID == ctx.Learners.Current:
-				note = "playing now"
-			case r.learner.Lock != nil:
-				note = "sign in to play"
-			}
+			label, note = r.learner.Name, s.notes[r.learner.ID]
 		case lrAdd:
-			label = "+ Add a learner"
+			label = "+ Sign in / add a learner"
 		case lrSignOut:
 			label = "Sign out " + r.learner.Name
 		case lrRemove:
 			label = "Remove " + r.learner.Name + " from this computer"
+		case lrRemoveOther:
+			label = "Remove " + r.learner.Name + " from this computer"
+			note = "can't sign in here"
 		case lrBack:
 			label = "Back"
 		}
@@ -243,7 +332,7 @@ func (s *Learners) Draw(dst *ebiten.Image, ctx *game.Context) {
 	switch s.confirm {
 	case lrSignOut:
 		drawSignOut(dst, ctx)
-	case lrRemove:
+	case lrRemove, lrRemoveOther:
 		dx, dy := dialog(dst, ctx, "REMOVE?", 500, 170)
 		f.DrawShadow(dst, "This deletes this learner's hero, word memory,", dx, dy, 1, pal.Tan)
 		f.DrawShadow(dst, "Hall of Fame and word lists from this computer.", dx, dy+16, 1, pal.Tan)
@@ -428,13 +517,8 @@ func (s *SignIn) back(ctx *game.Context) {
 // giveUp leaves the screen. A learner being added is removed again, and
 // the one before plays.
 func (s *SignIn) giveUp(ctx *game.Context) {
-	if s.prev != "" && !ctx.Link.Linked() {
-		if cur := ctx.Learner(); cur != nil && cur.ID != s.prev {
-			ctx.RemoveLearner(cur.ID)
-		}
-		if ctx.Learners.Find(s.prev) != nil && ctx.Learners.Current != s.prev {
-			ctx.SwitchLearner(s.prev)
-		}
+	if (s.prev != "" || ctx.AddPending()) && !ctx.Link.Linked() {
+		ctx.CancelAddLearner()
 		ctx.Replace(NewLearners(ctx))
 		return
 	}
@@ -563,28 +647,43 @@ func explainSignIn(err error) string {
 // namesShown is how many names the list shows at once.
 const namesShown = 10
 
-func (s *SignIn) updateName(ctx *game.Context) {
-	names := s.class.Learners
+// jumpName is the name chosen after typing chars: each letter jumps
+// from sel to the next name that starts with it.
+func jumpName(names []string, sel int, chars []rune) int {
 	n := len(names)
-	for _, r := range ctx.Input.Chars {
-		// A letter jumps to the next name starting with it.
+	for _, r := range chars {
 		r = unicode.ToLower(r)
 		for k := 1; k <= n; k++ {
-			i := (s.sel + k) % n
-			if first := []rune(strings.ToLower(names[i].DisplayName)); len(first) > 0 && first[0] == r {
-				s.sel = i
-				ctx.Sound.Play(audio.Blip)
+			i := (sel + k) % n
+			if first := []rune(strings.ToLower(names[i])); len(first) > 0 && first[0] == r {
+				sel = i
 				break
 			}
 		}
 	}
+	return sel
+}
+
+func (s *SignIn) updateName(ctx *game.Context) {
+	names := s.class.Learners
+	n := len(names)
+	shown := make([]string, n)
+	for i, l := range names {
+		shown[i] = l.DisplayName
+	}
+	if i := jumpName(shown, s.sel, ctx.Input.Chars); i != s.sel {
+		s.sel = i
+		ctx.Sound.Play(audio.Blip)
+	}
+	// Only the arrow keys move: W and S are letters here, which jump.
+	up, down := input.Repeat(ebiten.KeyArrowUp), input.Repeat(ebiten.KeyArrowDown)
 	switch {
 	case input.Back():
 		s.back(ctx)
-	case input.Up():
+	case up:
 		ctx.Sound.Play(audio.Blip)
 		s.sel = (s.sel + n - 1) % n
-	case input.Down():
+	case down:
 		ctx.Sound.Play(audio.Blip)
 		s.sel = (s.sel + 1) % n
 	case input.Confirm():
@@ -629,6 +728,7 @@ func (s *SignIn) updateText(ctx *game.Context) {
 		s.ask(ctx, "", text)
 	case input.Confirm():
 		ctx.Sound.Play(audio.Perfect)
+		ctx.SignInFor("") // playing without signing in: nobody to open again
 		if l := ctx.Learner(); l != nil {
 			l.Name = text
 			ctx.SignedIn(nil)
@@ -639,11 +739,12 @@ func (s *SignIn) updateText(ctx *game.Context) {
 }
 
 // pictureKeys pick a picture of the grid directly: 1 to 9, top left to
-// bottom right, on the number row or the keypad.
+// bottom right, on the number row or by the number on the keypad (not
+// its layout: the grid is labelled 1 to 9).
 var pictureKeys = [link.Grid][2]ebiten.Key{
-	{ebiten.Key1, ebiten.KeyNumpad7}, {ebiten.Key2, ebiten.KeyNumpad8}, {ebiten.Key3, ebiten.KeyNumpad9},
+	{ebiten.Key1, ebiten.KeyNumpad1}, {ebiten.Key2, ebiten.KeyNumpad2}, {ebiten.Key3, ebiten.KeyNumpad3},
 	{ebiten.Key4, ebiten.KeyNumpad4}, {ebiten.Key5, ebiten.KeyNumpad5}, {ebiten.Key6, ebiten.KeyNumpad6},
-	{ebiten.Key7, ebiten.KeyNumpad1}, {ebiten.Key8, ebiten.KeyNumpad2}, {ebiten.Key9, ebiten.KeyNumpad3},
+	{ebiten.Key7, ebiten.KeyNumpad7}, {ebiten.Key8, ebiten.KeyNumpad8}, {ebiten.Key9, ebiten.KeyNumpad9},
 }
 
 func (s *SignIn) updatePictures(ctx *game.Context) {
@@ -743,10 +844,14 @@ func (s *SignIn) linked(ctx *game.Context, st link.Status) {
 
 // tryUnlock opens the learner's folder with secret.
 func (s *SignIn) tryUnlock(ctx *game.Context, secret string) {
-	ok, err := ctx.Learners.Unlock(s.unlock.ID, secret)
+	ok, err := ctx.UnlockLearner(s.unlock.ID, secret)
 	switch {
+	case ok && err != nil:
+		ctx.Sound.Play(audio.Wrong)
+		ctx.Notify("Couldn't switch: " + err.Error())
+		ctx.Replace(NewLearners(ctx))
 	case ok:
-		switchTo(ctx, s.unlock)
+		switched(ctx, s.unlock)
 	case errors.Is(err, profile.ErrLocked):
 		ctx.Sound.Play(audio.Wrong)
 		s.say("Too many wrong tries. Wait a few minutes, then try again.", pal.Rose)
@@ -837,7 +942,7 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 	case siName:
 		s.drawNames(dst, ctx, x, y, w)
-		hint = "↑/↓ or a letter choose   Enter select   Esc back"
+		hint = "↑/↓ move   Type a first letter   Enter select   Esc back"
 	case siUsername, siPlayName:
 		gfx.Window(dst, x, y, w, 120)
 		prompt := "Type your username:"

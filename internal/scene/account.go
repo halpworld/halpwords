@@ -78,6 +78,12 @@ func (a *Account) say(msg string, c color.RGBA) { a.msg, a.msgCol = msg, c }
 
 // Update implements game.Scene.
 func (a *Account) Update(ctx *game.Context) error {
+	// Nobody chosen (a switch failed): the Account screen would link a
+	// game that has nobody to link it to.
+	if ctx.Learners != nil && ctx.Learner() == nil {
+		ctx.Replace(NewLearners(ctx))
+		return nil
+	}
 	if a.signingOut != nil {
 		if a.signingOut() {
 			a.signingOut = nil
@@ -152,7 +158,18 @@ func (a *Account) Update(ctx *game.Context) error {
 			a.mode = acUnlink
 		case acSchool:
 			ctx.Sound.Play(audio.Select)
-			ctx.Replace(NewSignIn(ctx, ""))
+			// A school sign-in never joins a folder that has another
+			// learner's progress: it gets a learner of its own.
+			prev := ""
+			if l := ctx.Learner(); l != nil && ctx.Learners != nil && !ctx.Pristine(l) {
+				prev = ctx.Learners.Current
+				if _, err := ctx.AddLearner(""); err != nil {
+					ctx.Sound.Play(audio.Wrong)
+					a.say("Couldn't add a learner: "+err.Error(), pal.Rose)
+					break
+				}
+			}
+			ctx.Replace(NewSignIn(ctx, prev))
 		case acBack:
 			a.leave(ctx)
 		}

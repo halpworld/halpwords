@@ -92,6 +92,13 @@ func (t *Title) rows() int { return (len(t.items) + 1) / 2 }
 
 // Update implements game.Scene.
 func (t *Title) Update(ctx *game.Context) error {
+	// Nobody plays until somebody is chosen: after a switch that failed,
+	// or when the game started on a guest because the learner who played
+	// last has to sign in.
+	if ctx.Learners != nil && (ctx.Learner() == nil || ctx.TakeNeedWho()) {
+		ctx.Replace(NewLearners(ctx))
+		return nil
+	}
 	for _, tr := range t.torches {
 		tr.Update()
 	}

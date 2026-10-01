@@ -34,11 +34,29 @@ func ForgetHeld() {
 	}
 }
 
+// fake, when set by a test, says for how many ticks each key is held.
+var fake func(ebiten.Key) int
+
+// FakeKeys makes the keys held what held says, until the test ends, so a
+// scene's keys can be tested: ebiten reads the real keyboard itself.
+func FakeKeys(t interface{ Cleanup(func()) }, held func(ebiten.Key) int) {
+	fake = held
+	t.Cleanup(func() { fake = nil })
+}
+
 // Held reports whether key is down.
-func Held(key ebiten.Key) bool { return !stale[key] && ebiten.IsKeyPressed(key) }
+func Held(key ebiten.Key) bool {
+	if fake != nil {
+		return fake(key) > 0
+	}
+	return !stale[key] && ebiten.IsKeyPressed(key)
+}
 
 // Duration reports for how many ticks key has been held, or 0.
 func Duration(key ebiten.Key) int {
+	if fake != nil {
+		return fake(key)
+	}
 	if stale[key] {
 		return 0
 	}
