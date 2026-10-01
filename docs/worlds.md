@@ -1,7 +1,8 @@
 # Worlds: every floor looks different
 
-Tracking issue: halpworld/halpwords#72. Status: design approved by the
-owner's choices of 2026-10-01; being built.
+Tracking issue: halpworld/halpwords#72. Status: **done**. Built as
+designed, with the deviations listed under "As built" below; the design text
+that follows is kept for the reasons behind it.
 
 A player asked for every floor to look different. Reaching a new floor
 should feel like arriving somewhere new, not the same dungeon in other
@@ -86,12 +87,12 @@ Garden never follows the Ice Halls.
 
 | Floor | Index | World | Walls / floor / ceiling | Fog, light | Prop, particles, ambience |
 |---|---|---|---|---|---|
-| 1 | 0 | The Crypt | bricks, cobwebs, cracks / flagstones / beams | black, warm torch (today's look) | bones, dust, low wind |
+| 1 | 0 | The Crypt | bricks, cracks / flagstones / beams | black, warm torch (today's look) | bones, dust, low wind |
 | 2 | 1 | Mossy Cellars | earth with roots and vines / mossy cobbles / mossy brick | dark olive | glowing mushrooms, fireflies, crickets |
 | 3 | 2 | Flooded Caves | cave rock with drips / rippling water / rock with stalactites | deep blue, longer reach | stalagmite, drips, water drops |
 | 4 | 4 | Lava Forge | basalt with glowing cracks / lava cracks / red rock | dark red | anvil, embers, rumble and crackle |
 | 5 | 3 | Ice Halls | ice blocks with frost / snow / icicles, tall | indigo, cold light | ice shards, snow, wind |
-| 6 | 9 | Whispering Library | bookshelves / planks / wooden coffers, tall | dark plum, candle light | book pile with candle, floating letters, page rustle |
+| 6 | 9 | Whispering Library | bookshelves with cobwebs / planks / wooden coffers, tall | dark plum, candle light | book pile with candle, floating letters, page rustle |
 | 7 | 7 | Sky Garden | hedges with flowers / grass / open sky | sky blue, long reach | flower bush, petals, birdsong |
 | 8 | 6 | Clockwork Workshop | steel with brass gears and pipes / brass grate / pipes | brown | cog, steam puffs, ticking |
 | 9 | 5 | Amethyst Vaults | crystal facets with glowing veins / checker / crystal | plum | crystal cluster, sparkles, chimes |
@@ -106,6 +107,58 @@ gives the lap.
 light, a prop and particles. Ideas: Candy Caverns, Sunken Temple, Mushroom
 Forest, Star Observatory. Each new world needs an append to `proc.Themes`
 and a place in the floor order.
+
+## As built
+
+Where the shipped code differs from the design above:
+
+- **Cobwebs live in the Library, not the Crypt.** The Crypt must stay
+  byte-identical (the server draws its door), so it gained no modifier. The
+  cobwebs went to the Whispering Library's wall variants.
+- **The Crypt's contrast is pinned, not raised.** Door frames and stairs must
+  be at least 3:1 against the wall in every world except The Crypt, which is
+  pinned at 1.55 (door frame) and 2.36 (stairs) so that its art stays byte
+  for byte as it was. No world makes monsters, doors or stairs harder to see
+  than today (checked by the balance analyst). Monsters are at least 1.5:1
+  against fog, walls and floor in every world, on laps 1 to 3.
+- **Two hash sets, chosen by build tag.** Apple Silicon fuses multiply-add and
+  amd64 and wasm do not, so the golden hashes (dungeon generation, every
+  world's textures and every world's rendered view) come in two sets. The
+  luminance maths uses a literal table and `hypot` is plain Go, so amd64
+  matches wasm. (Follow-up: monster HP and ATK maths is also fused on arm64,
+  so the dungeon hashes could go back to one set once it uses integers.)
+- **`ThemeFor` now goes floor by floor.** It follows `FloorOrder` instead of a
+  new theme every two floors, and from floor 11 returns the lap remix
+  (`World(i, lap)`, `Theme.Remix`). `ThemeFor(1)` is still The Crypt.
+- **`questTheme`.** A quest map that names no theme keeps the old two floors
+  per theme, so hand-made quests look as they did. Director floors get the
+  lap remix.
+- **Boss Raid is pinned by name** to Mossy Cellars, not by index.
+- **The arrival card says "Space to skip".** Space or Enter skips it, and Esc
+  skips it and opens the menu. It clears on any mode other than exploring.
+- **Calm effects also covers floor animation.** It stops particles, water and
+  lava animation and torch flicker. Flicker is at most 1 Hz and under 15%.
+- **Ambience** is `internal/audio/ambience.go`, one bed per world, mixed under
+  the floor music. Music is still per floor.
+- **Visual code never uses the dungeon RNG or `run.rng`.** Props and particles
+  use their own salted seeds. Props are `raycast.Decor`: visual only, never
+  in the level or saves, and they block nothing. Particles draw behind
+  sprites and stop while paused. Monster sprites are lifted by `SpriteLight`.
+- **Server:** no change is needed. It builds against the new `pkg/proc`, its
+  door image is byte-identical, and the Director only returns names the game
+  sent.
+- **New strings** are English only: the four new world names, ten taglines,
+  "Calm effects" with its hint, and "Space to skip". No Irish strings, so
+  nothing is under Q81.
+- **Performance** (Render at 192×120 with sprites, 0 allocs a frame): desktop
+  (M4) 0.29 to 0.31 ms, Sky Garden 0.17 ms; wasm 1.36 to 1.43 ms, Sky Garden
+  0.84 ms. Budgets were 0.6 and 3.0 ms. The web build holds 60 fps in the
+  browser.
+- **Exported but not usable elsewhere:** `Theme.Variants` and
+  `Surface.Paint`, `Mods` and `Anim` have unexported types, so other packages
+  cannot build worlds yet.
+
+Follow-ups are tracked from #72.
 
 ## Where the changes go
 
