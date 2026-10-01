@@ -155,21 +155,38 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 
 // syncMe fetches the learner. syncMu is held.
 func (c *Client) syncMe(ctx context.Context, gen int) error {
-	var me Me
-	if _, _, err := c.authed(ctx, gen, http.MethodGet, "/api/v1/me", nil, nil, &me); err != nil {
+	// LastSeq is the highest sequence number the server has from this
+	// device; older servers leave it out. It isn't kept in Me, so it
+	// doesn't count as a change to the learner.
+	var got struct {
+		Me
+		LastSeq *int64 `json:"last_seq"`
+	}
+	if _, _, err := c.authed(ctx, gen, http.MethodGet, "/api/v1/me", nil, nil, &got); err != nil {
 		return err
 	}
+	me := got.Me
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.gen != gen {
 		return ErrNotLinked
 	}
 	c.aiOff = false // the learner, as the server says now
+	save := false
+	if got.LastSeq != nil && *got.LastSeq+1 > c.st.NextSeq {
+		// The saved number was too low (a game that quit without
+		// saving it): new events would be taken as duplicates.
+		c.st.NextSeq = *got.LastSeq + 1
+		save = true
+	}
 	old, _ := json.Marshal(c.st.Me)
 	now, _ := json.Marshal(&me)
 	if string(old) != string(now) {
 		c.st.Me = &me
 		c.changes++
+		save = true
+	}
+	if save {
 		return c.saveState()
 	}
 	return nil
@@ -226,6 +243,10 @@ func (c *Client) upload(ctx context.Context, gen int) error {
 			// ones the server already has.
 			c.st.NextSeq = max(c.st.NextSeq, res.LastSeq+1)
 			c.batch = min(MaxBatch, c.batch*2)
+			// Saved at once, so a game that quits now, or a sync that
+			// fails later, never hands out these numbers again. If it
+			// fails, me's last_seq puts it right at the next sync.
+			c.saveState()
 		case errors.As(err, &e) && e.Status == http.StatusRequestEntityTooLarge:
 			if c.batch == 1 {
 				c.drop(map[int64]bool{seqs[0]: true}) // one event too large: never sendable

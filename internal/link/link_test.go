@@ -117,6 +117,8 @@ type fake struct {
 	unlinked int             // devices unlinked by the game
 	tickets  map[string]bool // play tickets not used yet
 	locked   bool            // sign-ins answer 403 locked
+	// meSeq makes GET /api/v1/me say last_seq, as newer servers do.
+	meSeq bool
 
 	// ai answers POST /api/v1/ai/{task}: a status and a body.
 	ai func(task string, body []byte) (int, any)
@@ -293,7 +295,14 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	case r.Method == "GET" && path == "/api/v1/me":
 		if auth() {
-			writeJSON(w, 200, f.me)
+			me := f.me
+			if f.meSeq {
+				me = map[string]any{"last_seq": f.lastSeq}
+				for k, v := range f.me {
+					me[k] = v
+				}
+			}
+			writeJSON(w, 200, me)
 		}
 	case r.Method == "GET" && path == "/api/v1/lists":
 		if !auth() {
