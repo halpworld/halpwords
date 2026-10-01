@@ -884,7 +884,8 @@ Product decision (Q3 of the bug-hunt triage): learners without a lock
 stay pickable, as they were, so a pairing-code learner or a guest can
 be chosen by anyone at the computer. Known and accepted: a game from
 before this fix can lose, once, the answers it queued before its first
-`/me`; and parked events are rarely counted twice (a stop between writing the queue and the parked file).
+`/me`; and parked events are rarely counted twice (a stop between writing the queue and the
+parked file).
 
 *Now (server W5.4, done):* **signing in with a school Google or
 Microsoft account.** The sign-in screen's *I have a school Google or
