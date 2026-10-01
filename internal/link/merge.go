@@ -121,6 +121,9 @@ func merge(local, server *words.Memory, queued []qAnswer, lang string) {
 		// A local card with more answers is newer: the learner played the
 		// word while unlinked. Answers only ever add up, so the count
 		// tells which card has seen more.
+		// Ties go to the server. Answers given while unlinked are not
+		// queued (Answer returns when not linked), so they exist only in
+		// the local card's counts.
 		if lc := local.Cards[k]; lc != nil && lc.Seen > card.Seen {
 			continue
 		}

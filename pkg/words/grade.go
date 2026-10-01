@@ -162,6 +162,9 @@ func normalize(s string, rules Rules) string {
 
 // articleOf is the leading article of s, or "".
 func articleOf(s string, lang *Language) string {
+	if lang == nil {
+		return ""
+	}
 	for _, a := range lang.Articles {
 		if len(s) > len(a) && strings.HasPrefix(s, a) {
 			return a
@@ -171,6 +174,9 @@ func articleOf(s string, lang *Language) string {
 }
 
 func stripArticle(s string, lang *Language) string {
+	if lang == nil {
+		return s
+	}
 	for _, a := range lang.Articles {
 		if len(s) > len(a) && strings.HasPrefix(s, a) {
 			return s[len(a):]

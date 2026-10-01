@@ -135,7 +135,7 @@ func (p *Practice) Update(ctx *game.Context) error {
 		p.taken = float64(ctx.Tick-p.started) / float64(ebiten.TPS())
 		p.result = words.GradeAmong(p.typed, p.word, p.deck.Entries(), p.lang(), p.settings.Rules, p.field.UsedBackspace)
 		p.mistake = words.NoMistake
-		if p.result.Tier < words.Correct {
+		if p.result.Tier < words.Correct && !p.result.ArticleError {
 			p.mistake = words.Classify(p.typed, p.result.Expected, p.lang())
 		}
 		p.deck.Answer(p.cur, words.Answer{Tier: p.result.Tier, Timed: true, Secs: p.taken, Mistake: p.mistake})
@@ -236,7 +236,9 @@ func (p *Practice) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 		f.DrawCentered(dst, info, cx, wy+186, 1, pal.Ice)
 		if r.Confused != "" {
-			f.DrawCentered(dst, "That is "+r.Confused+", a different word.", cx, wy+168, 1, pal.Orange)
+			f.DrawCentered(dst, confusedTip(r.Confused), cx, wy+168, 1, pal.Orange)
+		} else if r.ArticleError {
+			f.DrawCentered(dst, "Watch the article!", cx, wy+168, 1, pal.Orange)
 		} else if tip := p.mistake.Tip(); tip != "" && p.result.Tier < words.Correct {
 			f.DrawCentered(dst, tip, cx, wy+168, 1, pal.Orange)
 		}

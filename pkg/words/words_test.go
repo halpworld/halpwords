@@ -375,3 +375,10 @@ func TestGradeAmongNeighbours(t *testing.T) {
 		t.Errorf("%+v", r)
 	}
 }
+
+func TestGradeNilLanguage(t *testing.T) {
+	e := Entry{Prompt: "x", Answers: []string{"le chien"}}
+	if r := Grade("le chien", e, nil, Rules{}, false); r.Tier != Perfect {
+		t.Fatalf("%+v", r)
+	}
+}
