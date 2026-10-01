@@ -249,6 +249,13 @@ info**, then **Run anyway**.
   folder (see [where your files are](#where-your-files-are)), so shared
   computers keep each student's progress apart when students log in as
   themselves.
+- On a shared computer, only learners who signed in at school (with a school
+  account, a login card or class pictures) are locked: the game asks for
+  their sign-in again before it lets anyone play as them. A learner linked
+  with a grown-up's pairing code has no lock, so anyone at that computer can
+  pick them in **Switch learner** and play as them, and their answers go to
+  that child's account. Link home learners on their own computer, or have
+  them sign in with a school account on a shared one.
 - The AI helper is off until a parent or teacher sets it up. See
   [AI helper](#ai-helper-optional).
 
@@ -557,7 +564,8 @@ game to it, to see the player's progress and give them word lists. Choose
 type the code the website shows. The Account screen says who can see the
 progress and when the game last synced; *Sync now* sends everything at once,
 and *Unlink* stops it (your progress stays, and assigned lists become your
-own).
+own). A learner linked with a pairing code is not locked on a shared
+computer, so anyone there can pick them in *Switch learner*.
 
 Linked games sync every few minutes and when you quit. Assigned lists appear
 in **Word Lists** marked ◆, read-only. Settings a grown-up set are locked in
