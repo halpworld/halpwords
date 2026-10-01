@@ -62,7 +62,7 @@ func (p *ClassPick) Update(ctx *game.Context) error {
 		ctx.Sound.Play(audio.Select)
 		r := newRun(ctx, p.lang, rpg.Classes[p.sel], p.setup)
 		if r.quest != nil {
-			ctx.Replace(questIntro(r))
+			ctx.Replace(questIntro(r, p.setup))
 			return nil
 		}
 		ctx.Replace(newCrawl(r))

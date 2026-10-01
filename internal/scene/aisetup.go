@@ -599,10 +599,10 @@ func (a *AISetup) drawHalpwords(dst *ebiten.Image, ctx *game.Context, x, y, w in
 	}
 }
 
-// drawIntro explains what the AI does, when none is chosen.
-func (a *AISetup) drawIntro(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
-	f := ctx.Font
-	lines := []string{
+// introLines is what the AI does, wrapped to width, with whether each line
+// is a heading (the first and last) drawn brighter.
+func introLines(f *gfx.Font, width int) (lines []string, bright []bool) {
+	src := []string{
 		"With an AI connected, the dungeon reacts to the words you are learning:",
 		"• floors get names and stories built around your words",
 		"• new puzzles: gap-fill sentences in your language, and fresh riddles",
@@ -611,10 +611,23 @@ func (a *AISetup) drawIntro(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
 		"• the Word Forge makes new word lists on any topic",
 		"Choose Halpwords AI (linked games), or Anthropic, OpenAI, Meta or DeepSeek and a key.",
 	}
+	for i, l := range src {
+		for _, w := range wrap(f, l, width) {
+			lines = append(lines, w)
+			bright = append(bright, i == 0 || i == len(src)-1)
+		}
+	}
+	return lines, bright
+}
+
+// drawIntro explains what the AI does, when none is chosen.
+func (a *AISetup) drawIntro(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
+	f := ctx.Font
+	lines, bright := introLines(f, w-32)
 	gfx.Window(dst, x, y, w, len(lines)*17+16)
 	for i, l := range lines {
 		col := pal.Steel
-		if i == 0 || i == len(lines)-1 {
+		if bright[i] {
 			col = pal.Ice
 		}
 		f.DrawShadow(dst, l, x+16, y+9+i*17, 1, col)

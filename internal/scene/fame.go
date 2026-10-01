@@ -171,7 +171,10 @@ func (h *HallOfFame) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 	if h.ranking() {
 		h.drawRankings(dst, ctx)
-		f.DrawShadow(dst, "←/→ language · ↑/↓ board · Tab table · Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+		if h.checking {
+			h.drawCheck(dst, ctx)
+		}
+		f.DrawShadow(dst, h.help(ctx), 8, game.ScreenH-20, 1, pal.Ash)
 		return
 	}
 	mode := fameModes[h.mi]
@@ -203,15 +206,23 @@ func (h *HallOfFame) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 	}
 
-	help := "←/→ language · Tab table · C check a friend's code · Esc back"
-	if h.tabs(ctx) > len(fameModes) {
-		help = "←/→ language · Tab table or Rankings · C check a code · Esc back"
-	}
 	if h.checking {
 		h.drawCheck(dst, ctx)
-		help = "Type the share code · Enter check · Esc close"
 	}
-	f.DrawShadow(dst, help, 8, game.ScreenH-20, 1, pal.Ash)
+	f.DrawShadow(dst, h.help(ctx), 8, game.ScreenH-20, 1, pal.Ash)
+}
+
+// help is the key hint for the tab shown. C checks a code on every tab.
+func (h *HallOfFame) help(ctx *game.Context) string {
+	switch {
+	case h.checking:
+		return "Type the share code · Enter check · Esc close"
+	case h.ranking():
+		return "←/→ language · ↑/↓ board · Tab table · C check a code · Esc back"
+	case h.tabs(ctx) > len(fameModes):
+		return "←/→ language · Tab table or Rankings · C check a code · Esc back"
+	}
+	return "←/→ language · Tab table · C check a friend's code · Esc back"
 }
 
 func (h *HallOfFame) drawCheck(dst *ebiten.Image, ctx *game.Context) {
