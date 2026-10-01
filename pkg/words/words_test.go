@@ -341,3 +341,37 @@ func TestListErrors(t *testing.T) {
 		t.Errorf("bad cloze answer: %v", err)
 	}
 }
+
+func TestGradeAmongNeighbours(t *testing.T) {
+	fr, la, grc := lang(t, "fr"), lang(t, "la"), lang(t, "grc")
+	e := func(a string) Entry { return Entry{Prompt: "x" + a, Answers: []string{a}} }
+	tests := []struct {
+		name   string
+		typed  string
+		want   Entry
+		others []Entry
+		lang   *Language
+		tier   Tier
+		saw    string
+	}{
+		{"mere for pere", "la mère", e("le père"), []Entry{e("la mère"), e("le père")}, fr, Miss, "la mère"},
+		{"mere without article", "mère", e("le père"), []Entry{e("la mère")}, fr, Miss, "la mère"},
+		{"mater for pater", "māter", e("pāter"), []Entry{e("māter")}, la, Miss, "māter"},
+		{"kalos for kakos", "καλός", e("κακός"), []Entry{e("καλός")}, grc, Miss, "καλός"},
+		{"typo still grazes", "le pere", e("le père"), []Entry{e("la mère")}, fr, AccentSlip, ""},
+		{"unrelated typo grazes", "le chiem", e("le chien"), []Entry{e("la mère")}, fr, Graze, ""},
+		{"no others", "la mère", e("le père"), nil, fr, Graze, ""},
+	}
+	for _, tt := range tests {
+		r := GradeAmong(tt.typed, tt.want, tt.others, tt.lang, tt.lang.Defaults, false)
+		if r.Tier != tt.tier || r.Confused != tt.saw {
+			t.Errorf("%s: %+v, want tier %v confused %q", tt.name, r, tt.tier, tt.saw)
+		}
+	}
+	// The entry itself and entries sharing its answer are never "another word".
+	same := e("le père")
+	r := GradeAmong("le pere", same, []Entry{same, {Prompt: "dad", Answers: []string{"le père"}}}, fr, fr.Defaults, false)
+	if r.Tier != AccentSlip || r.Confused != "" {
+		t.Errorf("%+v", r)
+	}
+}

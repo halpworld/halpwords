@@ -34,6 +34,10 @@ type Result struct {
 	// and the answer have one, and they differ ("la chien" for "le chien").
 	// The tier is then at most AccentSlip, so the gender is not learnt wrong.
 	ArticleError bool
+	// Confused is set by GradeAmong when a near miss was really the answer
+	// to another word (mère for père): it is that answer, and the tier is
+	// Miss.
+	Confused string
 }
 
 const (
@@ -99,6 +103,41 @@ func Grade(typed string, e Entry, lang *Language, rules Rules, usedBackspace boo
 		}
 	}
 	return best
+}
+
+// GradeAmong is Grade for a word that is dealt from a set of words. A
+// Graze (one letter off) is a Miss when what was typed is exactly the answer
+// to another word in others: confusing mère and père is not a near hit.
+// Result.Confused then holds that answer. Entries with the same key as e, or
+// with an answer in common with it, are not other words. Other tiers are
+// as Grade gives them.
+func GradeAmong(typed string, e Entry, others []Entry, lang *Language, rules Rules, usedBackspace bool) Result {
+	r := Grade(typed, e, lang, rules, usedBackspace)
+	if r.Tier != Graze {
+		return r
+	}
+	key := Key(e)
+	for _, o := range others {
+		if len(o.Answers) == 0 || Key(o) == key || sharesAnswer(e, o, rules) {
+			continue
+		}
+		if or := Grade(typed, o, lang, rules, false); or.Tier >= AccentSlip {
+			r.Tier, r.Confused = Miss, or.Expected
+			return r
+		}
+	}
+	return r
+}
+
+func sharesAnswer(a, b Entry, rules Rules) bool {
+	for _, x := range a.Answers {
+		for _, y := range b.Answers {
+			if normalize(x, rules) == normalize(y, rules) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // normalize applies the always-on normalisation: NFC, collapsed spaces,

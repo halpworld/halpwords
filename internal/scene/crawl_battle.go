@@ -255,7 +255,7 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 }
 
 func (c *Crawl) grade(typed string) words.Result {
-	return words.Grade(typed, c.battle.word, c.run.lang, c.run.rules(), c.battle.field.UsedBackspace)
+	return words.GradeAmong(typed, c.battle.word, c.run.deck.Entries(), c.run.lang, c.run.rules(), c.battle.field.UsedBackspace)
 }
 
 // scoreAnswer records an answer for spaced practice, the combo streak and
@@ -390,7 +390,9 @@ func mistakeLine(said, typed string, res words.Result, lang *words.Language) log
 	if res.Tier == words.AccentSlip {
 		col = pal.Cyan
 	}
-	if tip := words.Classify(typed, res.Expected, lang).Tip(); tip != "" {
+	if res.Confused != "" {
+		said += " That is " + res.Confused + ", a different word."
+	} else if tip := words.Classify(typed, res.Expected, lang).Tip(); tip != "" {
 		said += " " + tip
 	}
 	return logLine{said, col}
