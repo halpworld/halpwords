@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -72,5 +73,40 @@ func TestParkWrittenOnClose(t *testing.T) {
 	var ps []parked
 	if err := json.Unmarshal(st.files[parkedFile], &ps); err != nil || len(ps) != 1 || len(ps[0].Queue.Answers) != 1 {
 		t.Errorf("parked %+v: %v", ps, err)
+	}
+}
+
+// TestSweepParked: the game drops expired parked events in a learner's
+// folder at start-up, even for a learner who never plays again.
+func TestSweepParked(t *testing.T) {
+	st := newMemStore()
+	now := time.Date(2026, 9, 26, 14, 5, 9, 0, time.UTC)
+	ps := []parked{
+		{Learner: "lrn_old", At: now.Add(-parkedFor - time.Hour), Queue: queue{Answers: []qAnswer{{Seq: 1}}}},
+		{Learner: "lrn_new", At: now.Add(-time.Hour), Queue: queue{Answers: []qAnswer{{Seq: 2}}}},
+	}
+	data, _ := json.Marshal(ps)
+	st.WritePrivate(parkedFile, data)
+	if err := SweepParked(st, now); err != nil {
+		t.Fatal(err)
+	}
+	var got []parked
+	if err := json.Unmarshal(st.files[parkedFile], &got); err != nil || len(got) != 1 || got[0].Learner != "lrn_new" || !st.private[parkedFile] {
+		t.Fatalf("after a sweep: %+v, %v", got, err)
+	}
+	if err := SweepParked(st, now.Add(parkedFor)); err != nil {
+		t.Fatal(err)
+	}
+	if st.has(parkedFile) {
+		t.Error("all expired, and the file is left")
+	}
+	// A folder without a parked file, or with a damaged one (Open's
+	// business), is left as it is.
+	if err := SweepParked(st, now); err != nil {
+		t.Fatal(err)
+	}
+	st.files[parkedFile] = []byte("{")
+	if err := SweepParked(st, now); err != nil || string(st.files[parkedFile]) != "{" {
+		t.Errorf("damaged file: %v, %q", err, st.files[parkedFile])
 	}
 }

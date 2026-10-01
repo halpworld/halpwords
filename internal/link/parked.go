@@ -175,3 +175,30 @@ func withoutSeqs(q queue, seen map[int64]bool) (queue, bool) {
 	q.Totals = slices.DeleteFunc(slices.Clone(q.Totals), func(t qTotals) bool { return seen[t.Seq] })
 	return q, q.len() != n
 }
+
+// SweepParked drops the parked events in the folder f that waited longer
+// than parkedFor for their learner. The game calls it for every learner's
+// folder at start-up, so a learner who never plays again doesn't keep
+// them for ever. A damaged file is left for Open, which starts afresh.
+func SweepParked(f Store, now time.Time) error {
+	data, err := f.Read(parkedFile)
+	if err != nil {
+		return nil // none (or unreadable: Open's business)
+	}
+	var ps []parked
+	if json.Unmarshal(data, &ps) != nil {
+		return nil
+	}
+	n := len(ps)
+	ps = slices.DeleteFunc(ps, func(p parked) bool { return now.Sub(p.At) > parkedFor })
+	switch {
+	case len(ps) == n:
+		return nil
+	case len(ps) == 0:
+		return f.Remove(parkedFile)
+	}
+	if data, err = json.Marshal(ps); err != nil {
+		return err
+	}
+	return f.WritePrivate(parkedFile, data)
+}

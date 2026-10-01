@@ -28,6 +28,11 @@ func (c *Context) openLearners() {
 		return
 	}
 	c.Learners = ls
+	// Events kept for a learner whose link was lost don't wait for ever
+	// for a learner who never plays again.
+	for _, l := range ls.List {
+		link.SweepParked(l.Folder(), time.Now())
+	}
 	if ls.Repaired {
 		// The locks were lost: whoever holds tokens must sign in again.
 		for _, l := range ls.List {

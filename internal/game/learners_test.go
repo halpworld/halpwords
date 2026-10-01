@@ -714,3 +714,27 @@ func TestSignInAgainKeepsLock(t *testing.T) {
 		t.Errorf("lock lost: %+v", old)
 	}
 }
+
+// Parked events of a learner who doesn't come back are dropped once
+// they expire, at start-up (halpworld/halpwords#39).
+func TestStartupSweepsParked(t *testing.T) {
+	useTempDir(t)
+	ctx := &Context{Sound: &Sound{Muted: true}}
+	ctx.openLearners()
+	if ctx.Learners == nil {
+		t.Fatal("no learners")
+	}
+	brian, err := ctx.AddLearner("Brian")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-31 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	if err := brian.Folder().WritePrivate("link-parked.json", []byte(`[{"Learner":"lrn_1","At":"`+old+`","Queue":{"Answers":[{"Seq":1}]}}]`)); err != nil {
+		t.Fatal(err)
+	}
+	again := &Context{Sound: &Sound{Muted: true}}
+	again.openLearners()
+	if _, err := brian.Folder().Read("link-parked.json"); err == nil {
+		t.Error("expired parked events kept in a learner's folder")
+	}
+}
