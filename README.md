@@ -576,6 +576,26 @@ is removed; the link files never move with the web game to a new address.
 another server, such as a test one. In a web browser, all of this is kept
 in the page's local storage.
 
+**What the web game keeps in the browser, and who can read it.** In a web
+browser the files above (`link.json` with the tokens, `link-queue.json` with
+the answers not yet sent, `link-parked.json`, `learners.json`, the saves and
+`ai.json` with an AI key) are kept in the page's local storage as plain
+text. Nothing there is encrypted or hidden: anyone who can open the browser
+profile, and any script that runs on the same site, can read it, including
+the tokens that let a game send answers for the learner. On a shared
+computer, the child should sign out (Switch learner, then sign out) when they
+finish, and a grown-up should clear the site's data in the browser if a
+computer is handed on. The downloaded game keeps the same files in the user
+folder, readable only by that user.
+
+**What the learner lock protects.** A learner who signs in at school gets a
+lock on that computer, a login card's code or three pictures out of nine,
+kept as a salted, slow hash in `learners.json`, with a limit of five wrong
+tries. It keeps classmates out at the keyboard. It is not protection against
+someone who can copy `learners.json` (or the browser's local storage): the
+pictures are few enough to be tried offline in moments, and the tries limit
+is kept in the same file. Treat the computer's own account as the real lock.
+
 ## Controls
 
 **In the dungeon**
