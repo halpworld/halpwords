@@ -5,6 +5,7 @@ package profile
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"testing"
 	"time"
 
@@ -193,5 +194,43 @@ func TestLock(t *testing.T) {
 	again, _ := OpenLearners(save.Root)
 	if again.CurrentLearner().Lock == nil || !again.CurrentLearner().Lock.Opens("4,0,7") {
 		t.Error("the lock was lost")
+	}
+}
+
+// A try that can't be saved is not looked at: a lock that forgets wrong
+// tries can be guessed at forever. And a lockout never moves earlier.
+func TestUnlockFailsClosed(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes anywhere")
+	}
+	useTempDir(t)
+	ls, _ := OpenLearners(save.Root)
+	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	ls.now = func() time.Time { return now }
+	l := ls.CurrentLearner()
+	l.Lock, _ = NewLock(LockCard, "ABCD")
+	dir, err := save.Root.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	if ok, err := ls.Unlock(l.ID, "ABCD"); ok || err == nil {
+		t.Errorf("the right secret opened it when the try couldn't be saved: %v, %v", ok, err)
+	}
+	if l.Tries != 0 {
+		t.Errorf("%d tries counted for a try that wasn't", l.Tries)
+	}
+	os.Chmod(dir, 0o700)
+	l.Tries = MaxTries - 1
+	ls.Unlock(l.ID, "WRONG")
+	before := l.LockedUntil
+	now = now.Add(LockFor)
+	l.Tries = MaxTries - 1
+	ls.Unlock(l.ID, "WRONG")
+	if l.LockedUntil.Before(before) {
+		t.Errorf("the lockout moved from %v back to %v", before, l.LockedUntil)
 	}
 }

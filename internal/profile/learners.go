@@ -68,6 +68,11 @@ type Learner struct {
 	Lock *Lock `json:",omitempty"`
 	// Tries counts wrong tries at the lock in a row; LockedUntil is when
 	// too many of them stop locking it.
+	// NeedsSignIn is set for a learner signed in at school without a
+	// lock (a school account, or a folder found again after the list was
+	// damaged): they open only by signing in again, never by choosing
+	// them from the list.
+	NeedsSignIn bool      `json:",omitempty"`
 	Tries       int       `json:",omitempty"`
 	LockedUntil time.Time `json:",omitempty"`
 	LastUsed    time.Time `json:",omitempty"`
@@ -153,6 +158,9 @@ type Learners struct {
 	// Migrated is set once the files of the game from before W2.5 moved
 	// into the first learner's folder.
 	Migrated bool `json:",omitempty"`
+	// Repaired is set when the list was damaged or missing and was made
+	// again from the learners' folders: the locks are lost.
+	Repaired bool `json:"-"`
 
 	root save.Folder
 	now  func() time.Time
@@ -176,11 +184,13 @@ func OpenLearners(root save.Folder) (*Learners, error) {
 			if err := ls.rebuild(); err != nil {
 				return nil, err
 			}
+			ls.Repaired = true
 		}
 	case errors.Is(err, fs.ErrNotExist):
 		if err := ls.rebuild(); err != nil {
 			return nil, err
 		}
+		ls.Repaired = len(ls.List) > 0
 	default:
 		return nil, err
 	}
@@ -372,7 +382,9 @@ func (ls *Learners) Use(id string) error {
 
 // Unlock tries secret on the learner's lock: it counts wrong tries, and
 // after MaxTries in a row the lock stays shut for LockFor. A learner
-// without a lock opens without one. It saves the list.
+// without a lock opens without one. The try is saved before the secret
+// is looked at, and if it can't be saved the secret isn't tried at all:
+// a lock that forgets wrong tries can be guessed at forever.
 func (ls *Learners) Unlock(id, secret string) (bool, error) {
 	l := ls.Find(id)
 	if l == nil {
@@ -385,17 +397,26 @@ func (ls *Learners) Unlock(id, secret string) (bool, error) {
 	if now.Before(l.LockedUntil) {
 		return false, ErrLocked
 	}
+	l.Tries++
+	if err := ls.Save(); err != nil {
+		l.Tries--
+		return false, err
+	}
 	if l.Lock.Opens(secret) {
 		l.Tries, l.LockedUntil = 0, time.Time{}
-		return true, ls.Save()
+		ls.Save() // a try left counted only costs the child one
+		return true, nil
 	}
-	l.Tries++
 	if l.Tries >= MaxTries {
-		l.Tries, l.LockedUntil = 0, now.Add(LockFor)
+		l.Tries = 0
+		// Never earlier than a lockout there is.
+		if until := now.Add(LockFor); until.After(l.LockedUntil) {
+			l.LockedUntil = until
+		}
 		ls.Save()
 		return false, ErrLocked
 	}
-	return false, ls.Save()
+	return false, nil
 }
 
 // validID reports whether id can name a folder: letters and digits.
