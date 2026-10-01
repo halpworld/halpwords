@@ -116,15 +116,18 @@ func (c *Crawl) drawViewOverlay(view *ebiten.Image, ctx *game.Context) {
 		c.drawDialog(view, ctx, "YOU HAVE FALLEN", c.wakeText(), "Enter try again · Esc give up")
 	}
 
+	c.drawArrival(view, ctx)
 	if c.bannerT > 0 && c.mode != modePause && c.mode != modeQuit && c.mode != modeCampfire && c.mode != modeShrine {
 		a := min(1, float64(c.bannerT)/30)
 		y := viewY + 70
 		if c.mode == modeBattle {
 			y = viewY + 44
 		}
-		f.DrawOutline(view, c.banner, cx-f.Width(c.banner, 3)/2, y, 3, pal.Fade(pal.Yellow, a), pal.Fade(pal.Black, a))
+		bs := f.FitScale(c.banner, vw-16, 3)
+		f.DrawOutline(view, c.banner, cx-f.Width(c.banner, bs)/2, y, bs, pal.Fade(pal.Yellow, a), pal.Fade(pal.Black, a))
 		if c.sub != "" {
-			f.DrawOutline(view, c.sub, cx-f.Width(c.sub, 2)/2, y+52, 2, pal.Fade(pal.Tan, a), pal.Fade(pal.Black, a))
+			ss := f.FitScale(c.sub, vw-16, 2)
+			f.DrawOutline(view, c.sub, cx-f.Width(c.sub, ss)/2, y+52, ss, pal.Fade(pal.Tan, a), pal.Fade(pal.Black, a))
 		}
 	}
 }

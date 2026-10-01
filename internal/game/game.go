@@ -137,6 +137,9 @@ func (c *Context) isFullscreen() bool {
 // Shake reports whether the view may shake. Some players turn it off.
 func (c *Context) Shake() bool { return c.opts.Shake }
 
+// Calm reports whether the player asked for calm effects.
+func (c *Context) Calm() bool { return c.opts.Calm }
+
 // SayWord says a word after a miss: the audio for entry in lang from the
 // linked account's audio packs. It does nothing when the player turned
 // it off, the game isn't linked, or there is no audio for the word.

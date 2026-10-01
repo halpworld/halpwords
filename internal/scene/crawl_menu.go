@@ -57,9 +57,9 @@ func (c *Crawl) openMenu(ctx *game.Context, m *menu) {
 		c.resume, c.pausedAt = c.mode, ctx.Tick
 	}
 	c.menu = m
-	c.mode = modeItems
+	c.enter(modeItems)
 	if m.shop {
-		c.mode = modeShop
+		c.enter(modeShop)
 	}
 	c.buildMenu()
 	c.moveMenu(0)

@@ -34,7 +34,8 @@ var pauseLabels = [...]string{"Resume", "Flee", "Items", "Grimoire", "Suspend an
 // pause stops the game and opens the pause menu. Everything stands still,
 // including the battle clock.
 func (c *Crawl) pause(ctx *game.Context) {
-	c.resume, c.mode = c.mode, modePause
+	c.resume = c.mode
+	c.enter(modePause)
 	c.pausedAt = ctx.Tick
 	c.menuSel = 0
 	c.unsaved = c.hasUnsaved()
@@ -129,7 +130,7 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 		c.play(audio.Select)
 		ctx.Push(newReport(ctx, c.run.seedCode()))
 	case pauseGiveUp:
-		c.mode = modeQuit
+		c.enter(modeQuit)
 	case pauseSuspend:
 		if c.writeSave(ctx, true) {
 			c.play(audio.Select)
@@ -140,7 +141,7 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 		}
 	case pauseQuit:
 		if c.unsaved {
-			c.mode = modeQuit
+			c.enter(modeQuit)
 			return
 		}
 		c.play(audio.Back)
@@ -162,7 +163,7 @@ func (c *Crawl) updateQuit(ctx *game.Context) {
 		c.play(audio.Back)
 		ctx.Replace(NewTitle(ctx))
 	case input.Pressed(ebiten.KeyN) || input.Back():
-		c.mode = modePause
+		c.enter(modePause)
 	}
 }
 
