@@ -76,6 +76,9 @@ type Context struct {
 	// closing are links of learners switched away from, still closing
 	// in the background, by folder.
 	closing map[save.Folder]chan struct{}
+	// addedFrom is the learner who played before AddLearner added
+	// the one playing now, for CancelAddLearner.
+	addedFrom string
 
 	// Full screen changes wait for the one before to finish: on macOS,
 	// changing again during the animation crashes the app.

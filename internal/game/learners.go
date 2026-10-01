@@ -35,17 +35,47 @@ func (c *Context) Learner() *profile.Learner {
 	return c.Learners.CurrentLearner()
 }
 
+// ErrLearnerLocked is switching to a learner whose folder has a lock,
+// without opening it first.
+var ErrLearnerLocked = errors.New("this learner has to sign in first")
+
 // SwitchLearner makes another learner the one playing: it ends the play
 // session, closes the link of the learner before (in the background: it
 // keeps writing to their folder only), and loads the new learner's
-// lists, profile and link.
+// lists, profile and link. A learner whose folder has a lock opens only
+// with UnlockLearner: on a shared computer the next child must never
+// play as, and send answers for, a classmate.
 func (c *Context) SwitchLearner(id string) error {
 	if c.Learners == nil {
 		return errors.New("no learners")
 	}
-	if c.Learners.Find(id) == nil {
+	l := c.Learners.Find(id)
+	if l == nil {
 		return errors.New("no such learner")
 	}
+	if l.Lock != nil && id != c.Learners.Current {
+		return ErrLearnerLocked
+	}
+	return c.switchLearner(id)
+}
+
+// UnlockLearner tries secret on the learner's lock (see
+// profile.Learners.Unlock), and switches to them if it opens.
+func (c *Context) UnlockLearner(id, secret string) (bool, error) {
+	if c.Learners == nil {
+		return false, errors.New("no learners")
+	}
+	ok, err := c.Learners.Unlock(id, secret)
+	if !ok {
+		return false, err
+	}
+	return true, c.switchLearner(id)
+}
+
+// switchLearner switches without asking for a lock: the callers have
+// opened it, or the learner is playing already.
+func (c *Context) switchLearner(id string) error {
+	c.EndSession()
 	c.EndSession()
 	if old := c.Link; old != nil {
 		c.closeLink(save.Current(), old)
@@ -97,15 +127,34 @@ func (c *Context) AddLearner(name string) (*profile.Learner, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := c.SwitchLearner(l.ID); err != nil {
+	prev := c.Learners.Current
+	if err := c.switchLearner(l.ID); err != nil {
 		return nil, err
 	}
+	c.addedFrom = prev
 	return l, nil
+}
+
+// CancelAddLearner takes back the learner AddLearner added and goes back
+// to the one who played before: they were open already, even with a lock.
+func (c *Context) CancelAddLearner() error {
+	prev := c.addedFrom
+	c.addedFrom = ""
+	added := c.Learners.Current
+	if prev == "" || prev == added || c.Learners.Find(prev) == nil {
+		return nil
+	}
+	if err := c.switchLearner(prev); err != nil {
+		return err
+	}
+	return c.RemoveLearner(added)
 }
 
 // RemoveLearner deletes a learner's folder, with everything in it, and
 // takes them off the list. Removing the learner playing switches to the
-// one who played most recently before, or to a new, empty learner.
+// one who played most recently before who has no lock and isn't linked
+// to an account, or to a new, empty learner: never to a learner with a
+// lock, whom nobody has opened.
 func (c *Context) RemoveLearner(id string) error {
 	if c.Learners == nil {
 		return errors.New("no learners")
@@ -126,22 +175,35 @@ func (c *Context) RemoveLearner(id string) error {
 	if c.Learners.Current != "" {
 		return c.Learners.Save()
 	}
-	next := c.lastUsed()
+	return c.leaveLearner()
+}
+
+// leaveLearner switches to a learner anyone may play as: see openLearner.
+func (c *Context) leaveLearner() error {
+	next := c.openLearner()
 	if next == nil {
 		var err error
 		if next, err = c.Learners.Add(""); err != nil {
 			return err
 		}
 	}
-	return c.SwitchLearner(next.ID)
+	return c.switchLearner(next.ID)
 }
 
-// lastUsed is the learner who played most recently, or nil.
-func (c *Context) lastUsed() *profile.Learner {
-	if len(c.Learners.List) == 0 {
+// openLearner is the learner who played most recently and whom anyone
+// may play as: without a lock, and not signed in to an account, whose
+// tokens would send the next child's answers to it. Nil if none.
+func (c *Context) openLearner() *profile.Learner {
+	var open []*profile.Learner
+	for _, l := range c.Learners.List {
+		if l.Lock == nil && l.LearnerID == "" {
+			open = append(open, l)
+		}
+	}
+	if len(open) == 0 {
 		return nil
 	}
-	return slices.MaxFunc(c.Learners.List, func(a, b *profile.Learner) int { return a.LastUsed.Compare(b.LastUsed) })
+	return slices.MaxFunc(open, func(a, b *profile.Learner) int { return a.LastUsed.Compare(b.LastUsed) })
 }
 
 // SignedIn is called once the learner playing has signed in: it keeps a
@@ -161,8 +223,9 @@ func (c *Context) SignedIn(lock *profile.Lock) {
 // SignOut signs the learner playing out: the game forgets their tokens
 // and tells the server. If the school allows it (or a grown-up linked
 // the game at home), their progress stays here, under their lock;
-// otherwise their folder is deleted, and the game switches to another
-// learner. done reports, from the game loop, when it has finished: the
+// otherwise their folder is deleted. Either way the game switches to a
+// learner anyone may play as, as it does when a learner is removed, so
+// a learner with a lock isn't left playing, unlocked. done reports, from the game loop, when it has finished: the
 // link needs a moment to close first.
 func (c *Context) SignOut() (done func() bool) {
 	keep := c.Link.KeepOnSignOut()
@@ -173,6 +236,13 @@ func (c *Context) SignOut() (done func() bool) {
 		if l != nil {
 			l.LearnerID = ""
 			c.Learners.Save()
+		}
+		var err error
+		if l != nil && l.Lock != nil {
+			err = c.leaveLearner()
+		}
+		if err != nil {
+			c.Notify("Couldn't switch to another learner")
 		}
 		return func() bool { return true }
 	}

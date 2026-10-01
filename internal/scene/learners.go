@@ -164,6 +164,11 @@ func switchTo(ctx *game.Context, l *profile.Learner) {
 		ctx.Notify("Couldn't switch: " + err.Error())
 		return
 	}
+	switched(ctx, l)
+}
+
+// switched greets l, now playing, and goes to the title.
+func switched(ctx *game.Context, l *profile.Learner) {
 	ctx.Sound.Play(audio.Perfect)
 	ctx.Notify("Hello, " + l.Name + "!")
 	ctx.Replace(NewTitle(ctx))
@@ -429,12 +434,7 @@ func (s *SignIn) back(ctx *game.Context) {
 // the one before plays.
 func (s *SignIn) giveUp(ctx *game.Context) {
 	if s.prev != "" && !ctx.Link.Linked() {
-		if cur := ctx.Learner(); cur != nil && cur.ID != s.prev {
-			ctx.RemoveLearner(cur.ID)
-		}
-		if ctx.Learners.Find(s.prev) != nil && ctx.Learners.Current != s.prev {
-			ctx.SwitchLearner(s.prev)
-		}
+		ctx.CancelAddLearner()
 		ctx.Replace(NewLearners(ctx))
 		return
 	}
@@ -759,10 +759,14 @@ func (s *SignIn) linked(ctx *game.Context, st link.Status) {
 
 // tryUnlock opens the learner's folder with secret.
 func (s *SignIn) tryUnlock(ctx *game.Context, secret string) {
-	ok, err := ctx.Learners.Unlock(s.unlock.ID, secret)
+	ok, err := ctx.UnlockLearner(s.unlock.ID, secret)
 	switch {
+	case ok && err != nil:
+		ctx.Sound.Play(audio.Wrong)
+		ctx.Notify("Couldn't switch: " + err.Error())
+		ctx.Replace(NewLearners(ctx))
 	case ok:
-		switchTo(ctx, s.unlock)
+		switched(ctx, s.unlock)
 	case errors.Is(err, profile.ErrLocked):
 		ctx.Sound.Play(audio.Wrong)
 		s.say("Too many wrong tries. Wait a few minutes, then try again.", pal.Rose)
