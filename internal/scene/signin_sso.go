@@ -62,6 +62,12 @@ func (s *SignIn) showSSO(ctx *game.Context, code *link.SSOCode) {
 	s.say("Sign in on the page that opened.", pal.Ice)
 }
 
+// pollBackoff is the wait before the next poll after n polls in a row
+// that got no answer: twice as long each time, up to a minute.
+func pollBackoff(every time.Duration, n int) time.Duration {
+	return min(every<<min(n, 6), max(time.Minute, every))
+}
+
 // ticks is d in game ticks.
 func ticks(d time.Duration) uint64 {
 	return uint64(d.Seconds() * float64(ebiten.TPS()))
@@ -118,11 +124,18 @@ func (s *SignIn) polled(ctx *game.Context, err error) {
 		if s.msg == "Checking…" {
 			s.say("Sign in on the website, then come back here.", pal.Ice)
 		}
+		s.failed = 0
+		// slow_down makes the game wait longer: take the new interval.
+		if p := ctx.Link.PendingSSO(); p != nil {
+			s.sso.Every = p.Every
+		}
 		s.nextPoll = ctx.Tick + ticks(s.sso.Every)
 	case ctx.Link.PendingSSO() != nil:
-		// The server couldn't be reached: the code still works.
+		// The server couldn't be reached: the code still works until it
+		// runs out, so go on asking, less and less often.
 		s.say(upperFirst(explainSignIn(err))+".", pal.Rose)
-		s.nextPoll = ctx.Tick + ticks(3*s.sso.Every)
+		s.failed++
+		s.nextPoll = ctx.Tick + ticks(pollBackoff(s.sso.Every, s.failed))
 	default:
 		ctx.Sound.Play(audio.Wrong)
 		s.say(upperFirst(explainSignIn(err))+".", pal.Rose)

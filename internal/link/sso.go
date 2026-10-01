@@ -141,10 +141,14 @@ func (c *Client) PollSSO(ctx context.Context) error {
 	payload, _ := json.Marshal(map[string]string{"device_code": code.DeviceCode, "name": c.deviceName()})
 	var t tokens
 	_, _, err := c.once(ctx, http.MethodPost, "/api/v1/sso/token", "", nil, payload, &t)
-	again := false
-	if err != nil {
-		again, _ = retryable(err) // no answer, or a server error
+	var apiErr *Error
+	if errors.As(err, &apiErr) && apiErr.Code == codeSlowDown {
+		c.slowSSO(code)
 	}
+	// An answer that never came (a request that timed out, a dropped
+	// connection) or a server error says nothing about the code: it may
+	// still work, so keep it until it runs out.
+	again := err != nil && (!errors.As(err, &apiErr) || retryableStatus(apiErr))
 	switch err = explainSSO(err); {
 	case errors.Is(err, ErrSSOPending):
 		return err
@@ -152,18 +156,44 @@ func (c *Client) PollSSO(ctx context.Context) error {
 		err = errors.New("link: the server sent no tokens")
 	case err == nil:
 		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.st.SSO != code || c.st.linked() {
+			// Cancelled (Esc) or replaced while the answer was on its
+			// way: the pupil chose to stop, so the tokens are dropped.
+			return ErrSSOExpired
+		}
 		c.signedIn(t, WaySSO)
-		c.mu.Unlock()
 		return nil
 	}
-	if again || errors.Is(err, ErrNotLinkable) {
+	if again && c.now().Before(code.Expires) || errors.Is(err, ErrNotLinkable) {
 		// The code may still work: try again later. A pupil who can't
 		// be linked yet (no consent, say) may be by the time it runs
 		// out, once a grown-up sees to it on the website.
 		return err
 	}
 	c.CancelSSO()
+	if again {
+		return ErrSSOExpired // it ran out while the connection was bad
+	}
 	return err
+}
+
+// slowSSO takes slow_down: the game polls 5 seconds less often from now
+// on (RFC 8628 section 3.5), and keeps that across a reload.
+func (c *Client) slowSSO(code *SSOCode) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.st.SSO == code {
+		code.Every += 5 * time.Second
+		c.saveState()
+	}
+}
+
+// retryableStatus reports whether the server's error answer is one that
+// passes: a server error or a rate limit.
+func retryableStatus(e *Error) bool {
+	again, _ := retryable(e)
+	return again
 }
 
 // explainSSO turns the server's error answer to a sign-in with a school

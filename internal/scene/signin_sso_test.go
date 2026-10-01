@@ -1,6 +1,7 @@
 package scene
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -98,4 +99,43 @@ func waitPoll(t *testing.T, s *SignIn) error {
 		t.Fatal("no answer to the poll")
 	}
 	return nil
+}
+
+// TestSignInSSOKeepsAskingWhenTheServerIsSlow checks that a poll that
+// got no answer leaves the code on the screen and tries again later, a
+// little later each time.
+func TestSignInSSOKeepsAskingWhenTheServerIsSlow(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"device_code": "hwsso_abc", "user_code": "ABCD-EFGH",
+			"verification_uri": "https://halpwords.test/sso/device", "expires_in": 600, "interval": 5})
+	}))
+	t.Cleanup(srv.Close)
+	openPage = func(string) error { return nil }
+	t.Cleanup(func() { openPage = browser.Open })
+	ctx := testContext(t)
+	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	t.Cleanup(ctx.Link.Close)
+	s := NewSignIn(ctx, "").(*SignIn)
+	s.startSSO(ctx)
+	s.answer(ctx, <-s.pending)
+	var gaps []uint64
+	for range 4 {
+		ctx.Tick = s.nextPoll
+		s.polled(ctx, context.DeadlineExceeded)
+		if s.step != siSSO || s.sso == nil || ctx.Link.PendingSSO() == nil {
+			t.Fatalf("gave up after a slow poll: step %d", s.step)
+		}
+		gaps = append(gaps, s.nextPoll-ctx.Tick)
+	}
+	for i := 1; i < len(gaps); i++ {
+		if gaps[i] <= gaps[i-1] {
+			t.Fatalf("no backoff: %v", gaps)
+		}
+	}
+	// Answering again starts over.
+	s.polled(ctx, link.ErrSSOPending)
+	if s.failed != 0 {
+		t.Fatal("the backoff stayed after an answer")
+	}
 }

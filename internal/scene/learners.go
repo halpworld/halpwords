@@ -405,6 +405,7 @@ type SignIn struct {
 	sso      *link.SSOCode
 	polling  chan error // a poll on its way
 	nextPoll uint64     // the tick of the next poll
+	failed   int        // polls in a row the server didn't answer
 }
 
 type siResult struct {

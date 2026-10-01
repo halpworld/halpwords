@@ -25,9 +25,28 @@ type ssoServer struct {
 	notLinkable bool
 	used        bool
 	name        string
+	// hang makes a poll wait this long before it answers; slowDown
+	// answers slow_down; gate, when not nil, holds a poll until it is
+	// closed (entered is told first).
+	hang     time.Duration
+	slowDown bool
+	gate     chan struct{}
+	entered  chan struct{}
 }
 
 func (f *ssoServer) serve(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	hang, gate, entered := f.hang, f.gate, f.entered
+	f.mu.Unlock()
+	if r.URL.Path == "/api/v1/sso/token" {
+		if entered != nil {
+			entered <- struct{}{}
+		}
+		if gate != nil {
+			<-gate
+		}
+		time.Sleep(hang)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var body map[string]any
@@ -51,6 +70,8 @@ func (f *ssoServer) serve(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusForbidden, codeAccessDenied)
 		case f.notLinkable:
 			writeErr(w, http.StatusForbidden, codeNotLinkable)
+		case f.slowDown:
+			writeErr(w, http.StatusBadRequest, codeSlowDown)
 		case !f.signedIn:
 			writeErr(w, http.StatusBadRequest, codeAuthorizationPending)
 		default:
@@ -191,5 +212,106 @@ func TestSSONotLinkableKeepsCode(t *testing.T) {
 	clk.add(11 * time.Minute)
 	if err := c.PollSSO(ctx); !errors.Is(err, ErrSSOExpired) || c.PendingSSO() != nil {
 		t.Fatalf("expired: %v", err)
+	}
+}
+
+// A poll that times out is a poor connection, not a finished sign-in:
+// the code stays until it runs out, and a later poll can still sign in.
+func TestSSOPollTimeoutKeepsCode(t *testing.T) {
+	f, c, _, _ := ssoSetup(t)
+	ctx := context.Background()
+	if _, err := c.StartSSO(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.hang = 300 * time.Millisecond
+	c.hc.Timeout = 50 * time.Millisecond
+	err := c.PollSSO(ctx)
+	if err == nil || errors.Is(err, ErrSSOPending) {
+		t.Fatalf("a slow poll: %v", err)
+	}
+	if c.PendingSSO() == nil {
+		t.Fatal("one slow poll forgot the code")
+	}
+	// A poll cut off by the caller's own deadline keeps it too.
+	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	if err := c.PollSSO(short); err == nil || c.PendingSSO() == nil {
+		t.Fatalf("a poll cut short: %v, pending %v", err, c.PendingSSO() != nil)
+	}
+	f.mu.Lock()
+	f.hang, f.signedIn = 0, true
+	f.mu.Unlock()
+	c.hc.Timeout = 0
+	if err := c.PollSSO(ctx); err != nil || !c.Linked() {
+		t.Fatalf("after the connection came back: %v, linked %v", err, c.Linked())
+	}
+}
+
+// When the code runs out while the connection is bad, the poll says so.
+func TestSSOPollTimeoutAfterExpiry(t *testing.T) {
+	f, c, _, clk := ssoSetup(t)
+	ctx := context.Background()
+	if _, err := c.StartSSO(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.hang = 300 * time.Millisecond
+	c.hc.Timeout = 50 * time.Millisecond
+	f.entered = make(chan struct{}, 4)
+	go func() { <-f.entered; clk.add(11 * time.Minute) }()
+	if err := c.PollSSO(ctx); !errors.Is(err, ErrSSOExpired) {
+		t.Fatalf("a slow poll after the code ran out: %v", err)
+	}
+	if c.PendingSSO() != nil {
+		t.Fatal("an expired code is still on its way")
+	}
+}
+
+// slow_down makes the game ask less often, for the rest of the sign-in.
+func TestSSOSlowDown(t *testing.T) {
+	f, c, st, _ := ssoSetup(t)
+	ctx := context.Background()
+	if _, err := c.StartSSO(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.slowDown = true
+	if err := c.PollSSO(ctx); !errors.Is(err, ErrSSOPending) {
+		t.Fatalf("slow_down: %v", err)
+	}
+	p := c.PendingSSO()
+	if p == nil || p.Every != 10*time.Second {
+		t.Fatalf("after slow_down: %+v", p)
+	}
+	if err := c.PollSSO(ctx); !errors.Is(err, ErrSSOPending) {
+		t.Fatal(err)
+	}
+	if p := c.PendingSSO(); p.Every != 15*time.Second {
+		t.Fatalf("after two: %v", p.Every)
+	}
+	c2 := Open(Options{Store: st, Server: c.server, Now: c.now})
+	if p := c2.PendingSSO(); p == nil || p.Every != 15*time.Second {
+		t.Fatalf("after a reload: %+v", p)
+	}
+}
+
+// Esc cancels the code while a poll is on its way: when the pupil had
+// signed in meanwhile, the game must not end up linked.
+func TestSSOCancelDuringPoll(t *testing.T) {
+	f, c, _, _ := ssoSetup(t)
+	ctx := context.Background()
+	if _, err := c.StartSSO(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.signedIn = true
+	f.gate, f.entered = make(chan struct{}), make(chan struct{}, 1)
+	done := make(chan error, 1)
+	go func() { done <- c.PollSSO(ctx) }()
+	<-f.entered
+	c.CancelSSO()
+	close(f.gate)
+	if err := <-done; err == nil {
+		t.Fatal("a cancelled sign-in went through")
+	}
+	if c.Linked() {
+		t.Fatal("the game linked after the sign-in was cancelled")
 	}
 }
