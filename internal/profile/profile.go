@@ -191,9 +191,7 @@ func LoadFrom(f save.Folder) (*Profile, []error) {
 	read(memoryFile, &mem)
 	for code, m := range mem.Memory {
 		if m != nil {
-			if m.Cards == nil {
-				m.Cards = map[string]*words.Card{}
-			}
+			m.Sanitize()
 			p.Memory[code] = m
 		}
 	}

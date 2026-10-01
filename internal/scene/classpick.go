@@ -72,7 +72,7 @@ func (p *ClassPick) updateAsk(ctx *game.Context) {
 func (p *ClassPick) begin(ctx *game.Context) {
 	r := newRun(ctx, p.lang, rpg.Classes[p.sel], p.setup)
 	if r.quest != nil {
-		ctx.Replace(questIntro(r))
+		ctx.Replace(questIntro(r, p.setup))
 		return
 	}
 	ctx.Replace(newCrawl(r))

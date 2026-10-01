@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/halpworld/halpwords/internal/audio"
 	"github.com/halpworld/halpwords/internal/dungeon"
@@ -167,7 +168,13 @@ type RaceEnd struct {
 	bg   *ebiten.Image
 	rr   *raceRun
 	last race.Report // the player's final report, sent until it goes
+	// asked is when Esc was first pressed while reconnecting: a second Esc
+	// soon after leaves. One stray key must not drop the final report.
+	asked time.Time
 }
+
+// leaveConfirm is how long the second Esc may take.
+const leaveConfirm = 4 * time.Second
 
 func newRaceEnd(ctx *game.Context, r *run, at dungeon.Point) *RaceEnd {
 	ctx.EndSession()
@@ -185,17 +192,74 @@ func (e *RaceEnd) Update(ctx *game.Context) error {
 	if !e.rr.over(st) {
 		e.rr.play.Report(e.last)
 	}
-	// Back to the room once the server has the result, so the lobby
-	// can't start the same race again.
-	if (input.Confirm() || input.Back()) && e.settled(st) {
+	other := input.Confirm() || len(ctx.Input.Chars) > 0
+	for _, k := range inpututil.AppendJustPressedKeys(nil) {
+		other = other || k != ebiten.KeyEscape
+	}
+	switch e.act(st, time.Now(), other, input.Confirm(), input.Back()) {
+	case raceEndLobby:
+		// Back to the room once the server has the result, so the lobby
+		// can't start the same race again.
 		ctx.Sound.Play(audio.Select)
 		if st.Phase == link.PlayOff {
 			ctx.Replace(NewLobby(ctx))
 			return nil
 		}
 		ctx.Replace(&Lobby{bg: backdrop(7, 1.15), raced: e.rr.number})
+	case raceEndLeave:
+		// The connection dropped and the game is trying to get back: the
+		// player may stop waiting. Leaving ends the attempt, as Esc does in
+		// the lobby.
+		ctx.Sound.Play(audio.Back)
+		e.rr.play.Leave()
+		ctx.Replace(NewLobby(ctx))
 	}
 	return nil
+}
+
+// raceEndAct is what a key does on the race's end screen.
+type raceEndAct int
+
+const (
+	raceEndStay  raceEndAct = iota
+	raceEndLobby            // to the room, the race being settled
+	raceEndLeave            // stop waiting for the connection to come back
+)
+
+// act is what the keys pressed do in the room as it is now.
+func (e *RaceEnd) act(st link.PlayState, now time.Time, other, confirm, back bool) raceEndAct {
+	rejoining := st.Phase == link.PlayRejoining && !e.settled(st)
+	if !rejoining || other || (!e.asked.IsZero() && now.Sub(e.asked) > leaveConfirm) {
+		e.asked = time.Time{}
+	}
+	switch {
+	case rejoining:
+		if back && !e.asked.IsZero() {
+			return raceEndLeave
+		}
+		if back {
+			e.asked = now
+		}
+	case (confirm || back) && e.settled(st):
+		return raceEndLobby
+	}
+	return raceEndStay
+}
+
+// hint is the key hint for the room as it is now.
+func (e *RaceEnd) hint(st link.PlayState) string {
+	switch {
+	case st.Phase == link.PlayOff:
+		return "Enter continue"
+	case st.Phase == link.PlayRejoining && !e.settled(st):
+		if !e.asked.IsZero() {
+			return "Esc again to leave"
+		}
+		return "Reconnecting… Esc to leave"
+	case e.settled(st):
+		return "Enter back to the room"
+	}
+	return ""
 }
 
 // settled reports whether the player's race is over as the room sees it.
@@ -223,26 +287,24 @@ func (e *RaceEnd) Draw(dst *ebiten.Image, ctx *game.Context) {
 
 	const x, y, w, h = 70, 66, game.ScreenW - 140, 230
 	gfx.Window(dst, x, y, w, h)
-	hint := ""
 	switch {
 	case st.Phase == link.PlayOff:
 		f.DrawCentered(dst, "You are out of the room.", cx, y+40, 1, pal.Tan)
 		if st.Problem != "" {
 			f.DrawCentered(dst, fit(f, st.Problem, w-24, 1), cx, y+60, 1, pal.Tan)
 		}
-		hint = "Enter continue"
 	case st.Race == nil || st.Race.Number != e.rr.number:
 		f.DrawShadow(dst, "Results", x+12, y+10, 1, pal.Yellow)
 		e.drawResults(dst, ctx, st, x+12, y+32, w-24)
-		hint = "Enter back to the room"
 	default:
-		f.DrawShadow(dst, "Waiting for the others…", x+12, y+10, 1, pal.Yellow)
-		e.drawRacers(dst, ctx, st, x+12, y+32, w-24)
-		if e.settled(st) {
-			hint = "Enter back to the room"
+		wait := "Waiting for the others…"
+		if st.Phase == link.PlayRejoining && !e.settled(st) {
+			wait = "Lost the connection. Getting back in…"
 		}
+		f.DrawShadow(dst, wait, x+12, y+10, 1, pal.Yellow)
+		e.drawRacers(dst, ctx, st, x+12, y+32, w-24)
 	}
-	f.DrawShadow(dst, hint, 8, game.ScreenH-20, 1, pal.Ash)
+	f.DrawShadow(dst, e.hint(st), 8, game.ScreenH-20, 1, pal.Ash)
 }
 
 // drawRacers lists the racers as they are now.

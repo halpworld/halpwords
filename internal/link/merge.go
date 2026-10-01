@@ -52,7 +52,9 @@ func (c *Client) syncMemory(ctx context.Context, gen int) error {
 //
 // Words the server has cards for take the server's cards, which hold
 // every answer from all the learner's games. Answers still waiting in the
-// queue are then replayed on top, as the server hasn't seen them. Other
+// queue are then replayed on top, as the server hasn't seen them. A local
+// card that has more answers than the result is newer (it was played while
+// unlinked) and stays. Other
 // words (the player's own lists) keep their local cards, and the local
 // Clock stays: the server's due times are moved to it.
 func (c *Client) MergeMemory(mems map[string]*words.Memory) bool {
@@ -98,6 +100,7 @@ func merge(local, server *words.Memory, queued []qAnswer, lang string) {
 			continue
 		}
 		card := *sc
+		card.Box = words.ClampBox(card.Box)
 		card.Due += base - server.Clock
 		tmp.Cards[k] = &card
 	}
@@ -115,6 +118,15 @@ func merge(local, server *words.Memory, queued []qAnswer, lang string) {
 		local.Cards = map[string]*words.Card{}
 	}
 	for k, card := range tmp.Cards {
+		// A local card with more answers is newer: the learner played the
+		// word while unlinked. Answers only ever add up, so the count
+		// tells which card has seen more.
+		// Ties go to the server. Answers given while unlinked are not
+		// queued (Answer returns when not linked), so they exist only in
+		// the local card's counts.
+		if lc := local.Cards[k]; lc != nil && lc.Seen > card.Seen {
+			continue
+		}
 		local.Cards[k] = card
 	}
 	local.Clock = max(local.Clock, tmp.Clock)

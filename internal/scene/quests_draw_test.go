@@ -24,6 +24,6 @@ func TestQuestScreensDraw(t *testing.T) {
 	s := NewQuests(ctx, droppedFile{"bad.hwmap", []byte("{}")}).(*Quests)
 	s.Draw(dst, ctx)
 	c := questRun(t)
-	questIntro(c.run).Draw(dst, ctx)
+	questIntro(c.run, runSetup{}).Draw(dst, ctx)
 	questEnd(c.run).Draw(dst, ctx)
 }
