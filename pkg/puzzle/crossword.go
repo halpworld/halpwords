@@ -176,6 +176,7 @@ func (c *crossword) Check(a Attempt) Result {
 		res := words.Grade(typed, only(e, c.answers[i]), c.lang, c.rules, a.UsedBackspace)
 		r.Tier = min(r.Tier, res.Tier)
 		r.MarkError = r.MarkError || res.MarkError
+		r.ArticleError = r.ArticleError || res.ArticleError
 		want = append(want, c.answers[i])
 		r.Solution = append(r.Solution, e.Prompt+" = "+c.answers[i])
 	}

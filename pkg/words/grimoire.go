@@ -167,7 +167,7 @@ func (m *Memory) NewGrimoire(entries []Entry, by GrimoireSort) *Grimoire {
 	for _, i := range m.SortGrimoire(es, by) {
 		row := GrimoireRow{Entry: es[i], Card: m.Card(es[i])}
 		if c := row.Card; c != nil {
-			row.Box = c.Box
+			row.Box = ClampBox(c.Box)
 			row.Right = Percent(c.Accuracy())
 			row.Watch = c.WatchOut()
 		}

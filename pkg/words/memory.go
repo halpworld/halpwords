@@ -80,10 +80,31 @@ func (m *Memory) Card(e Entry) *Card {
 	return m.Cards[Key(e)]
 }
 
+// ClampBox returns b limited to the valid boxes, 0 to Boxes.
+func ClampBox(b int) int { return max(0, min(Boxes, b)) }
+
+// Sanitize makes the memory safe to use after it was read from a file or
+// the server: nil cards are dropped and boxes are limited to 0 to Boxes.
+func (m *Memory) Sanitize() {
+	if m == nil {
+		return
+	}
+	if m.Cards == nil {
+		m.Cards = map[string]*Card{}
+	}
+	for k, c := range m.Cards {
+		if c == nil {
+			delete(m.Cards, k)
+			continue
+		}
+		c.Box = ClampBox(c.Box)
+	}
+}
+
 // Box returns e's box: 0 when it has never been answered.
 func (m *Memory) Box(e Entry) int {
 	if c := m.Card(e); c != nil {
-		return c.Box
+		return ClampBox(c.Box)
 	}
 	return 0
 }
@@ -211,7 +232,7 @@ func (m *Memory) Summarize(entries []Entry) Summary {
 			s.InBox[0]++
 			continue
 		}
-		s.InBox[c.Box]++
+		s.InBox[ClampBox(c.Box)]++
 		s.Seen += c.Seen
 		s.Right += c.Right
 		s.Timed += c.Timed
@@ -241,8 +262,8 @@ func (m *Memory) Weakest(entries []Entry, n int) []int {
 		}
 		seen[k] = true
 		// Low boxes first; then the share of misses; then how often.
-		sc := float64(Boxes-c.Box)*10 + (1-c.Accuracy())*8 + float64(min(c.Misses, 10))*0.2
-		if c.Box == Boxes && c.Misses == 0 {
+		sc := float64(Boxes-ClampBox(c.Box))*10 + (1-c.Accuracy())*8 + float64(min(c.Misses, 10))*0.2
+		if ClampBox(c.Box) == Boxes && c.Misses == 0 {
 			continue // mastered and never missed
 		}
 		out = append(out, scored{i, sc})

@@ -238,3 +238,21 @@ func TestDifficulty(t *testing.T) {
 		t.Fatalf("difficulties %v %v %v %v", short, marked, greek, accented)
 	}
 }
+
+func TestBadBoxDoesNotPanic(t *testing.T) {
+	e1 := Entry{Prompt: "a", Answers: []string{"x"}}
+	e2 := Entry{Prompt: "b", Answers: []string{"y"}}
+	m := &Memory{Cards: map[string]*Card{Key(e1): {Box: 9, Seen: 1}, Key(e2): {Box: -1, Seen: 1}}}
+	s := m.Summarize([]Entry{e1, e2})
+	if s.InBox[Boxes] != 1 || s.InBox[0] != 1 {
+		t.Fatalf("summary %+v", s.InBox)
+	}
+	if m.Box(e1) != Boxes || m.Box(e2) != 0 {
+		t.Fatalf("boxes %d %d", m.Box(e1), m.Box(e2))
+	}
+	m.NewGrimoire([]Entry{e1, e2}, 0)
+	m.Sanitize()
+	if m.Cards[Key(e1)].Box != Boxes || m.Cards[Key(e2)].Box != 0 {
+		t.Fatal("Sanitize did not clamp")
+	}
+}
