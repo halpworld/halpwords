@@ -315,6 +315,9 @@ func (c *Crawl) writeSave(ctx *game.Context, suspend bool) bool {
 // An Adventure comes back where it was; a Hardcore or Daily run is a
 // suspend too, and so can be picked up once, like any suspend.
 //
+// Known limit: two tabs of the web game share one save slot, so a Hardcore
+// suspend written by one can be picked up by another and so forked.
+//
 // Nothing is written where the pause menu would not offer Suspend: in a
 // battle or a puzzle, after a fall, or in a race. The save already on disk
 // is then left as it is.
@@ -322,7 +325,7 @@ func (c *Crawl) OnClose(ctx *game.Context) {
 	if !c.canSuspend() {
 		return
 	}
-	if c.writeSave(ctx, true) && c.run.hardcore() {
+	if c.writeSave(ctx, true) {
 		c.closeSaved, c.closedAt = true, time.Now()
 	}
 }
@@ -343,17 +346,29 @@ func (c *Crawl) canSuspend() bool {
 const closeGrace = time.Second
 
 // afterClose is called every update, and does something when the game goes
-// on after OnClose, as a web page does when it is shown again. A Hardcore
-// run's suspend is taken back off the disk, so the run is in memory only
-// again: it can be picked up once, and a crash after that still loses it.
-func (c *Crawl) afterClose(now time.Time) {
+// on after OnClose, as a web page does when it is shown again. The suspend
+// written on close is then stale, so it goes, as when Continue loads one:
+// a Hardcore run's is taken off the disk, so the run is in memory only
+// again (it can be picked up once, and a crash after that still loses
+// it); an Adventure goes back to its last shrine save, so dying and then
+// closing the tab cannot bring back the state from before the fall. The
+// game is hidden again, and suspended again, before it matters.
+func (c *Crawl) afterClose(ctx *game.Context, now time.Time) {
 	if !c.closeSaved || now.Sub(c.closedAt) < closeGrace {
 		return
 	}
 	c.closeSaved = false
-	if c.run.hardcore() && c.run.onDisk {
+	if !c.run.onDisk {
+		return
+	}
+	if c.run.hardcore() {
 		save.Remove(saveName)
 		c.run.onDisk = false
+		return
+	}
+	if c.writeSave(ctx, false) {
+		c.lastSave = nil // the disk no longer has the game as it is now
+		c.unsaved = true
 	}
 }
 

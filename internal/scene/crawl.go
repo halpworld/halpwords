@@ -251,7 +251,7 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
-	c.afterClose(time.Now())
+	c.afterClose(ctx, time.Now())
 	c.run.ai.poll(c)
 	c.run.played += 1 / float64(ebiten.TPS())
 	if c.run.race != nil {

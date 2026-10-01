@@ -11,17 +11,18 @@ import (
 // watchPage saves the link's queue when the page is hidden or closed, as a
 // web game never gets to quit, and syncs when it is hidden so a closed tab
 // loses as little as it can. It also calls save, which keeps the run being
-// played and any score not yet recorded: a closed tab must not lose them.
+// played and any score not yet recorded: a closed tab must not lose them. hide is the lighter save for a page
+// that is only hidden (see Hider).
 // The handlers stay for the life of the page, and act on the link of the
 // learner playing (current).
-func watchPage(current func() *link.Client, save func()) {
+func watchPage(current func() *link.Client, save, hide func()) {
 	doc := js.Global().Get("document")
 	if doc.IsUndefined() {
 		return
 	}
 	hidden := js.FuncOf(func(js.Value, []js.Value) any {
 		if doc.Get("visibilityState").String() == "hidden" {
-			save() // now: localStorage is written at once
+			hide() // now: localStorage is written at once
 			l := current()
 			go func() {
 				l.Save()

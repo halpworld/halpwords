@@ -37,7 +37,11 @@ type GameOver struct {
 
 	place   int    // where the run would go in the Hall of Fame, or 0
 	name    []rune // the name being typed for the Hall of Fame
-	entered bool   // the run is in the Hall of Fame
+	entered bool   // the run is in the Hall of Fame under its final name
+	// provisional is set when the page was hidden at the name prompt: the
+	// run is in the Hall of Fame under a stand-in name while the prompt
+	// stays open, and entering the name renames that entry.
+	provisional bool
 }
 
 // newGameOver ends run r, which fell or was given up.
@@ -70,7 +74,8 @@ func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
 	return g
 }
 
-// record puts the run in the Hall of Fame under the typed name.
+// record puts the run in the Hall of Fame under the typed name. If it is
+// there already as a provisional entry, that entry gets the name.
 func (g *GameOver) record(ctx *game.Context) {
 	name := strings.TrimSpace(string(g.name))
 	if name == "" {
@@ -78,14 +83,50 @@ func (g *GameOver) record(ctx *game.Context) {
 	}
 	p := ctx.Profile
 	p.Name = name
-	day := today()
-	g.place = p.Fame.Add(compete.TableKey(g.mode, g.lang.Code), compete.Fame{
-		Name: name, Class: g.class, Floor: g.floor, Score: g.score, Date: day, Code: g.code,
-	})
+	if g.provisional && g.rename(ctx, name) {
+		g.provisional = false
+	} else {
+		g.place = p.Fame.Add(compete.TableKey(g.mode, g.lang.Code), g.fame(name))
+	}
 	if err := p.SaveFame(); err != nil {
 		ctx.Notify("Could not save the Hall of Fame")
 	}
 	g.entered = true
+}
+
+func (g *GameOver) fame(name string) compete.Fame {
+	return compete.Fame{Name: name, Class: g.class, Floor: g.floor, Score: g.score, Date: today(), Code: g.code}
+}
+
+// rename gives the run's provisional entry a name, and reports whether it
+// was still in the table.
+func (g *GameOver) rename(ctx *game.Context, name string) bool {
+	t := ctx.Profile.Fame.Table(compete.TableKey(g.mode, g.lang.Code))
+	for i := range t {
+		if t[i].Code == g.code && t[i].Score == g.score {
+			t[i].Name = name
+			return true
+		}
+	}
+	return false
+}
+
+// OnHide implements game.Hider: a web page hidden at the name prompt keeps
+// the run in the Hall of Fame under the name typed so far, but the prompt
+// stays open to be finished. The profile's own name is not changed.
+func (g *GameOver) OnHide(ctx *game.Context) {
+	if g.place == 0 || g.entered || g.provisional {
+		return
+	}
+	name := strings.TrimSpace(string(g.name))
+	if name == "" {
+		name = "Hero"
+	}
+	g.place = ctx.Profile.Fame.Add(compete.TableKey(g.mode, g.lang.Code), g.fame(name))
+	g.provisional = true
+	if err := ctx.Profile.SaveFame(); err != nil {
+		ctx.Notify("Could not save the Hall of Fame")
+	}
 }
 
 // OnClose implements game.Closer: a run that placed in the Hall of Fame is

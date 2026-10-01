@@ -75,7 +75,7 @@ func TestCloseAdventureSaveSurvivesContinue(t *testing.T) {
 		}
 	}
 	// Continued play: afterClose must not touch an Adventure.
-	c.afterClose(time.Now().Add(time.Hour))
+	c.afterClose(ctx, time.Now().Add(time.Hour))
 	if !hasSaveFile() {
 		t.Fatal("afterClose removed an Adventure save")
 	}

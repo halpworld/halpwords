@@ -308,7 +308,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 	}
 	ctx.openLearners()
 	ctx.openLink()
-	watchPage(func() *link.Client { return ctx.Link }, ctx.SaveOnClose)
+	watchPage(func() *link.Client { return ctx.Link }, ctx.SaveOnClose, ctx.SaveOnHide)
 	if err := ctx.LoadLists(); err != nil {
 		return nil, err
 	}

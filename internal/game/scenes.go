@@ -1,6 +1,8 @@
 package game
 
 import (
+	"runtime/debug"
+
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/halpworld/halpwords/internal/audio"
@@ -42,14 +44,49 @@ type Closer interface {
 	OnClose(ctx *Context)
 }
 
+// Hider is a Closer that does something lighter when a web page is only
+// hidden, because the player may come back: it keeps what it must, but
+// leaves what is on screen to be finished.
+type Hider interface {
+	OnHide(ctx *Context)
+}
+
 // SaveOnClose tells the scenes the game is closing, the one on top first,
 // so a run is saved and a score is recorded (#49, #50). A menu on top of
 // a run doesn't hide the run.
-func (c *Context) SaveOnClose() {
+//
+// It is called straight from a JavaScript event handler on the web. That
+// is safe because wasm has no preemption: the handler only runs while the
+// game's frame goroutine is blocked waiting for the next frame, never in
+// the middle of an Update.
+func (c *Context) SaveOnClose() { c.tellScenes(func(s Closer) { s.OnClose(c) }) }
+
+// SaveOnHide is SaveOnClose for a web page that is hidden, not gone:
+// scenes that are Hiders get OnHide instead of OnClose.
+func (c *Context) SaveOnHide() {
+	c.tellScenes(func(s Closer) {
+		if h, ok := s.(Hider); ok {
+			h.OnHide(c)
+			return
+		}
+		s.OnClose(c)
+	})
+}
+
+// tellScenes calls f for each scene that is a Closer, top first. A scene
+// that panics must not stop the others saving.
+func (c *Context) tellScenes(f func(Closer)) {
 	st := c.scenes.stack
 	for i := len(st) - 1; i >= 0; i-- {
 		if s, ok := st[i].(Closer); ok {
-			s.OnClose(c)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						Crash(r, debug.Stack())
+					}
+				}()
+				f(s)
+			}()
 		}
 	}
 }
