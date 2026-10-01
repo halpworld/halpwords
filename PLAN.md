@@ -820,7 +820,13 @@ pairing code and keeps the device tokens in a private `link.json` (local
 storage on the web). Answers to assigned words, daily totals for the rest,
 and play sessions wait in `link-queue.json` (at most 50,000 events; the
 oldest answers fold into daily totals) and go up every three minutes, when
-asked and on quitting. Assigned lists are downloaded by ETag into
+asked and on quitting. If the server stops taking the tokens (unlinked on
+the website, or a refresh whose answer was lost too long ago), the events
+not sent move to a private `link-parked.json` in the learner's folder,
+with the learner's id and when, and go up when the same learner links the
+game again; they are dropped after 30 days (checked for every learner's
+folder at start-up), never sent as another learner, never moved with the
+web game (`move.Exportable`), and deleted with the learner's folder. Assigned lists are downloaded by ETag into
 `assigned/` and shown read-only in Word Lists; the server's word memory is
 merged in (server cards for server words, queued answers replayed on top);
 settings and accommodations from `/me` are locked in Settings with who set
