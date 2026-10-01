@@ -9,6 +9,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
@@ -16,6 +17,8 @@ import (
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
+	"github.com/halpworld/halpwords/internal/raycast"
+	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/pkg/proc"
 )
 
@@ -127,6 +130,9 @@ func TestArrivalCardStaysOverTheView(t *testing.T) {
 			t.Errorf("box reaches the panel: %v", box)
 		}
 		for _, p := range placed {
+			if p.hint {
+				continue
+			}
 			r := image.Rect(p.x, p.y, p.x+ctx.Font.Width(p.text, p.scale), p.y+gfx.LineHeight*p.scale)
 			if !r.In(box) {
 				t.Errorf("%.20q: line %q at %v outside box %v", name, p.text, r, box)
@@ -204,17 +210,22 @@ func TestRaidIsInTheMossyCellars(t *testing.T) {
 	}
 }
 
-// A late Director script after the card is gone is a banner, as before; and
-// starting a card never wipes a banner that is up.
-func TestArrivalLateScriptAfterCardUsesBanner(t *testing.T) {
+// Once the card has begun to fade (or is gone), a late Director script
+// shows nothing: no card change and no repeat banner. Starting a card never
+// wipes a banner that is up.
+func TestArrivalLateScriptAfterFadeShowsNothing(t *testing.T) {
 	ctx := testContext(t)
 	c := testCrawl(t, ctx)
 	c.theme = &proc.Themes[1]
-	c.arriveT = 0
 	c.run.ai = &runAI{scripts: map[int]*llm.Script{1: {Name: "The Late Pantry"}}}
-	c.lateScript(&llm.Script{Name: "The Late Pantry"})
-	if c.arriveT != 0 || c.banner != "Floor 1" || c.sub != "The Late Pantry" || c.bannerT == 0 {
-		t.Errorf("card %d banner %q/%q", c.arriveT, c.banner, c.sub)
+	for _, left := range []int{0, 1, arrivalFade} {
+		c.startArrival()
+		c.arriveT = left
+		before := arrivalTexts(c.arrival)
+		c.lateScript(&llm.Script{Name: "The Late Pantry"})
+		if c.arriveT != left || c.banner != "" || c.bannerT != 0 || strings.Join(arrivalTexts(c.arrival), "|") != strings.Join(before, "|") {
+			t.Errorf("left %d: card %d banner %q", left, c.arriveT, c.banner)
+		}
 	}
 	c.showBanner("LEVEL UP!", "Level 2")
 	c.startArrival()
@@ -319,5 +330,102 @@ func TestArrivalClustersKeepMarks(t *testing.T) {
 	}
 	if got := clusters("e\u0301x"); len(got) != 2 || got[0] != "\u00e9" {
 		t.Errorf("clusters %q", got)
+	}
+}
+
+func TestArrivalHasKeyHintInsideTheBox(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
+	for _, name := range []string{"A", "The Marvellous Kingdom of the Forgotten Clockwork Gardens"} {
+		placed, box := layoutArrival(ctx.Font, arrivalLines(2, name, "Ice Halls", true), vw, vh)
+		last := placed[len(placed)-1]
+		r := image.Rect(last.x, last.y, last.x+ctx.Font.Width(last.text, last.scale), last.y+gfx.LineHeight)
+		if !last.hint || last.text != "Space" || !r.In(box) || r.Max.X < box.Max.X-12 {
+			t.Errorf("%.8q: hint %q at %v, box %v", name, last.text, r, box)
+		}
+		for _, p := range placed[:len(placed)-1] {
+			if p.hint || (p.y+gfx.LineHeight*p.scale > last.y) {
+				t.Errorf("a line touches the hint row: %q", p.text)
+			}
+		}
+	}
+}
+
+// Every glyph the card can need is in the font the game embeds.
+func TestArrivalGlyphsAreInTheFont(t *testing.T) {
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := "… ā ē ī ō ū Ā Ē Ī Ō Ū Space Floor 0123456789 · "
+	for _, tag := range taglines {
+		text += tag
+	}
+	for r := rune(0x1F00); r <= 0x1FFF; r++ {
+		text += string(r)
+	}
+	for _, r := range text {
+		if !face.Has(r) {
+			t.Errorf("U+%04X %q is not in the font", r, r)
+		}
+	}
+}
+
+// A floor's props come from its look, are not in the level, and the
+// Calm option reaches the renderer, in the crawl and the raid, live.
+func TestArrivalWorldsAreWiredIn(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	seen := map[string]bool{}
+	r := testCrawl(t, ctx).run
+	for d := 1; d <= 40; d++ {
+		r.depth = d
+		c := crawlOn(r, r.floor(d))
+		seen[c.theme.Name] = true
+		want := len(raycast.Decor(c.level, c.theme))
+		if len(c.decor) != want {
+			t.Errorf("depth %d %s: %d props, want %d", d, c.theme.Name, len(c.decor), want)
+		}
+		if got := len(c.sprites(0)); got < want {
+			t.Errorf("depth %d %s: sprites drop the props", d, c.theme.Name)
+		}
+	}
+	if len(seen) < 2 {
+		t.Errorf("only %d worlds seen", len(seen))
+	}
+}
+
+func TestArrivalCalmReachesTheRenderer(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	c := crawlOn(testCrawl(t, ctx).run, testCrawl(t, ctx).level)
+	dst := ebiten.NewImage(game.ScreenW, game.ScreenH)
+	for _, calm := range []bool{true, false, true} {
+		o := ctx.Profile.Settings.Options()
+		o.Calm = calm
+		ctx.Profile.Settings.SetOptions(o)
+		ctx.ApplyOptions()
+		c.Draw(dst, ctx)
+		if c.view.Calm != calm {
+			t.Errorf("calm %v: crawl renderer has %v", calm, c.view.Calm)
+		}
+	}
+}
+
+func TestArrivalCalmReachesTheRaid(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	s := newRaidScreen(ctx, raidState())
+	dst := ebiten.NewImage(game.ScreenW, game.ScreenH)
+	for _, calm := range []bool{true, false} {
+		o := ctx.Profile.Settings.Options()
+		o.Calm = calm
+		ctx.Profile.Settings.SetOptions(o)
+		ctx.ApplyOptions()
+		s.drawView(dst, ctx)
+		if s.view.Calm != calm {
+			t.Errorf("calm %v: raid renderer has %v", calm, s.view.Calm)
+		}
 	}
 }

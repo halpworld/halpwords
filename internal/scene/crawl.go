@@ -192,8 +192,10 @@ type Crawl struct {
 	banner      string
 	sub         string // smaller line under the banner
 	bannerT     int
-	arrival     []arrivalLine // the floor-arrival card
-	arriveT     int           // ticks of the card left
+	arrival     []arrivalLine    // the floor-arrival card
+	arriveT     int              // ticks of the card left
+	decor       []raycast.Sprite // the world's props, from the look of the floor
+	air         uint64           // ticks of moving air (particles), not counted while paused
 	floats      []floater
 }
 
@@ -210,12 +212,15 @@ func newCrawl(r *run) *Crawl {
 func crawlOn(r *run, l *dungeon.Level) *Crawl {
 	th := r.themeFor()
 	dress(l, r.script())
+	view := raycast.New(viewW, viewH)
+	view.SetWorld(th)
 	return &Crawl{
 		run:    r,
 		level:  l,
 		theme:  th,
 		tex:    raycast.NewTextures(th, l.Seed),
-		view:   raycast.New(viewW, viewH),
+		view:   view,
+		decor:  raycast.Decor(l, th), // never part of the level or a save
 		img:    ebiten.NewImage(viewW, viewH),
 		chest:  [2]*proc.Indexed{proc.ChestSprite(false), proc.ChestSprite(true)},
 		looks:  map[*dungeon.Monster][2]*proc.Indexed{},
@@ -297,6 +302,7 @@ func (c *Crawl) Update(ctx *game.Context) error {
 		return nil
 	}
 	c.fx.Update()
+	c.air++
 	if c.freeze > 0 {
 		c.freeze-- // a moment's stillness after a critical hit
 		if b := c.battle; b != nil {
@@ -745,7 +751,7 @@ func (c *Crawl) look(m *dungeon.Monster) [2]*proc.Indexed {
 }
 
 func (c *Crawl) sprites(tick uint64) []raycast.Sprite {
-	var out []raycast.Sprite
+	out := append([]raycast.Sprite(nil), c.decor...)
 	for p, ch := range c.level.Chests {
 		if p.Manhattan(c.pos) > 12 {
 			continue
@@ -793,7 +799,10 @@ func (c *Crawl) sprites(tick uint64) []raycast.Sprite {
 // Draw implements game.Scene.
 func (c *Crawl) Draw(dst *ebiten.Image, ctx *game.Context) {
 	dst.Fill(pal.Black)
-	c.view.Render(c.level, c.tex, c.camera(), c.sprites(ctx.Tick), ctx.Tick)
+	c.view.Calm = c.calm(ctx)
+	cam := c.camera()
+	c.view.Render(c.level, c.tex, cam, c.sprites(ctx.Tick), ctx.Tick)
+	c.view.DrawParticles(cam, c.air)
 	c.img.WritePixels(c.view.Img.Pix)
 
 	gfx.Window(dst, viewX-4, viewY-4, viewW*gfx.ArtScale+8, viewH*gfx.ArtScale+8)

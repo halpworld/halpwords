@@ -58,11 +58,11 @@ func TestQAArrivalLateScript(t *testing.T) {
 	c := testCrawl(t, ctx)
 	c.theme = &proc.Themes[1]
 	c.startArrival()
-	c.arriveT = 20
+	c.arriveT = arrivalFade + 20
 	c.run.ai = &runAI{scripts: map[int]*llm.Script{1: {Name: "The Late Pantry"}}}
 	c.lateScript(&llm.Script{Name: "The Late Pantry"})
 	// A card still up gets the name, and its time is left alone.
-	if c.arriveT != 20 {
+	if c.arriveT != arrivalFade+20 {
 		t.Errorf("late script changed the card's time: %d", c.arriveT)
 	}
 	got := arrivalTexts(c.arrival)

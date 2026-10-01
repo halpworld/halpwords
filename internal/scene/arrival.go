@@ -37,6 +37,9 @@ var taglines = map[string]string{
 	"Whispering Library": "Books whisper. Listen closely.",
 }
 
+// arrivalHint is the key that skips the card, in its corner.
+const arrivalHint = "Space"
+
 // arrivalLine is one line of the arrival card.
 type arrivalLine struct {
 	text  string
@@ -185,6 +188,7 @@ func fitLines(f *gfx.Font, l arrivalLine, w int) []arrivalLine {
 type placedLine struct {
 	arrivalLine
 	x, y int
+	hint bool // the key hint in the corner, not centred
 }
 
 // layoutArrival centres the lines in a view vw by vh at (viewX, viewY),
@@ -204,6 +208,9 @@ func layoutArrival(f *gfx.Font, lines []arrivalLine, vw, vh int) ([]placedLine, 
 			}
 		}
 	}
+	hw := f.Width(arrivalHint, 1)
+	w = max(w, hw)
+	h += gap + gfx.LineHeight
 	box := image.Rect(0, 0, w+2*pad, h+2*pad)
 	box = box.Add(image.Pt(viewX+(vw-box.Dx())/2, viewY+min(40, max(0, (vh-box.Dy())/3))))
 	y := box.Min.Y + pad
@@ -213,6 +220,10 @@ func layoutArrival(f *gfx.Font, lines []arrivalLine, vw, vh int) ([]placedLine, 
 		l.y = y
 		y += gfx.LineHeight*l.scale + gap
 	}
+	placed = append(placed, placedLine{
+		arrivalLine: arrivalLine{arrivalHint, 1, pal.Ash, false},
+		x:           box.Max.X - pad - hw, y: box.Max.Y - pad - gfx.LineHeight, hint: true,
+	})
 	return placed, box
 }
 

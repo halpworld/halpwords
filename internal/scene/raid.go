@@ -123,6 +123,7 @@ func (s *RaidScreen) stage(seed uint64) {
 	y := float64(room.Y+room.H/2) + 0.5
 	s.level, s.tex = l, raycast.NewTextures(th, l.Seed)
 	s.view, s.img = raycast.New(viewW, viewH), ebiten.NewImage(viewW, viewH)
+	s.view.SetWorld(th)
 	s.cam = raycast.NewCamera(float64(room.X)+0.05, y, 0, 0.75)
 	s.bx, s.by = float64(room.X+1)+0.5, y
 }
@@ -278,7 +279,9 @@ func (s *RaidScreen) Draw(dst *ebiten.Image, ctx *game.Context) {
 func (s *RaidScreen) drawView(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	sp := raycast.Sprite{X: s.bx, Y: s.by, Img: s.look[int(ctx.Tick/24)%2], Size: s.size, Flash: s.flash > 4}
+	s.view.Calm = ctx.Calm()
 	s.view.Render(s.level, s.tex, s.cam, []raycast.Sprite{sp}, ctx.Tick)
+	s.view.DrawParticles(s.cam, ctx.Tick)
 	s.img.WritePixels(s.view.Img.Pix)
 	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
 	gfx.Window(dst, viewX-4, viewY-4, vw+8, vh+8)
