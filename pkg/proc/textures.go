@@ -30,12 +30,12 @@ func ToIndexed(img *image.RGBA) *Indexed {
 // Variant 1 adds moss, variant 2 a crack. The Crypt's walls in the 3D view
 // are still exactly these.
 func WallTexture(t *Theme, seed uint64, variant int) *Indexed {
-	s := Surface{Paint: WallBricks, Look: Look{Base: t.Wall, Accent: t.Moss}}
+	s := Surface{Paint: wallBricks, Look: Look{Base: t.Wall, Accent: t.Moss}}
 	switch variant {
 	case 1:
-		s.Mods = []Modifier{ModMoss}
+		s.Mods = []modifier{modMoss}
 	case 2:
-		s.Mods = []Modifier{ModCrack}
+		s.Mods = []modifier{modCrack}
 	}
 	return s.Make(seed)
 }
@@ -173,7 +173,7 @@ func arch(x, y, x0, y0, x1 int) bool {
 
 // FloorTexture draws flagstones.
 func FloorTexture(t *Theme, seed uint64) *Indexed {
-	return Surface{Paint: FloorFlagstones, Look: Look{Base: t.Floor}}.Make(seed)
+	return Surface{Paint: floorFlagstones, Look: Look{Base: t.Floor}}.Make(seed)
 }
 
 // beamWood colours the timber beams of the old ceilings, dark to light.
@@ -181,7 +181,7 @@ var beamWood = []color.RGBA{pal.Black, pal.Plum, pal.Mahogany, pal.Brown}
 
 // CeilingTexture draws dark stone blocks with a timber beam.
 func CeilingTexture(t *Theme, seed uint64) *Indexed {
-	return Surface{Paint: CeilBeams, Look: Look{Base: t.Ceil, Accent: beamWood}}.Make(seed)
+	return Surface{Paint: ceilBeams, Look: Look{Base: t.Ceil, Accent: beamWood}}.Make(seed)
 }
 
 // StairsTexture draws stairs going down into the dark, seen from above.
