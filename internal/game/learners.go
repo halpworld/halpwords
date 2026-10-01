@@ -1,9 +1,11 @@
 package game
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/profile"
@@ -15,13 +17,14 @@ import (
 // last one who played current, unless they have to sign in first: then a
 // guest plays and the Switch learner screen comes first, so the next
 // child at a shared computer never starts in a classmate's progress. A
-// grown-up's pairing-code learner at home resumes as before. If this
-// fails, the game plays with the user's folder as before.
+// grown-up's pairing-code learner at home resumes as before, and so does
+// a learner whose sign-in with a school account was started a moment ago
+// and is waiting for the website (the web game leaves the page for it).
+// If this fails, the game plays with the user's folder as before.
 func (c *Context) openLearners() {
 	ls, err := profile.OpenLearners(save.Root)
 	if err != nil {
-		c.Notify("Couldn't read who plays here")
-		save.Use(save.Root)
+		c.noLearners(err)
 		return
 	}
 	c.Learners = ls
@@ -36,21 +39,52 @@ func (c *Context) openLearners() {
 		c.Notify("Learner data was repaired: sign in again to open a learner")
 	}
 	id := ls.Current
-	if cur := ls.CurrentLearner(); cur != nil && c.NeedsSignIn(cur) {
+	if cur := ls.CurrentLearner(); cur != nil && c.NeedsSignIn(cur) && !resumingSSO(cur, time.Now()) {
 		g, err := c.guest()
 		if err != nil {
-			c.Notify("Couldn't read who plays here")
-			c.Learners = nil
-			save.Use(save.Root)
+			c.noLearners(err)
 			return
 		}
 		id, c.needWho = g.ID, true
 	}
 	if err := ls.Use(id); err != nil {
-		c.Notify("Couldn't read who plays here")
-		c.Learners = nil
-		save.Use(save.Root)
+		c.noLearners(err)
 	}
+}
+
+// noLearners is the game playing without a list of learners, when it
+// couldn't be read. The files of the game from before W2.5 move into the
+// first learner's folder, so the user's folder holds no learner's
+// progress once that has happened and the game may play in it as it did
+// before. If a login of a learner is still there (the move failed), the
+// game plays in a folder of nobody's instead and doesn't open it: the
+// next child must not play as, and send answers for, that learner.
+func (c *Context) noLearners(err error) {
+	c.Learners = nil
+	c.Notify("Couldn't read who plays here")
+	if p := link.PeekFolder(save.Root); p.Tokens || p.PendingSSO {
+		c.Notify("Couldn't read who plays here: not playing as the learner signed in")
+		sinkFolder.RemoveAll()
+		save.Use(sinkFolder)
+		return
+	}
+	save.Use(save.Root)
+}
+
+// ssoWait is how long a sign-in with a school account waiting for the
+// website still counts for start-up.
+const ssoWait = 10 * time.Minute
+
+// resumingSSO reports whether a learner is waiting for the website to
+// finish their sign-in with a school account, started less than ssoWait
+// ago: they hold no tokens yet, so there is nothing of anyone's to open.
+func resumingSSO(l *profile.Learner, now time.Time) bool {
+	if l.Lock != nil || l.NeedsSignIn {
+		return false
+	}
+	p := link.PeekFolder(l.Folder())
+	return p.PendingSSO && !p.Tokens && !p.SSOStarted.IsZero() &&
+		!p.SSOStarted.After(now) && now.Sub(p.SSOStarted) < ssoWait
 }
 
 // TakeNeedWho reports, once, that the game started on a guest because the
@@ -65,7 +99,7 @@ func (c *Context) TakeNeedWho() bool {
 // sign-in at school, or a school account sign-in on its way.
 func schoolTokens(l *profile.Learner) bool {
 	p := link.PeekFolder(l.Folder())
-	return p.PendingSSO || p.Tokens && p.School()
+	return p.PendingSSO || p.Tokens && (p.School() || p.Damaged)
 }
 
 // NeedsSignIn reports whether a learner can be opened only by signing in:
@@ -90,7 +124,7 @@ func hasTokens(l *profile.Learner) bool {
 // no lock, no sign-in, no files at all in their folder, and a name the
 // game gave. Only a guest like that is safe for the next child.
 func (c *Context) Pristine(l *profile.Learner) bool {
-	if l.Lock != nil || l.NeedsSignIn || l.LearnerID != "" || hasTokens(l) {
+	if l.Lock != nil || l.NeedsSignIn || l.LearnerID != "" || l.Owner != "" || hasTokens(l) {
 		return false
 	}
 	if l.Name != "" && !strings.HasPrefix(l.Name, "Player ") {
@@ -212,23 +246,42 @@ func (c *Context) AddLearner(name string) (*profile.Learner, error) {
 	if err := c.switchLearner(l.ID); err != nil {
 		return nil, err
 	}
-	c.addedFrom = prev
+	c.addedFrom, c.addedID, c.adopting = prev, l.ID, ""
 	return l, nil
+}
+
+// AddPending reports whether the learner playing was just added by
+// AddLearner, and CancelAddLearner would take them back.
+func (c *Context) AddPending() bool {
+	return c.Learners != nil && c.addedID != "" && c.addedID == c.Learners.Current
 }
 
 // CancelAddLearner takes back the learner AddLearner added and goes back
 // to the one who played before: they were open already, even with a lock.
+// If nobody played before (the game had failed closed), nobody plays
+// again and the new learner goes, if nobody has played as them.
 func (c *Context) CancelAddLearner() error {
-	prev := c.addedFrom
-	c.addedFrom = ""
-	added := c.Learners.Current
-	if prev == "" || prev == added || c.Learners.Find(prev) == nil {
+	if !c.AddPending() {
 		return nil
 	}
-	if err := c.switchLearner(prev); err != nil {
-		return err
+	prev, added := c.addedFrom, c.addedID
+	c.addedFrom, c.addedID, c.adopting = "", "", ""
+	switch {
+	case prev != "" && prev != added && c.Learners.Find(prev) != nil:
+		if err := c.switchLearner(prev); err != nil {
+			return err
+		}
+		return c.RemoveLearner(added)
+	case prev == "" && c.Pristine(c.Learners.Find(added)):
+		l := c.Learners.Find(added)
+		c.failClosed("")
+		c.waitClosed(l.Folder())
+		if err := c.Learners.Remove(added); err != nil {
+			return err
+		}
+		return c.Learners.Save()
 	}
-	return c.RemoveLearner(added)
+	return nil
 }
 
 // RemoveLearner deletes a learner's folder, with everything in it, and
@@ -271,7 +324,7 @@ func (c *Context) leaveLearner() error {
 		}
 	}
 	if err != nil {
-		c.failClosed()
+		c.failClosed("Couldn't switch learners: choose who is playing")
 	}
 	return err
 }
@@ -301,14 +354,16 @@ func (c *Context) guest() (*profile.Learner, error) {
 const sinkFolder = save.Folder(profile.ProfilesDir + "/_none")
 
 // failClosed leaves nobody as the learner playing. The title sees that
-// and goes to the Switch learner screen before any play.
-func (c *Context) failClosed() {
+// and goes to the Switch learner screen before any play. msg, if not
+// empty, is shown. Anything left in the folder of nobody's is cleared.
+func (c *Context) failClosed(msg string) {
 	c.EndSession()
 	if c.Link != nil {
 		c.closeLink(save.Current(), c.Link)
 	}
 	c.Learners.Current = ""
 	c.Learners.Save()
+	sinkFolder.RemoveAll()
 	save.Use(sinkFolder)
 	c.waitClosed(sinkFolder)
 	c.openLink()
@@ -317,7 +372,9 @@ func (c *Context) failClosed() {
 	c.loadProfile()
 	c.lockSettings()
 	c.ApplyOptions()
-	c.Notify("Couldn't switch learners: choose who is playing")
+	if msg != "" {
+		c.Notify(msg)
+	}
 }
 
 // SignedIn is called once the learner playing has signed in: it keeps a
@@ -353,7 +410,7 @@ func (c *Context) SignOut() (done func() bool) {
 	c.Link.Unlink()
 	if keep || l == nil {
 		if l != nil {
-			l.LearnerID = ""
+			l.Owner, l.LearnerID = cmp.Or(l.LearnerID, l.Owner), ""
 			if school && l.Lock == nil {
 				l.NeedsSignIn = true // the tokens are gone: nothing else says so
 			}
@@ -392,7 +449,9 @@ func (c *Context) SignOut() (done func() bool) {
 }
 
 // notePlayer keeps the linked learner's name and ID on the list of
-// learners, for the Switch learner screen.
+// learners, for the Switch learner screen. It also finishes a sign-in
+// again to a learner's folder (SignInFor), now the server says who
+// signed in.
 func (c *Context) notePlayer() {
 	l := c.Learner()
 	me := c.Link.Me()
@@ -400,9 +459,63 @@ func (c *Context) notePlayer() {
 		return
 	}
 	name, id := me.Learner.DisplayName, me.Learner.ID
-	if name == "" || (l.Name == name && l.LearnerID == id) {
+	if c.adopting != "" && id != "" && c.adopt(l, id) {
 		return
 	}
-	l.Name, l.LearnerID = name, id
+	if name == "" || (l.Name == name && l.LearnerID == id && l.Owner == id) {
+		return
+	}
+	l.Name, l.LearnerID, l.Owner = name, id, id
 	c.Learners.Save()
+}
+
+// SignInFor says the learner playing now (a new one) is signing in to
+// open the folder of the learner target again, who has to sign in. If
+// the server says it is the same learner, the game moves the sign-in
+// into target's folder and plays there, and the new learner goes;
+// if it is somebody else, the new learner stays and target is left alone.
+func (c *Context) SignInFor(target string) { c.adopting = target }
+
+// owner is the learner ID on the website that a learner's folder is for,
+// or "".
+func owner(l *profile.Learner) string {
+	switch {
+	case l.Owner != "":
+		return l.Owner
+	case l.LearnerID != "":
+		return l.LearnerID
+	}
+	return link.PeekFolder(l.Folder()).LearnerID
+}
+
+// adopt moves the sign-in of n, the learner playing, into the folder of
+// the learner SignInFor named, if the server's learner ID serverID is
+// theirs. It reports whether it did.
+func (c *Context) adopt(n *profile.Learner, serverID string) bool {
+	target := c.Learners.Find(c.adopting)
+	c.adopting = ""
+	if target == nil || target.ID == n.ID || owner(target) != serverID {
+		return false
+	}
+	c.EndSession()
+	old := c.Link
+	c.Link = nil
+	old.Close() // it writes link.json until it has closed
+	err := link.MoveState(n.Folder(), target.Folder())
+	if err != nil {
+		c.switchLearner(n.ID) // stay as the new learner, open again
+		return false
+	}
+	target.Lock, target.NeedsSignIn = n.Lock, n.NeedsSignIn
+	target.LearnerID, target.Owner = serverID, serverID
+	if err := c.switchLearner(target.ID); err != nil {
+		c.Notify("Couldn't open your progress again")
+		return true
+	}
+	c.addedFrom, c.addedID = "", ""
+	c.Learners.Remove(n.ID)
+	c.Learners.Save()
+	c.Notify("Welcome back!")
+	c.notePlayer()
+	return true
 }

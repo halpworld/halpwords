@@ -1533,3 +1533,25 @@ func TestSignInWithClassCode(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A link.json that can't be parsed in full still counts as holding
+// tokens, like Open reads it: a type error in an unrelated field must not
+// hide a sign-in (#38).
+func TestPeekFolderFailsClosed(t *testing.T) {
+	st := newMemStore()
+	if p := PeekFolder(st); p.Tokens || p.Damaged {
+		t.Fatalf("empty folder: %+v", p)
+	}
+	st.files[stateFile] = []byte(`{"Refresh":"hwr_1","Way":"card","NextSeq":"oops"}`)
+	if p := PeekFolder(st); !p.Tokens || !p.Damaged || p.Way != WayCard {
+		t.Errorf("type error in another field: %+v", p)
+	}
+	st.files[stateFile] = []byte(`{"Refresh":`)
+	if p := PeekFolder(st); !p.Tokens || !p.Damaged {
+		t.Errorf("cut off: %+v", p)
+	}
+	st.files[stateFile] = []byte(`{"Refresh":"hwr_1","Way":"pairing","Me":{"learner":{"id":"lrn_1"}}}`)
+	if p := PeekFolder(st); !p.Tokens || p.Damaged || p.Way != WayPairing || p.LearnerID != "lrn_1" {
+		t.Errorf("good file: %+v", p)
+	}
+}

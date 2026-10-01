@@ -78,6 +78,12 @@ func (a *Account) say(msg string, c color.RGBA) { a.msg, a.msgCol = msg, c }
 
 // Update implements game.Scene.
 func (a *Account) Update(ctx *game.Context) error {
+	// Nobody chosen (a switch failed): the Account screen would link a
+	// game that has nobody to link it to.
+	if ctx.Learners != nil && ctx.Learner() == nil {
+		ctx.Replace(NewLearners(ctx))
+		return nil
+	}
 	if a.signingOut != nil {
 		if a.signingOut() {
 			a.signingOut = nil

@@ -14,6 +14,7 @@ package link
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"runtime"
@@ -703,20 +704,66 @@ type Peek struct {
 	Tokens     bool
 	Way        string
 	PendingSSO bool
+	// SSOStarted is when the waiting sign-in started, if it says.
+	SSOStarted time.Time
+	// LearnerID is the learner's ID on the server, if link.json knows it.
+	LearnerID string
+	// Damaged is a link.json that can't be read or parsed in full. It
+	// counts as holding tokens: Open uses whatever it can read of it, so
+	// anything else would let a damaged file hide a sign-in.
+	Damaged bool
 }
 
-// PeekFolder reads link.json in the store f. A missing or damaged file says
-// nothing is there.
+// PeekFolder reads link.json in the store f like Open does: a file that
+// is there but can't be read or parsed in full still counts as holding
+// tokens, and gives what could be read of it.
 func PeekFolder(f Store) Peek {
 	data, err := f.Read(stateFile)
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		return Peek{}
+	}
+	if err != nil {
+		return Peek{Tokens: true, Damaged: true}
 	}
 	var st state
+	p := Peek{}
 	if json.Unmarshal(data, &st) != nil {
-		return Peek{}
+		p.Tokens, p.Damaged = true, true
 	}
-	return Peek{Tokens: st.linked(), Way: st.Way, PendingSSO: st.SSO != nil}
+	p.Tokens = p.Tokens || st.linked()
+	p.Way, p.PendingSSO = st.Way, st.SSO != nil
+	if st.SSO != nil {
+		p.SSOStarted = st.SSO.Started
+	}
+	if st.Me != nil {
+		p.LearnerID = st.Me.Learner.ID
+	}
+	return p
+}
+
+// MoveState moves the sign-in in from's link.json into to's, for a
+// learner who signs in again on a folder of their own: the lists and
+// what was fetched are left behind to be fetched again, and the event
+// numbers never go back. from must not be open.
+func MoveState(from, to Store) error {
+	data, err := from.Read(stateFile)
+	if err != nil {
+		return err
+	}
+	var in, old state
+	if err := json.Unmarshal(data, &in); err != nil {
+		return err
+	}
+	if data, err := to.Read(stateFile); err == nil {
+		json.Unmarshal(data, &old)
+	}
+	in.NextSeq = max(in.NextSeq, old.NextSeq)
+	in.ListsETag, in.Lists, in.Quests = "", nil, nil
+	out, err := json.MarshalIndent(in, "", "  ")
+	if err != nil {
+		return err
+	}
+	return to.WritePrivate(stateFile, out)
 }
 
 // School reports whether the sign-in was made at school: a login card,

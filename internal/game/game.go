@@ -79,6 +79,10 @@ type Context struct {
 	// addedFrom is the learner who played before AddLearner added
 	// the one playing now, for CancelAddLearner.
 	addedFrom string
+	addedID   string
+	// adopting is the learner whose folder the learner playing now is
+	// signing in to open again, until the server says who signed in.
+	adopting string
 	// needWho is set when the game started on a guest, for TakeNeedWho;
 	// leaveErr makes leaveLearner fail, for tests.
 	needWho  bool

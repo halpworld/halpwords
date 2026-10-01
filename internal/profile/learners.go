@@ -63,6 +63,10 @@ type Learner struct {
 	Name string
 	// LearnerID is their learner ID on the website, once linked.
 	LearnerID string `json:",omitempty"`
+	// Owner is the learner ID on the website of whoever signed in here
+	// last. Unlike LearnerID it stays after a sign-out that keeps the
+	// progress, to tell whether the same learner signs in again.
+	Owner string `json:",omitempty"`
 	// Lock, when set, is the sign-in that opens their folder: the same
 	// login card or pictures they signed in with at school.
 	Lock *Lock `json:",omitempty"`

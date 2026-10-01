@@ -39,6 +39,7 @@ const (
 	lrAdd
 	lrSignOut
 	lrRemove
+	lrRemoveOther // a learner who isn't playing and has nothing to open them
 	lrBack
 )
 
@@ -52,6 +53,23 @@ type Learners struct {
 	signingOut func() bool
 	msg        string
 	msgCol     color.RGBA
+	// victim is the learner a lrRemoveOther waits to remove.
+	victim *profile.Learner
+
+	// The rows and the notes beside them are worked out when the screen
+	// opens and the list changes, not on every draw: each takes reading
+	// the learner's folder.
+	built bool
+	key   lrKey
+	cache []lrRow
+	notes map[string]string
+}
+
+// lrKey is what the rows depend on, to see when they change.
+type lrKey struct {
+	n      int
+	cur    string
+	linked bool
 }
 
 // NewLearners creates the Switch learner screen.
@@ -59,10 +77,34 @@ func NewLearners(ctx *game.Context) game.Scene {
 	return &Learners{bg: backdrop(12, 1.2), confirm: lrPick}
 }
 
+// rows is the rows of the screen, kept until the list changes.
 func (s *Learners) rows(ctx *game.Context) []lrRow {
+	key := lrKey{len(ctx.Learners.List), ctx.Learners.Current, ctx.Link.Linked()}
+	if !s.built || key != s.key {
+		s.build(ctx, key)
+	}
+	return s.cache
+}
+
+// changed makes the rows work themselves out again at the next look.
+func (s *Learners) changed() { s.built = false }
+
+func (s *Learners) build(ctx *game.Context, key lrKey) {
+	s.built, s.key = true, key
+	s.notes = map[string]string{}
 	var rows []lrRow
 	for _, l := range ctx.Learners.List {
 		rows = append(rows, lrRow{learner: l})
+		switch {
+		case l.ID == ctx.Learners.Current && ctx.Pristine(l):
+			s.notes[l.ID] = "playing now (guest)"
+		case l.ID == ctx.Learners.Current:
+			s.notes[l.ID] = "playing now"
+		case l.Lock != nil || ctx.NeedsSignIn(l):
+			s.notes[l.ID] = "sign in to play"
+		case ctx.Pristine(l):
+			s.notes[l.ID] = "(guest)"
+		}
 	}
 	rows = append(rows, lrRow{action: lrAdd})
 	if cur := ctx.Learner(); cur != nil {
@@ -72,7 +114,13 @@ func (s *Learners) rows(ctx *game.Context) []lrRow {
 			rows = append(rows, lrRow{learner: cur, action: lrRemove})
 		}
 	}
-	return append(rows, lrRow{action: lrBack})
+	// Stranded folders: nothing here opens them, so they can only go.
+	for _, l := range ctx.Learners.List {
+		if l.ID != ctx.Learners.Current && l.Lock == nil && ctx.NeedsSignIn(l) {
+			rows = append(rows, lrRow{learner: l, action: lrRemoveOther})
+		}
+	}
+	s.cache = append(rows, lrRow{action: lrBack})
 }
 
 func (s *Learners) say(msg string, c color.RGBA) { s.msg, s.msgCol = msg, c }
@@ -86,6 +134,7 @@ func (s *Learners) Update(ctx *game.Context) error {
 	if s.signingOut != nil {
 		if s.signingOut() {
 			s.signingOut = nil
+			s.changed()
 			s.sel = len(ctx.Learners.List) // the add row
 			s.say("Signed out. Pick your name, or choose + Add a learner.", pal.Lime)
 		}
@@ -121,10 +170,10 @@ func (s *Learners) Update(ctx *game.Context) error {
 		case lrPick:
 			s.pick(ctx, r.learner)
 		case lrAdd:
-			s.add(ctx)
-		case lrSignOut, lrRemove:
+			s.add(ctx, nil)
+		case lrSignOut, lrRemove, lrRemoveOther:
 			ctx.Sound.Play(audio.Select)
-			s.confirm = r.action
+			s.confirm, s.victim = r.action, r.learner
 		case lrBack:
 			s.leave(ctx)
 		}
@@ -144,14 +193,19 @@ func (s *Learners) leave(ctx *game.Context) {
 	ctx.Replace(NewTitle(ctx))
 }
 
-// add starts the sign-in of another learner.
-func (s *Learners) add(ctx *game.Context) {
+// add starts the sign-in of another learner. again is a learner who
+// has to sign in again, or nil: if the same learner signs in, their
+// folder is the one that opens.
+func (s *Learners) add(ctx *game.Context, again *profile.Learner) {
 	ctx.Sound.Play(audio.Select)
 	prev := ctx.Learners.Current
 	if _, err := ctx.AddLearner(""); err != nil {
 		ctx.Sound.Play(audio.Wrong)
 		s.say("Couldn't add a learner: "+err.Error(), pal.Rose)
 		return
+	}
+	if again != nil {
+		ctx.SignInFor(again.ID)
 	}
 	ctx.Replace(NewSignIn(ctx, prev))
 }
@@ -170,9 +224,9 @@ func (s *Learners) pick(ctx *game.Context, l *profile.Learner) {
 		return
 	}
 	if ctx.NeedsSignIn(l) {
-		// Signed in at school with nothing local to open them: they sign
-		// in again, as a new learner.
-		s.add(ctx)
+		// Nothing local opens them: they sign in again, and if it is the
+		// same learner, this folder opens.
+		s.add(ctx, l)
 		return
 	}
 	switchTo(ctx, l)
@@ -205,6 +259,18 @@ func (s *Learners) doConfirmed(ctx *game.Context) {
 			s.say("Couldn't remove: "+err.Error(), pal.Rose)
 			return
 		}
+		s.changed()
+		s.sel = 0
+		s.say("Removed.", pal.Lime)
+	case lrRemoveOther:
+		if s.victim == nil || s.victim.ID == ctx.Learners.Current {
+			return
+		}
+		if err := ctx.RemoveLearner(s.victim.ID); err != nil {
+			s.say("Couldn't remove: "+err.Error(), pal.Rose)
+			return
+		}
+		s.changed()
 		s.sel = 0
 		s.say("Removed.", pal.Lime)
 	}
@@ -241,23 +307,16 @@ func (s *Learners) Draw(dst *ebiten.Image, ctx *game.Context) {
 		label, note := "", ""
 		switch r.action {
 		case lrPick:
-			label = r.learner.Name
-			switch {
-			case r.learner.ID == ctx.Learners.Current && ctx.Pristine(r.learner):
-				note = "playing now (guest)"
-			case r.learner.ID == ctx.Learners.Current:
-				note = "playing now"
-			case r.learner.Lock != nil || ctx.NeedsSignIn(r.learner):
-				note = "sign in to play"
-			case ctx.Pristine(r.learner):
-				note = "(guest)"
-			}
+			label, note = r.learner.Name, s.notes[r.learner.ID]
 		case lrAdd:
 			label = "+ Sign in / add a learner"
 		case lrSignOut:
 			label = "Sign out " + r.learner.Name
 		case lrRemove:
 			label = "Remove " + r.learner.Name + " from this computer"
+		case lrRemoveOther:
+			label = "Remove " + r.learner.Name + " from this computer"
+			note = "can't sign in here"
 		case lrBack:
 			label = "Back"
 		}
@@ -273,7 +332,7 @@ func (s *Learners) Draw(dst *ebiten.Image, ctx *game.Context) {
 	switch s.confirm {
 	case lrSignOut:
 		drawSignOut(dst, ctx)
-	case lrRemove:
+	case lrRemove, lrRemoveOther:
 		dx, dy := dialog(dst, ctx, "REMOVE?", 500, 170)
 		f.DrawShadow(dst, "This deletes this learner's hero, word memory,", dx, dy, 1, pal.Tan)
 		f.DrawShadow(dst, "Hall of Fame and word lists from this computer.", dx, dy+16, 1, pal.Tan)
@@ -458,7 +517,7 @@ func (s *SignIn) back(ctx *game.Context) {
 // giveUp leaves the screen. A learner being added is removed again, and
 // the one before plays.
 func (s *SignIn) giveUp(ctx *game.Context) {
-	if s.prev != "" && !ctx.Link.Linked() {
+	if (s.prev != "" || ctx.AddPending()) && !ctx.Link.Linked() {
 		ctx.CancelAddLearner()
 		ctx.Replace(NewLearners(ctx))
 		return
@@ -669,6 +728,7 @@ func (s *SignIn) updateText(ctx *game.Context) {
 		s.ask(ctx, "", text)
 	case input.Confirm():
 		ctx.Sound.Play(audio.Perfect)
+		ctx.SignInFor("") // playing without signing in: nobody to open again
 		if l := ctx.Learner(); l != nil {
 			l.Name = text
 			ctx.SignedIn(nil)

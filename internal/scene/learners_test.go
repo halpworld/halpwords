@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
+	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/pkg/proc"
 )
 
@@ -126,5 +128,101 @@ func TestUpdateNameSWOnlyJump(t *testing.T) {
 		if s.sel != c.want {
 			t.Errorf("key %v typing %q from %d: selected %d, want %d", c.key, c.chars, c.from, s.sel, c.want)
 		}
+	}
+}
+
+func learnersCtx(t *testing.T) *game.Context {
+	t.Helper()
+	useTempDir(t)
+	ctx := &game.Context{Sound: &game.Sound{Muted: true}}
+	ctx.TestOpen()
+	if ctx.Learners == nil {
+		t.Fatal("no learners")
+	}
+	t.Cleanup(func() {
+		ctx.Link.Close()
+		save.Use(save.Root)
+	})
+	return ctx
+}
+
+// The notes beside the rows are worked out when the list changes, and
+// Draw reads them as they were (#38).
+func TestLearnersNotesCached(t *testing.T) {
+	ctx := learnersCtx(t)
+	other, err := ctx.AddLearner("Sam")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.NeedsSignIn = true
+	ctx.Learners.Save()
+	if err := ctx.SwitchLearner(ctx.Learners.List[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	s := NewLearners(ctx).(*Learners)
+	s.rows(ctx)
+	if s.notes[other.ID] != "sign in to play" || s.notes[ctx.Learner().ID] != "playing now (guest)" {
+		t.Errorf("notes %v", s.notes)
+	}
+	// Nothing in the key moved, so a change under the screen isn't looked at.
+	other.NeedsSignIn = false
+	s.rows(ctx)
+	if s.notes[other.ID] != "sign in to play" {
+		t.Errorf("worked out again without a change: %v", s.notes)
+	}
+	s.changed()
+	s.rows(ctx)
+	if s.notes[other.ID] == "sign in to play" {
+		t.Errorf("not worked out after a change: %v", s.notes)
+	}
+}
+
+// A learner who needs to sign in and has no lock can be removed from the
+// screen, after a confirmation, but not the learner playing (#38).
+func TestLearnersRemoveStranded(t *testing.T) {
+	ctx := learnersCtx(t)
+	playing := ctx.Learner()
+	other, err := ctx.AddLearner("Sam")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.NeedsSignIn = true
+	ctx.Learners.Save()
+	if err := ctx.SwitchLearner(playing.ID); err != nil {
+		t.Fatal(err)
+	}
+	s := NewLearners(ctx).(*Learners)
+	var rm *lrRow
+	for _, r := range s.rows(ctx) {
+		if r.action == lrRemoveOther && r.learner == other {
+			rm = &r
+		}
+		if r.action == lrRemoveOther && r.learner == playing {
+			t.Error("a Remove row for the learner playing")
+		}
+	}
+	if rm == nil {
+		t.Fatal("no Remove row for the stranded learner")
+	}
+	s.confirm, s.victim = lrRemoveOther, other
+	s.doConfirmed(ctx)
+	if ctx.Learners.Find(other.ID) != nil || ctx.Learners.Find(playing.ID) == nil {
+		t.Errorf("learners after: %v", ctx.Learners.List)
+	}
+}
+
+// With nobody chosen, the Account screen goes to Switch learner and the
+// keys on it do nothing (#38).
+func TestAccountWithNobodyGoesToSwitch(t *testing.T) {
+	ctx := learnersCtx(t)
+	a := NewAccount(ctx)
+	next := ctx.TestScenes(a)
+	ctx.Learners.Current = ""
+	ctx.Input = &input.State{}
+	if err := a.Update(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := next().(*Learners); !ok {
+		t.Errorf("Account stayed")
 	}
 }

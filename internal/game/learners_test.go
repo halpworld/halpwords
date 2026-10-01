@@ -2,6 +2,7 @@ package game
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -496,4 +497,147 @@ func TestRebuildNeedsSignIn(t *testing.T) {
 	if cur := again.Learner(); cur == nil || cur.ID == first.ID {
 		t.Errorf("started on %+v", cur)
 	}
+}
+
+// A learner whose link.json is damaged counts as holding tokens: they
+// have to sign in, and are never a guest (#38).
+func TestDamagedLinkJSONNeedsSignIn(t *testing.T) {
+	ctx, first, _ := sharedComputer(t)
+	first.Folder().WritePrivate("link.json", []byte(`{"Refresh":"hwr_x","Way":"pairing","NextSeq":"oops"}`))
+	if !ctx.NeedsSignIn(first) || ctx.Pristine(first) {
+		t.Error("a damaged link.json hides a sign-in")
+	}
+}
+
+// A sign-in with a school account waiting for the website keeps its
+// learner at start-up if it started less than 10 minutes ago; later, or
+// with tokens, a guest plays (#38).
+func TestStartupResumesRecentSSO(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		ago     time.Duration
+		tokens  bool
+		resumes bool
+	}{
+		{"just started", time.Minute, false, true},
+		{"just under the limit", 9*time.Minute + 50*time.Second, false, true},
+		{"too long ago", 11 * time.Minute, false, false},
+		{"has tokens", time.Minute, true, false},
+		{"no start time", 0, false, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ctx, first, _ := sharedComputer(t)
+			sso := `{"device_code":"d","user_code":"u","expires":"` + time.Now().Add(time.Hour).Format(time.RFC3339) + `"`
+			if c.ago > 0 {
+				sso += `,"started":"` + time.Now().Add(-c.ago).Format(time.RFC3339) + `"`
+			}
+			sso += `}`
+			refresh := ""
+			if c.tokens {
+				refresh = `"Refresh":"hwr_x","Way":"sso",`
+			}
+			data := `{"Server":"http://127.0.0.1:1",` + refresh + `"NextSeq":1,"SSO":` + sso + `}`
+			first.Folder().WritePrivate("link.json", []byte(data))
+			ctx.Learners.Current = first.ID
+			ctx.Learners.Save()
+			ctx.Link.Close()
+			again := &Context{Sound: &Sound{Muted: true}}
+			again.openLearners()
+			cur := again.Learner()
+			if cur == nil || (cur.ID == first.ID) != c.resumes {
+				t.Errorf("resumes %v: playing %+v", c.resumes, cur)
+			}
+		})
+	}
+}
+
+// The same learner signing in again opens their own folder; somebody
+// else gets a new learner and the old folder is left alone (#38).
+func TestSignInAgainAdoptsSameFolder(t *testing.T) {
+	for _, same := range []bool{true, false} {
+		ctx, _, _ := sharedComputer(t)
+		old, _ := ctx.Learners.Add("Sam")
+		old.NeedsSignIn, old.Owner = true, "lrn_1"
+		old.Folder().Write("halloffame.json", []byte(`{"Name":"Sam"}`))
+		ctx.Learners.Save()
+		added, err := ctx.AddLearner("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx.SignInFor(old.ID)
+		// The sign-in happens, and the server says who it was.
+		who := "lrn_1"
+		if !same {
+			who = "lrn_2"
+		}
+		ctx.Link.Close()
+		data := `{"Server":"http://127.0.0.1:1","Refresh":"hwr_new","Way":"sso","NextSeq":5,"Me":{"learner":{"id":"` + who + `","display_name":"Sam"}}}`
+		if err := added.Folder().WritePrivate("link.json", []byte(data)); err != nil {
+			t.Fatal(err)
+		}
+		if err := ctx.switchLearner(added.ID); err != nil {
+			t.Fatal(err)
+		}
+		ctx.notePlayer()
+		if same {
+			if ctx.Learner() != old || ctx.Learners.Find(added.ID) != nil || !ctx.Link.Linked() {
+				t.Fatalf("same learner: playing %+v, new learner kept: %v", ctx.Learner(), ctx.Learners.Find(added.ID) != nil)
+			}
+			if got, _ := old.Folder().Read("halloffame.json"); !strings.Contains(string(got), "Sam") {
+				t.Error("their progress is gone")
+			}
+			if old.Owner != "lrn_1" {
+				t.Errorf("owner %q", old.Owner)
+			}
+			continue
+		}
+		if ctx.Learner() != added || ctx.Learners.Find(old.ID) == nil {
+			t.Fatalf("somebody else: playing %+v", ctx.Learner())
+		}
+		if _, err := old.Folder().Read("link.json"); err == nil {
+			t.Error("the old folder got somebody else's sign-in")
+		}
+		if !old.NeedsSignIn {
+			t.Error("the old learner can be chosen without signing in")
+		}
+	}
+}
+
+// failClosed clears what a game with nobody playing left in the folder of
+// nobody's, and leaves nobody playing; cancelling an add from there
+// removes the new learner again (#38).
+func TestFailClosedClearsSinkAndCancelAdd(t *testing.T) {
+	ctx, _, _ := sharedComputer(t)
+	sinkFolder.Write("halloffame.json", []byte(`{"Name":"Old"}`))
+	ctx.failClosed("")
+	if names, _ := sinkFolder.All(); len(names) > 0 {
+		t.Errorf("left in the folder of nobody's: %v", names)
+	}
+	n := len(ctx.Learners.List)
+	added, err := ctx.AddLearner("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ctx.AddPending() {
+		t.Fatal("no add to cancel")
+	}
+	if err := ctx.CancelAddLearner(); err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Learner() != nil || len(ctx.Learners.List) != n || ctx.Learners.Find(added.ID) != nil {
+		t.Errorf("playing %v with %d learners, want nobody and %d", ctx.Learner(), len(ctx.Learners.List), n)
+	}
+}
+
+// If the learners can't be read and the folder of the game from before
+// still holds a login, the game doesn't play as them (#38).
+func TestNoLearnersDoesNotOpenLegacyLogin(t *testing.T) {
+	useTempDir(t)
+	save.Root.WritePrivate("link.json", []byte(`{"Refresh":"hwr_x","Way":"card","NextSeq":1}`))
+	ctx := &Context{Sound: &Sound{Muted: true}}
+	ctx.noLearners(errors.New("boom"))
+	if save.Current() == save.Root || ctx.Learners != nil {
+		t.Errorf("playing in %q", save.Current())
+	}
+	save.Use(save.Root)
 }
