@@ -196,3 +196,113 @@ func TestCancelAddLearner(t *testing.T) {
 		t.Errorf("playing %v, new learner still listed: %v", ctx.Learner(), ctx.Learners.Find(added.ID) != nil)
 	}
 }
+
+// The lock counts wrong tries across calls: after MaxTries the right
+// secret is refused too, and nothing switches (#38).
+func TestUnlockLearnerLockout(t *testing.T) {
+	ctx, first, locked := sharedComputer(t)
+	for i := 1; i < profile.MaxTries; i++ {
+		if ok, err := ctx.UnlockLearner(locked.ID, "WRONG"); ok || err != nil {
+			t.Fatalf("try %d: %v, %v", i, ok, err)
+		}
+	}
+	if ok, err := ctx.UnlockLearner(locked.ID, "WRONG"); ok || !errors.Is(err, profile.ErrLocked) {
+		t.Fatalf("last try: %v, %v, want ErrLocked", ok, err)
+	}
+	if ok, err := ctx.UnlockLearner(locked.ID, "ABCD"); ok || !errors.Is(err, profile.ErrLocked) {
+		t.Fatalf("right secret while locked out: %v, %v", ok, err)
+	}
+	if ctx.Learner() != first {
+		t.Fatalf("playing %v, want to stay with %v", ctx.Learner(), first)
+	}
+	// Unlocking a learner who has no lock switches to them.
+	free, err := ctx.Learners.Add("Free")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := ctx.UnlockLearner(free.ID, ""); !ok || err != nil || ctx.Learner() != free {
+		t.Fatalf("learner without a lock: %v, %v", ok, err)
+	}
+	if ok, _ := ctx.UnlockLearner("nobody", "x"); ok {
+		t.Error("unlocked a learner who doesn't exist")
+	}
+}
+
+// The learner playing can "switch" to themselves, lock or not: they
+// opened it already.
+func TestSwitchToSelfWithLock(t *testing.T) {
+	ctx, _, locked := sharedComputer(t)
+	if _, err := ctx.UnlockLearner(locked.ID, "ABCD"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.SwitchLearner(locked.ID); err != nil {
+		t.Fatalf("SwitchLearner(self) = %v", err)
+	}
+}
+
+// A new learner without a name is "Player N", the first free N.
+func TestAddLearnerNameFallback(t *testing.T) {
+	ctx, _, _ := sharedComputer(t) // two learners
+	l, err := ctx.AddLearner("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Name != "Player 3" {
+		t.Errorf("name %q, want Player 3", l.Name)
+	}
+	if err := ctx.RemoveLearner(ctx.Learners.List[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if l2, _ := ctx.AddLearner(""); l2.Name == "" || l2.Name == l.Name {
+		t.Errorf("second unnamed learner is %q, same as the first", l2.Name)
+	}
+}
+
+// Without a learner added before, cancelling does nothing: the one
+// playing is not removed, and a second cancel does nothing either.
+func TestCancelAddLearnerNothingToCancel(t *testing.T) {
+	ctx, first, _ := sharedComputer(t)
+	if err := ctx.CancelAddLearner(); err != nil || ctx.Learner() != first || ctx.Learners.Find(first.ID) == nil {
+		t.Fatalf("cancel with nothing added: %v, playing %v", err, ctx.Learner())
+	}
+	if _, err := ctx.AddLearner("Cara"); err != nil {
+		t.Fatal(err)
+	}
+	n := len(ctx.Learners.List)
+	if err := ctx.CancelAddLearner(); err != nil || ctx.Learner() != first || len(ctx.Learners.List) != n-1 {
+		t.Fatalf("cancel: %v, playing %v, %d learners", err, ctx.Learner(), len(ctx.Learners.List))
+	}
+	if err := ctx.CancelAddLearner(); err != nil || ctx.Learner() != first || len(ctx.Learners.List) != n-1 {
+		t.Fatalf("second cancel changed things: %v, playing %v", err, ctx.Learner())
+	}
+}
+
+// A learner signed in to an account is not a safe one to land on after a
+// removal: their tokens would send the next child's answers to it (#38).
+func TestRemoveSkipsLinked(t *testing.T) {
+	ctx, first, locked := sharedComputer(t)
+	locked.Lock = nil
+	first.LearnerID = "lrn_1" // linked, no lock
+	other, err := ctx.AddLearner("Cara")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.RemoveLearner(other.ID); err != nil {
+		t.Fatal(err)
+	}
+	cur := ctx.Learner()
+	if cur == nil || cur.LearnerID != "" || cur.ID == first.ID {
+		t.Fatalf("playing %+v", cur)
+	}
+}
+
+// Removing a learner who isn't playing leaves the one playing alone.
+func TestRemoveOtherKeepsPlayer(t *testing.T) {
+	ctx, first, locked := sharedComputer(t)
+	if err := ctx.RemoveLearner(locked.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Learner() != first || ctx.Learners.Find(locked.ID) != nil {
+		t.Fatalf("playing %v", ctx.Learner())
+	}
+}

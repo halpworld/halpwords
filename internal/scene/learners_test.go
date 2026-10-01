@@ -1,10 +1,12 @@
 package scene
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/pkg/proc"
 )
@@ -62,5 +64,28 @@ func TestNameListLetterOnlyJumps(t *testing.T) {
 	}
 	if got := jumpName(names, 3, []rune("q")); got != 3 {
 		t.Errorf("no name with q moved to %d", got)
+	}
+}
+
+// updateName jumps to the name a typed letter starts, and with no arrow
+// key down stays there: the screen shows the same name the child asked
+// for (#46). (Arrow keys can't be faked: ebiten reads them itself.)
+func TestUpdateNameLetterSelects(t *testing.T) {
+	var class link.Class
+	if err := json.Unmarshal([]byte(`{"learners":[{"id":"a","display_name":"Aoife"},{"id":"b","display_name":"Brian"},{"id":"s","display_name":"Sam"},{"id":"w","display_name":"Will"}]}`), &class); err != nil {
+		t.Fatal(err)
+	}
+	ctx := testContext(t)
+	ctx.Input = &input.State{}
+	s := &SignIn{step: siName, class: &class}
+	for _, c := range []struct {
+		chars string
+		want  int
+	}{{"s", 2}, {"w", 3}, {"S", 2}, {"b", 3 - 2}, {"x", 1}} {
+		ctx.Input.Chars = []rune(c.chars)
+		s.updateName(ctx)
+		if s.sel != c.want {
+			t.Fatalf("after %q: selected %d, want %d", c.chars, s.sel, c.want)
+		}
 	}
 }
