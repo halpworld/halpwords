@@ -135,9 +135,8 @@ func TestQAZeroAllocsEveryLap(t *testing.T) {
 
 // Decor copes with degenerate levels: none, empty, no free floor.
 func TestQADecorEdgeCases(t *testing.T) {
-	th := proc.ThemeFor(1)
 	for i := range proc.Themes {
-		th = &proc.Themes[i]
+		th := &proc.Themes[i]
 		if got := Decor(&dungeon.Level{}, th); len(got) != 0 {
 			t.Errorf("%s: empty level has %d props", th.Name, len(got))
 		}
