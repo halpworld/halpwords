@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -138,6 +139,10 @@ type floater struct {
 // happen here, so the dungeon stays on screen.
 type Crawl struct {
 	run *run
+	// closeSaved is set when closing the game suspended a Hardcore run,
+	// at closedAt (see afterClose).
+	closeSaved bool
+	closedAt   time.Time
 	// kind is the kind of answer being graded, for the grown-up's
 	// account: "attack", "dodge" or "puzzle".
 	kind  string
@@ -246,6 +251,7 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
+	c.afterClose(ctx, time.Now())
 	c.run.ai.poll(c)
 	c.run.played += 1 / float64(ebiten.TPS())
 	if c.run.race != nil {

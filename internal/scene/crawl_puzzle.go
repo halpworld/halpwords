@@ -350,6 +350,8 @@ func (c *Crawl) solvePuzzle() {
 			lang = words.English
 		}
 		lp.lines = append(lp.lines, mistakeLine(verb+shown+".", shown, res.Result, lang))
+	case res.Tier == words.AccentSlip && res.ArticleError:
+		lp.lines = append(lp.lines, logLine{"Watch the article!", pal.Cyan})
 	case res.Tier == words.AccentSlip:
 		lp.lines = append(lp.lines, logLine{"Watch the accents!", pal.Cyan})
 	}

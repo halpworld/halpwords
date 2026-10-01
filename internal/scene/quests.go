@@ -266,13 +266,28 @@ type QuestPage struct {
 	text    []string // paragraphs
 	prompt  string
 	next    func(*game.Context) game.Scene
+	// back is where Esc goes, or nil when Esc moves on like Enter (the
+	// ending: there is nothing to go back to).
+	back func(*game.Context) game.Scene
+}
+
+// route is the scene the keys pressed lead to, or nil to stay.
+func (p *QuestPage) route(ctx *game.Context) game.Scene {
+	switch {
+	case input.Back() && p.back != nil:
+		ctx.Sound.Play(audio.Back)
+		return p.back(ctx)
+	case input.Confirm() || input.Pressed(ebiten.KeySpace) || input.Back():
+		ctx.Sound.Play(audio.Select)
+		return p.next(ctx)
+	}
+	return nil
 }
 
 // Update implements game.Scene.
 func (p *QuestPage) Update(ctx *game.Context) error {
-	if input.Confirm() || input.Pressed(ebiten.KeySpace) || input.Back() {
-		ctx.Sound.Play(audio.Select)
-		ctx.Replace(p.next(ctx))
+	if s := p.route(ctx); s != nil {
+		ctx.Replace(s)
 	}
 	return nil
 }
@@ -305,15 +320,18 @@ func (p *QuestPage) Draw(dst *ebiten.Image, ctx *game.Context) {
 
 // questIntro shows the quest's introduction, if it has one, before the
 // first floor.
-func questIntro(r *run) game.Scene {
+// Esc goes back to the hero picker, so a player who chose by mistake can
+// choose again (#47).
+func questIntro(r *run, setup runSetup) game.Scene {
 	c := newCrawl(r)
 	if strings.TrimSpace(r.quest.Intro) == "" {
 		return c
 	}
 	return &QuestPage{
 		bg: backdrop(4, 1.4), heading: "A Quest", title: r.quest.Title,
-		text: []string{r.quest.Intro}, prompt: "Enter begin",
+		text: []string{r.quest.Intro}, prompt: "Enter begin · Esc back",
 		next: func(*game.Context) game.Scene { return c },
+		back: func(*game.Context) game.Scene { return NewClassPick(r.lang, setup) },
 	}
 }
 

@@ -67,6 +67,14 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestWrongArticleFlag(t *testing.T) {
+	fr := lang(t, "fr")
+	r := Grade("la chien", Entry{Prompt: "x", Answers: []string{"le chien"}}, fr, fr.Defaults, false)
+	if r.Tier != AccentSlip || !r.ArticleError || r.MarkError {
+		t.Fatalf("%+v", r)
+	}
+}
+
 func TestGrade(t *testing.T) {
 	fr, la, grc, ga := lang(t, "fr"), lang(t, "la"), lang(t, "grc"), lang(t, "ga")
 	e := func(answers ...string) Entry { return Entry{Prompt: "x", Answers: answers} }
@@ -95,6 +103,13 @@ func TestGrade(t *testing.T) {
 		{"fr two errors", "le shein", e("le chien"), fr, fr.Defaults, false, Miss},
 		{"fr graze sub", "le chiem", e("le chien"), fr, fr.Defaults, false, Graze},
 		{"fr alternative", "l'amie", e("l'ami", "l'amie"), fr, fr.Defaults, false, Perfect},
+		{"fr wrong article", "la chien", e("le chien"), fr, fr.Defaults, false, AccentSlip},
+		{"fr plural for singular", "les chien", e("le chien"), fr, fr.Defaults, false, AccentSlip},
+		{"fr indefinite for definite", "un chien", e("le chien"), fr, fr.Defaults, false, AccentSlip},
+		{"fr le for l'", "le ami", e("l'ami"), fr, fr.Defaults, false, AccentSlip},
+		{"fr wrong article backspace", "la chien", e("le chien"), fr, fr.Defaults, true, AccentSlip},
+		{"fr right article extra", "le chien", e("chien"), fr, fr.Defaults, false, Perfect},
+		{"en article swap ok", "a dog", Entry{Prompt: "x", Answers: []string{"the dog"}}, English, English.Defaults, false, Perfect},
 		{"fr wrong", "le chat", e("le chien"), fr, fr.Defaults, false, Miss},
 		{"fr empty", "  ", e("le chien"), fr, fr.Defaults, false, Miss},
 		{"la macron ignored", "amicus", e("amīcus"), la, la.Defaults, false, Perfect},
@@ -324,5 +339,46 @@ func TestListErrors(t *testing.T) {
 	_, err := Parse(strings.NewReader("language: fr\ndog = le chien\n\n>> Le ___ dort. | chat"), "t.txt")
 	if err == nil || !strings.Contains(err.Error(), "t.txt line 4:") {
 		t.Errorf("bad cloze answer: %v", err)
+	}
+}
+
+func TestGradeAmongNeighbours(t *testing.T) {
+	fr, la, grc := lang(t, "fr"), lang(t, "la"), lang(t, "grc")
+	e := func(a string) Entry { return Entry{Prompt: "x" + a, Answers: []string{a}} }
+	tests := []struct {
+		name   string
+		typed  string
+		want   Entry
+		others []Entry
+		lang   *Language
+		tier   Tier
+		saw    string
+	}{
+		{"mere for pere", "la mère", e("le père"), []Entry{e("la mère"), e("le père")}, fr, Miss, "la mère"},
+		{"mere without article", "mère", e("le père"), []Entry{e("la mère")}, fr, Miss, "la mère"},
+		{"mater for pater", "māter", e("pāter"), []Entry{e("māter")}, la, Miss, "māter"},
+		{"kalos for kakos", "καλός", e("κακός"), []Entry{e("καλός")}, grc, Miss, "καλός"},
+		{"typo still grazes", "le pere", e("le père"), []Entry{e("la mère")}, fr, AccentSlip, ""},
+		{"unrelated typo grazes", "le chiem", e("le chien"), []Entry{e("la mère")}, fr, Graze, ""},
+		{"no others", "la mère", e("le père"), nil, fr, Graze, ""},
+	}
+	for _, tt := range tests {
+		r := GradeAmong(tt.typed, tt.want, tt.others, tt.lang, tt.lang.Defaults, false)
+		if r.Tier != tt.tier || r.Confused != tt.saw {
+			t.Errorf("%s: %+v, want tier %v confused %q", tt.name, r, tt.tier, tt.saw)
+		}
+	}
+	// The entry itself and entries sharing its answer are never "another word".
+	same := e("le père")
+	r := GradeAmong("le pere", same, []Entry{same, {Prompt: "dad", Answers: []string{"le père"}}}, fr, fr.Defaults, false)
+	if r.Tier != AccentSlip || r.Confused != "" {
+		t.Errorf("%+v", r)
+	}
+}
+
+func TestGradeNilLanguage(t *testing.T) {
+	e := Entry{Prompt: "x", Answers: []string{"le chien"}}
+	if r := Grade("le chien", e, nil, Rules{}, false); r.Tier != Perfect {
+		t.Fatalf("%+v", r)
 	}
 }

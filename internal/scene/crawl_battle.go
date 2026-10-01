@@ -255,7 +255,7 @@ func (c *Crawl) updateBattle(ctx *game.Context) {
 }
 
 func (c *Crawl) grade(typed string) words.Result {
-	return words.Grade(typed, c.battle.word, c.run.lang, c.run.rules(), c.battle.field.UsedBackspace)
+	return words.GradeAmong(typed, c.battle.word, c.run.deck.Entries(), c.run.lang, c.run.rules(), c.battle.field.UsedBackspace)
 }
 
 // scoreAnswer records an answer for spaced practice, the combo streak and
@@ -269,7 +269,7 @@ func (c *Crawl) scoreAnswer(id int, res words.Result, typed string, hinted bool,
 	t := res.Tier
 	if id >= 0 {
 		a := words.Answer{Tier: t, Hinted: hinted, Secs: secs, Timed: secs > 0}
-		if t < words.Correct && typed != "" {
+		if t < words.Correct && typed != "" && !res.ArticleError {
 			a.Mistake = words.Classify(typed, res.Expected, r.lang)
 		}
 		r.deck.Answer(id, a)
@@ -384,13 +384,27 @@ func answerLines(e words.Entry, res words.Result, typed string, lang *words.Lang
 	return lines
 }
 
+// confusedTip tells a child that what they typed was another word.
+func confusedTip(other string) string {
+	if r := []rune(other); len(r) > 28 {
+		other = string(r[:27]) + "…"
+	}
+	return "That is " + other + ", another word in this list."
+}
+
 // mistakeLine is what the hero typed, with a tip about their mistake.
 func mistakeLine(said, typed string, res words.Result, lang *words.Language) logLine {
 	col := pal.Steel
 	if res.Tier == words.AccentSlip {
 		col = pal.Cyan
 	}
-	if tip := words.Classify(typed, res.Expected, lang).Tip(); tip != "" {
+	if res.Confused != "" {
+		// The line must fit the screen, so it drops what was typed.
+		return logLine{confusedTip(res.Confused), col}
+	}
+	if res.ArticleError {
+		said += " Check the article: " + res.Expected + "."
+	} else if tip := words.Classify(typed, res.Expected, lang).Tip(); tip != "" {
 		said += " " + tip
 	}
 	return logLine{said, col}

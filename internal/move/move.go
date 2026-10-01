@@ -74,14 +74,18 @@ const (
 // the events waiting to be sent (a URL can end up in the browser's
 // history; the game links again at its new address); crash reports; damaged files kept to one side; and
 // this package's own files.
+//
+// The names are matched on the last part of the path, because a learner's
+// files are in profiles/<id>/. learners.json does move: it is the list of
+// learners, with their names, class names and the hashes of their locks.
 func Exportable(name string) bool {
-	switch {
+	switch base := path.Base(name); {
 	case !validName(name),
-		name == "ai.json",
-		name == "link.json",
-		name == "link-queue.json",
-		name == "link-parked.json",
-		name == "crash.txt",
+		base == "ai.json",
+		base == "link.json",
+		base == "link-queue.json",
+		base == "link-parked.json",
+		base == "crash.txt",
 		strings.HasSuffix(name, ".bad"),
 		strings.HasPrefix(name, stashDir):
 		return false

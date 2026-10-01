@@ -3,11 +3,9 @@
 package scene
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/halpworld/halpwords/internal/game"
-	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func useTempUserDir(t *testing.T) {
@@ -15,15 +13,6 @@ func useTempUserDir(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("AppData", dir)
-}
-
-func importList(t *testing.T, src string) *words.List {
-	t.Helper()
-	l, err := words.ParseImport(strings.NewReader(src), "import.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return l
 }
 
 // loadShelf reads the shelf back from disk, as the Word Lists screen does.

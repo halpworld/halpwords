@@ -10,9 +10,13 @@ import (
 	"github.com/halpworld/halpwords/internal/save"
 )
 
-// useTempDir points the save folder at a fresh temporary folder.
+// useTempDir points the save folder at a fresh temporary folder, and keeps
+// the test away from the real one and from the real server, so it gives the
+// same result on any computer (#63).
 func useTempDir(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HALPWORDS_SERVER", "http://127.0.0.1:1")
+	save.Use(save.Root)
 	t.Setenv("HOME", dir)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("AppData", dir)
@@ -20,7 +24,10 @@ func useTempDir(t *testing.T) {
 }
 
 // Switching learners loads each one's own profile, and removing one
-// deletes theirs and switches back (W2.5).
+// deletes theirs and switches back (W2.5). The learners here have no lock
+// and no sign-in: the home case, where anyone can be chosen from the list.
+// The cases with a lock, a school sign-in or a pairing code are the tests
+// below, and TestStartupRestore.
 func TestSwitchLearners(t *testing.T) {
 	useTempDir(t)
 	ctx := &Context{Sound: &Sound{Muted: true}}

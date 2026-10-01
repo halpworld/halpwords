@@ -87,6 +87,13 @@ func (l *Learner) Folder() save.Folder { return save.Folder(ProfilesDir + "/" + 
 
 // Lock is what opens a learner's folder, kept as a salted, slow hash: a
 // login card's code, or the 3 pictures they tap out of Grid.
+//
+// The lock keeps classmates out at the keyboard. It is not protection
+// against anyone who can copy learners.json: 3 of 9 pictures are only a few
+// hundred combinations, so the hash can be guessed offline in moments, and
+// the wrong-tries counter is in the same file. That is accepted (#62); the
+// README says so. Copies of learners.json kept to one side (learners.json.bad)
+// hold the same hashes. Don't present the lock as more than that in the game.
 type Lock struct {
 	Kind string // "card" or "pictures"
 	// Grid are the 9 pictures to show, for "pictures": the server's,

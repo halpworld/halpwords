@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"io/fs"
+	"time"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
@@ -191,7 +193,9 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 func saveSummary() (summary string, ok bool) {
 	data, err := save.Read(saveName)
 	if err != nil {
-		return "", false
+		// Only a missing file is no save: one that can't be read is
+		// still there, and Continue will explain.
+		return "", !errors.Is(err, fs.ErrNotExist)
 	}
 	var s struct {
 		Language   string
@@ -224,6 +228,29 @@ func saveSummary() (summary string, ok bool) {
 		summary += " · Assignment"
 	}
 	return summary, true
+}
+
+// savedHero names the hero in the save slot, such as "Knight", and the
+// floor they are on. ok is false when there is no save. A save that can't
+// be read still counts, with no hero named: starting a run would replace it.
+func savedHero() (hero string, floor int, ok bool) {
+	data, err := save.Read(saveName)
+	if err != nil {
+		return "", 0, !errors.Is(err, fs.ErrNotExist)
+	}
+	var s struct {
+		Class   rpg.Class
+		Shrine  struct{ Depth int }
+		Suspend *struct{ Depth int }
+	}
+	if json.Unmarshal(data, &s) != nil {
+		return "", 0, true
+	}
+	floor = s.Shrine.Depth
+	if s.Suspend != nil {
+		floor = s.Suspend.Depth
+	}
+	return s.Class.String(), floor, true
 }
 
 // loadCrawl resumes the saved adventure. A suspended game is deleted from
@@ -281,4 +308,77 @@ func (c *Crawl) writeSave(ctx *game.Context, suspend bool) bool {
 	c.lastSave, _ = encodeSave(c.run, c.level, c.pos, c.facing, true)
 	c.unsaved = false
 	return true
+}
+
+// OnClose implements game.Closer: the window or the page is closing, so a
+// run that Suspend would keep is written the way Suspend writes it (#49).
+// An Adventure comes back where it was; a Hardcore or Daily run is a
+// suspend too, and so can be picked up once, like any suspend.
+//
+// Known limit: two tabs of the web game share one save slot, so a Hardcore
+// suspend written by one can be picked up by another and so forked.
+//
+// Nothing is written where the pause menu would not offer Suspend: in a
+// battle or a puzzle, after a fall, or in a race. The save already on disk
+// is then left as it is.
+func (c *Crawl) OnClose(ctx *game.Context) {
+	if !c.canSuspend() {
+		return
+	}
+	if c.writeSave(ctx, true) {
+		c.closeSaved, c.closedAt = true, time.Now()
+	}
+}
+
+// canSuspend reports whether the game could be suspended now: the pause
+// menu offers Suspend when the hero is exploring and it is not a race.
+func (c *Crawl) canSuspend() bool {
+	m := c.mode
+	if m == modePause || m == modeQuit {
+		m = c.resume
+	}
+	return m == modeExplore && c.run.race == nil
+}
+
+// closeGrace is how long after OnClose the game must still be running
+// for it to count as going on: a web page may run one more frame after it
+// is hidden, and must not take its own save back then.
+const closeGrace = time.Second
+
+// afterClose is called every update, and does something when the game goes
+// on after OnClose, as a web page does when it is shown again. The suspend
+// written on close is then stale, so it goes, as when Continue loads one:
+// a Hardcore run's is taken off the disk, so the run is in memory only
+// again (it can be picked up once, and a crash after that still loses
+// it); an Adventure goes back to its last shrine save, so dying and then
+// closing the tab cannot bring back the state from before the fall. The
+// game is hidden again, and suspended again, before it matters.
+func (c *Crawl) afterClose(ctx *game.Context, now time.Time) {
+	if !c.closeSaved || now.Sub(c.closedAt) < closeGrace {
+		return
+	}
+	c.closeSaved = false
+	if !c.run.onDisk {
+		return
+	}
+	if c.run.hardcore() {
+		save.Remove(saveName)
+		c.run.onDisk = false
+		return
+	}
+	if c.writeSave(ctx, false) {
+		c.lastSave = nil // the disk no longer has the game as it is now
+		c.unsaved = true
+	}
+}
+
+// savedScored reports whether the save slot holds a Hardcore or Daily run,
+// which can't be got back once it is replaced.
+func savedScored() bool {
+	data, err := save.Read(saveName)
+	if err != nil {
+		return false
+	}
+	var s struct{ Mode compete.Mode }
+	return json.Unmarshal(data, &s) == nil && s.Mode.Scored()
 }
