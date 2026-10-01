@@ -639,11 +639,12 @@ func (s *SignIn) updateText(ctx *game.Context) {
 }
 
 // pictureKeys pick a picture of the grid directly: 1 to 9, top left to
-// bottom right, on the number row or the keypad.
+// bottom right, on the number row or by the number on the keypad (not
+// its layout: the grid is labelled 1 to 9).
 var pictureKeys = [link.Grid][2]ebiten.Key{
-	{ebiten.Key1, ebiten.KeyNumpad7}, {ebiten.Key2, ebiten.KeyNumpad8}, {ebiten.Key3, ebiten.KeyNumpad9},
+	{ebiten.Key1, ebiten.KeyNumpad1}, {ebiten.Key2, ebiten.KeyNumpad2}, {ebiten.Key3, ebiten.KeyNumpad3},
 	{ebiten.Key4, ebiten.KeyNumpad4}, {ebiten.Key5, ebiten.KeyNumpad5}, {ebiten.Key6, ebiten.KeyNumpad6},
-	{ebiten.Key7, ebiten.KeyNumpad1}, {ebiten.Key8, ebiten.KeyNumpad2}, {ebiten.Key9, ebiten.KeyNumpad3},
+	{ebiten.Key7, ebiten.KeyNumpad7}, {ebiten.Key8, ebiten.KeyNumpad8}, {ebiten.Key9, ebiten.KeyNumpad9},
 }
 
 func (s *SignIn) updatePictures(ctx *game.Context) {

@@ -1,6 +1,8 @@
 package scene
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/halpworld/halpwords/internal/link"
@@ -32,5 +34,18 @@ func TestPictureImages(t *testing.T) {
 	}
 	if pictureImage(proc.PictureCount) != nil || pictureImage(-1) != nil {
 		t.Error("an image for a picture that doesn't exist")
+	}
+}
+
+// The picture keys on the keypad are the numbers on the labels, not the
+// keypad's layout (#47).
+func TestPictureKeysMatchLabels(t *testing.T) {
+	for i, keys := range pictureKeys {
+		want := fmt.Sprint(i + 1)
+		for _, k := range keys {
+			if got := k.String(); !strings.HasSuffix(got, want) {
+				t.Errorf("picture %s has key %v", want, got)
+			}
+		}
 	}
 }
