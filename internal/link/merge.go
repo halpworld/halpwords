@@ -98,6 +98,7 @@ func merge(local, server *words.Memory, queued []qAnswer, lang string) {
 			continue
 		}
 		card := *sc
+		card.Box = words.ClampBox(card.Box)
 		card.Due += base - server.Clock
 		tmp.Cards[k] = &card
 	}

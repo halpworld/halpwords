@@ -203,7 +203,7 @@ func (g *Grimoire) Draw(dst *ebiten.Image, ctx *game.Context) {
 		c := mem.Card(e)
 		box := 0
 		if c != nil {
-			box = c.Box
+			box = words.ClampBox(c.Box)
 		}
 		for p := 1; p <= words.Boxes; p++ {
 			pc, glyph := pal.Stone, "□"
