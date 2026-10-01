@@ -563,28 +563,43 @@ func explainSignIn(err error) string {
 // namesShown is how many names the list shows at once.
 const namesShown = 10
 
-func (s *SignIn) updateName(ctx *game.Context) {
-	names := s.class.Learners
+// jumpName is the name chosen after typing chars: each letter jumps
+// from sel to the next name that starts with it.
+func jumpName(names []string, sel int, chars []rune) int {
 	n := len(names)
-	for _, r := range ctx.Input.Chars {
-		// A letter jumps to the next name starting with it.
+	for _, r := range chars {
 		r = unicode.ToLower(r)
 		for k := 1; k <= n; k++ {
-			i := (s.sel + k) % n
-			if first := []rune(strings.ToLower(names[i].DisplayName)); len(first) > 0 && first[0] == r {
-				s.sel = i
-				ctx.Sound.Play(audio.Blip)
+			i := (sel + k) % n
+			if first := []rune(strings.ToLower(names[i])); len(first) > 0 && first[0] == r {
+				sel = i
 				break
 			}
 		}
 	}
+	return sel
+}
+
+func (s *SignIn) updateName(ctx *game.Context) {
+	names := s.class.Learners
+	n := len(names)
+	shown := make([]string, n)
+	for i, l := range names {
+		shown[i] = l.DisplayName
+	}
+	if i := jumpName(shown, s.sel, ctx.Input.Chars); i != s.sel {
+		s.sel = i
+		ctx.Sound.Play(audio.Blip)
+	}
+	// Only the arrow keys move: W and S are letters here, which jump.
+	up, down := input.Repeat(ebiten.KeyArrowUp), input.Repeat(ebiten.KeyArrowDown)
 	switch {
 	case input.Back():
 		s.back(ctx)
-	case input.Up():
+	case up:
 		ctx.Sound.Play(audio.Blip)
 		s.sel = (s.sel + n - 1) % n
-	case input.Down():
+	case down:
 		ctx.Sound.Play(audio.Blip)
 		s.sel = (s.sel + 1) % n
 	case input.Confirm():

@@ -49,3 +49,18 @@ func TestPictureKeysMatchLabels(t *testing.T) {
 		}
 	}
 }
+
+// A letter in the class's name list only jumps: W and S are also Up and
+// Down in menus, and must not move the selection again (#46).
+func TestNameListLetterOnlyJumps(t *testing.T) {
+	names := []string{"Aoife", "Brian", "Sam", "Will", "Zoe"}
+	if got := jumpName(names, 0, []rune("s")); got != 2 {
+		t.Errorf("s: %d, want 2 (Sam)", got)
+	}
+	if got := jumpName(names, 0, []rune("W")); got != 3 {
+		t.Errorf("W: %d, want 3 (Will)", got)
+	}
+	if got := jumpName(names, 3, []rune("q")); got != 3 {
+		t.Errorf("no name with q moved to %d", got)
+	}
+}
