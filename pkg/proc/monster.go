@@ -375,3 +375,10 @@ func shadeMonster(c *canvas, look monsterLook) *Indexed {
 	outline(m)
 	return m
 }
+
+// MonsterHues is the number of monster colourings; Kind.Hue picks one.
+func MonsterHues() int { return len(monsterLooks) }
+
+// MonsterBody returns the main body colour of a monster colouring, the
+// middle of its body ramp, for readability checks.
+func MonsterBody(hue int) color.RGBA { return monsterLooks[hue%len(monsterLooks)].ramp[2] }

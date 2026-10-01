@@ -6,9 +6,10 @@
 package raycast
 
 import (
+	"cmp"
 	"image"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/pal"
@@ -18,31 +19,36 @@ import (
 // levels is the number of light levels, from black to fully lit.
 const levels = 8
 
-// Textures are the images for one dungeon theme.
+// Textures are the images for one dungeon world.
 type Textures struct {
-	Walls  []*proc.Indexed // variants, picked per cell
-	Torch  []*proc.Indexed // animation frames
-	Door   *proc.Indexed
-	Sealed *proc.Indexed
-	Floor  *proc.Indexed
-	Ceil   *proc.Indexed
-	Stairs *proc.Indexed
+	Walls     []*proc.Indexed // variants, picked per cell
+	Torch     []*proc.Indexed // animation frames
+	Door      *proc.Indexed
+	Sealed    *proc.Indexed
+	Floor     *proc.Indexed
+	FloorAnim []*proc.Indexed // animation frames of water or lava, or nil
+	Ceil      *proc.Indexed
+	Stairs    *proc.Indexed
+	Sky       *proc.Indexed // an open sky panorama instead of the ceiling, or nil
 }
 
-// NewTextures generates the textures for a theme.
+// NewTextures generates the textures for a world. The Crypt's are exactly
+// the ones it always had.
 func NewTextures(t *proc.Theme, seed uint64) *Textures {
 	tx := &Textures{
-		Door:   proc.DoorTexture(t, seed+10, false),
-		Sealed: proc.DoorTexture(t, seed+10, true),
-		Floor:  proc.FloorTexture(t, seed+11),
-		Ceil:   proc.CeilingTexture(t, seed+12),
-		Stairs: proc.StairsTexture(t, seed+11),
+		Door:      t.DoorTex(seed+10, false),
+		Sealed:    t.DoorTex(seed+10, true),
+		Floor:     t.FloorTex(seed + 11),
+		FloorAnim: t.FloorFrames(seed + 11),
+		Ceil:      t.CeilTex(seed + 12),
+		Stairs:    t.StairsTex(seed + 11),
+		Sky:       t.SkyTex(seed + 13),
 	}
-	for v := 0; v < 3; v++ {
-		tx.Walls = append(tx.Walls, proc.WallTexture(t, seed+uint64(v), v))
+	for v := range 3 {
+		tx.Walls = append(tx.Walls, t.WallTex(seed+uint64(v), v))
 	}
-	for f := 0; f < 4; f++ {
-		tx.Torch = append(tx.Torch, proc.TorchWall(t, seed, f))
+	for f := range 4 {
+		tx.Torch = append(tx.Torch, t.TorchTex(seed, f))
 	}
 	return tx
 }
@@ -80,35 +86,40 @@ type Renderer struct {
 	Img  *image.RGBA
 	// Light is the hero's torch radius in cells.
 	Light float64
+	// Calm turns off moving effects: particles, rippling water and lava,
+	// and flickering torches.
+	Calm bool
 
-	zbuf  []float64
-	shade [levels][256]uint8
-	rgba  [256][4]byte
+	zbuf        []float64
+	shade       [levels][256]uint8 // walls, floors and ceilings
+	spriteShade [levels][256]uint8 // sprites, kept out of the fog
+	rgba        [256][4]byte
+
+	// The world's air, set by SetWorld.
+	reach     float64 // multiplies Light
+	ceilH     float64 // ceiling height in wall heights
+	particles proc.Particles
+	invLight  float64 // 1 / (Light × reach), for this frame
+
+	skyCol []int  // the sky panorama column of each view column
+	items  []item // sprites to draw, reused between frames
 
 	level    *dungeon.Level
 	torchMap []float64 // light from wall torches at each cell
+	seed     uint64    // the level's seed for particles
 }
 
-// New returns a renderer for a w×h view.
+// New returns a renderer for a w×h view, in The Crypt's air until SetWorld
+// says otherwise.
 func New(w, h int) *Renderer {
-	r := &Renderer{W: w, H: h, Img: image.NewRGBA(image.Rect(0, 0, w, h)), Light: 5.5, zbuf: make([]float64, w)}
-	for i := 0; i < 256; i++ {
-		for lv := 0; lv < levels; lv++ {
-			r.shade[lv][i] = proc.Transparent
-		}
+	r := &Renderer{
+		W: w, H: h, Img: image.NewRGBA(image.Rect(0, 0, w, h)), Light: 5.5,
+		zbuf: make([]float64, w), skyCol: make([]int, w),
 	}
 	for i, c := range pal.All {
 		r.rgba[i] = [4]byte{c.R, c.G, c.B, 0xff}
-		for lv := 0; lv < levels; lv++ {
-			k := float64(lv) / (levels - 1)
-			// Torchlight is warm: blue fades first.
-			s := c
-			s.R = uint8(float64(c.R) * k)
-			s.G = uint8(float64(c.G) * k * 0.94)
-			s.B = uint8(float64(c.B) * k * 0.85)
-			r.shade[lv][i] = pal.Index(s)
-		}
 	}
+	r.SetWorld(&proc.Themes[0])
 	return r
 }
 
@@ -124,14 +135,32 @@ var bayer = [4][4]float64{
 // pixels ignore b.
 func (r *Renderer) put(x, y int, c uint8, b float64, glow bool) {
 	if !glow {
-		lv := int(b*(levels-1) + bayer[y&3][x&3])
-		if lv >= levels {
-			lv = levels - 1
-		} else if lv < 0 {
-			lv = 0
-		}
-		c = r.shade[lv][c]
+		c = r.shade[light(x, y, b)][c]
 	}
+	r.plot(x, y, c)
+}
+
+// putSprite is put for sprites, which never sink fully into the fog.
+func (r *Renderer) putSprite(x, y int, c uint8, b float64, glow bool) {
+	if !glow {
+		c = r.spriteShade[light(x, y, b)][c]
+	}
+	r.plot(x, y, c)
+}
+
+// light returns the dithered light level for brightness b at (x, y).
+func light(x, y int, b float64) int {
+	lv := int(b*(levels-1) + bayer[y&3][x&3])
+	if lv >= levels {
+		return levels - 1
+	} else if lv < 0 {
+		return 0
+	}
+	return lv
+}
+
+// plot writes palette index c at (x, y) as it is.
+func (r *Renderer) plot(x, y int, c uint8) {
 	o := (y*r.W + x) * 4
 	copy(r.Img.Pix[o:o+4], r.rgba[c][:])
 }
@@ -152,6 +181,7 @@ func (r *Renderer) prepare(l *dungeon.Level) {
 		return
 	}
 	r.level = l
+	r.seed = l.Seed ^ uint64(l.Depth)*0x9e3779b97f4a7c15 ^ particleSalt
 	r.torchMap = make([]float64, l.W*l.H)
 	const reach = 3.5
 	for ty := 0; ty < l.H; ty++ {
@@ -192,36 +222,54 @@ func (r *Renderer) ambient(x, y float64) float64 {
 
 // brightness combines the hero's torch at distance d with wall torches.
 func (r *Renderer) brightness(d, x, y float64) float64 {
-	b := 1.2 - d/r.Light
+	b := 1.2 - d*r.invLight
 	return math.Max(0, math.Min(1, math.Max(b, r.ambient(x, y))))
 }
 
 // seeRange is how far away cells are marked as seen for the automap.
 const seeRange = 7
 
-// Render draws the level from cam. tick animates torches.
+// Render draws the level from cam. tick animates torches and animated
+// floors.
 func (r *Renderer) Render(l *dungeon.Level, tex *Textures, cam Camera, sprites []Sprite, tick uint64) {
 	r.prepare(l)
+	r.invLight = 1 / (r.Light * r.reach)
 	w, h := r.W, r.H
 	k := float64(w) / (2 * math.Hypot(cam.PlaneX, cam.PlaneY)) // pixels per map unit at distance 1
 	horizon := float64(h) / 2
-	torch := tex.Torch[int(tick/8)%len(tex.Torch)]
+	torch, floorTex := tex.Torch[0], tex.Floor
+	if !r.Calm {
+		torch = tex.Torch[int(tick/8)%len(tex.Torch)]
+		if n := len(tex.FloorAnim); n > 0 {
+			floorTex = tex.FloorAnim[int(tick/floorFrameTicks)%n]
+		}
+	}
+	if tex.Sky != nil {
+		r.aimSky(cam, tex.Sky.W)
+	}
 
 	// Floor and ceiling, row by row.
-	for y := 0; y < h; y++ {
+	for y := range h {
 		floor := float64(y)+0.5 > horizon
+		if !floor && tex.Sky != nil {
+			r.skyRow(tex.Sky, y, horizon)
+			continue
+		}
 		p := math.Abs(float64(y) + 0.5 - horizon)
 		dist := k * 0.5 / p
+		if !floor {
+			dist = k * (r.ceilH - 0.5) / p
+		}
 		lx := cam.X + dist*(cam.DirX-cam.PlaneX)
 		ly := cam.Y + dist*(cam.DirY-cam.PlaneY)
 		sx := dist * 2 * cam.PlaneX / float64(w)
 		sy := dist * 2 * cam.PlaneY / float64(w)
-		for x := 0; x < w; x++ {
+		for x := range w {
 			fx, fy := lx+sx*float64(x), ly+sy*float64(x)
 			cx, cy := int(math.Floor(fx)), int(math.Floor(fy))
 			t := tex.Ceil
 			if floor {
-				t = tex.Floor
+				t = floorTex
 				if l.At(dungeon.Point{X: cx, Y: cy}) == dungeon.Stairs {
 					t = tex.Stairs
 				}
@@ -239,7 +287,7 @@ func (r *Renderer) Render(l *dungeon.Level, tex *Textures, cam Camera, sprites [
 	if p := (dungeon.Point{X: int(math.Floor(cam.X)), Y: int(math.Floor(cam.Y))}); l.In(p) {
 		l.Seen[l.Index(p)] = true
 	}
-	for x := 0; x < w; x++ {
+	for x := range w {
 		camX := 2*(float64(x)+0.5)/float64(w) - 1
 		rdx := cam.DirX + cam.PlaneX*camX
 		rdy := cam.DirY + cam.PlaneY*camX
@@ -262,7 +310,7 @@ func (r *Renderer) Render(l *dungeon.Level, tex *Textures, cam Camera, sprites [
 		}
 		side := 0
 		var tile dungeon.Tile
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			if sdx < sdy {
 				sdx += ddx
 				mx += stepX
@@ -297,7 +345,8 @@ func (r *Renderer) Render(l *dungeon.Level, tex *Textures, cam Camera, sprites [
 		if (side == 0 && rdx < 0) || (side == 1 && rdy > 0) {
 			u = 1 - u
 		}
-		t := tex.Walls[wallVariant(mx, my, len(tex.Walls))]
+		plain := tex.Walls[wallVariant(mx, my, len(tex.Walls))]
+		t := plain
 		switch {
 		case tile == dungeon.Door:
 			t = tex.Door
@@ -311,18 +360,57 @@ func (r *Renderer) Render(l *dungeon.Level, tex *Textures, cam Camera, sprites [
 		if side == 1 {
 			b -= 0.1
 		}
-		lineH := k / perp
-		top := horizon - lineH/2
-		y0 := max(0, int(math.Ceil(top-0.5)))
-		y1 := min(h, int(math.Ceil(top+lineH-0.5)))
-		for y := y0; y < y1; y++ {
-			v := (float64(y) + 0.5 - top) / lineH
-			c, glow := texel(t, u, v)
-			r.put(x, y, c, b, glow)
-		}
+		r.wallColumn(x, t, plain, u, b, horizon, k/perp)
 	}
 
 	r.drawSprites(cam, sprites, k, horizon)
+}
+
+// floorFrameTicks is how long each frame of an animated floor shows: at 60
+// ticks a second, water and lava change twice a second.
+const floorFrameTicks = 30
+
+// wallColumn draws column x of a wall lineH pixels per wall height. The
+// bottom unit shows t (which may be a door or torch); the rest of a tall
+// wall stacks plain wall above it. Transparent texels let the sky through.
+func (r *Renderer) wallColumn(x int, t, plain *proc.Indexed, u, b, horizon, lineH float64) {
+	bottom := horizon + lineH/2
+	top := bottom - lineH*r.ceilH
+	y0 := max(0, int(math.Ceil(top-0.5)))
+	y1 := min(r.H, int(math.Ceil(bottom-0.5)))
+	unitTop := bottom - lineH // where t starts
+	for y := y0; y < y1; y++ {
+		fy := float64(y) + 0.5
+		tt, v := t, (fy-unitTop)/lineH
+		if v < 0 {
+			tt, v = plain, v-math.Floor(v)
+		}
+		c, glow := texel(tt, u, v)
+		if c == proc.Transparent {
+			continue
+		}
+		r.put(x, y, c, b, glow)
+	}
+}
+
+// aimSky works out which sky panorama column each view column sees. One
+// panorama width is a full turn, so the sky turns with the view.
+func (r *Renderer) aimSky(cam Camera, skyW int) {
+	for x := range r.W {
+		camX := 2*(float64(x)+0.5)/float64(r.W) - 1
+		a := math.Atan2(cam.DirY+cam.PlaneY*camX, cam.DirX+cam.PlaneX*camX)
+		r.skyCol[x] = int((a/(2*math.Pi)+1)*float64(skyW)) % skyW
+	}
+}
+
+// skyRow draws view row y of an open sky. The sky is far away, so it is
+// neither shaded nor lit.
+func (r *Renderer) skyRow(sky *proc.Indexed, y int, horizon float64) {
+	sy := min(sky.H-1, int(float64(y)/horizon*float64(sky.H)))
+	row := sky.Pix[sy*sky.W : (sy+1)*sky.W]
+	for x, col := range r.skyCol {
+		r.plot(x, y, row[col])
+	}
 }
 
 // wallVariant picks a wall texture for a cell: mostly plain, some mossy or
@@ -342,14 +430,16 @@ func wallVariant(x, y, n int) int {
 	}
 }
 
+// item is a sprite to draw, with its depth and screen column.
+type item struct {
+	s     *Sprite
+	depth float64
+	sx    float64
+}
+
 func (r *Renderer) drawSprites(cam Camera, sprites []Sprite, k, horizon float64) {
-	type item struct {
-		s     *Sprite
-		depth float64
-		sx    float64
-	}
 	inv := 1 / (cam.PlaneX*cam.DirY - cam.DirX*cam.PlaneY)
-	var items []item
+	r.items = r.items[:0]
 	for i := range sprites {
 		s := &sprites[i]
 		dx, dy := s.X-cam.X, s.Y-cam.Y
@@ -358,11 +448,12 @@ func (r *Renderer) drawSprites(cam Camera, sprites []Sprite, k, horizon float64)
 		if ty < 0.1 {
 			continue
 		}
-		items = append(items, item{s, ty, float64(r.W) / 2 * (1 + tx/ty)})
+		r.items = append(r.items, item{s, ty, float64(r.W) / 2 * (1 + tx/ty)})
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].depth > items[j].depth })
+	// Far to near, so near sprites cover far ones.
+	slices.SortStableFunc(r.items, func(a, b item) int { return cmp.Compare(b.depth, a.depth) })
 
-	for _, it := range items {
+	for _, it := range r.items {
 		s := it.s
 		img := s.Img
 		hgt := s.Size * k / it.depth
@@ -370,7 +461,7 @@ func (r *Renderer) drawSprites(cam Camera, sprites []Sprite, k, horizon float64)
 		bottom := horizon + (0.5-s.Lift)*k/it.depth
 		top := bottom - hgt
 		left := it.sx - wid/2
-		b := r.brightness(it.depth, s.X, s.Y)
+		b := max(spriteMinLight, r.brightness(it.depth, s.X, s.Y))
 		x0 := max(0, int(math.Ceil(left-0.5)))
 		x1 := min(r.W, int(math.Ceil(left+wid-0.5)))
 		y0 := max(0, int(math.Ceil(top-0.5)))
@@ -389,7 +480,7 @@ func (r *Renderer) drawSprites(cam Camera, sprites []Sprite, k, horizon float64)
 				if s.Flash {
 					c, glow = white, true
 				}
-				r.put(x, y, c, b, glow)
+				r.putSprite(x, y, c, b, glow)
 			}
 		}
 	}
