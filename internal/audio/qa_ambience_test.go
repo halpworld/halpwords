@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestQAAmbienceQuiet(t *testing.T) {
@@ -61,15 +62,25 @@ func TestQAAmbienceYields(t *testing.T) {
 		s := Compose(Track{Mood: Delve, Seed: 3, Ambience: a})
 		n := 0
 		RenderAmbience(s, SampleRate, func() { n++ })
-		// Ticking is cheap (under 2ms native) and never yields; the rest do.
-		if n < 1 && a != Ticking {
+		if n < 1 {
 			t.Errorf("%s: only %d yields in the ambience render", a, n)
+		}
+		// No stretch of work between yields may stall a browser frame:
+		// about 2ms native, with room for a busy test machine.
+		best, last := time.Duration(0), time.Now()
+		RenderAmbience(s, SampleRate, func() {
+			now := time.Now()
+			best, last = max(best, now.Sub(last)), now
+		})
+		best = max(best, time.Since(last))
+		if best > 5*time.Millisecond {
+			t.Errorf("%s: %v between yields", a, best)
 		}
 		total := 0
 		RenderLoop(s, SampleRate, func() { total++ })
 		none := 0
 		RenderLoop(Compose(Track{Mood: Delve, Seed: 3}), SampleRate, func() { none++ })
-		if total < none || (a != Ticking && total <= none) {
+		if total <= none {
 			t.Errorf("%s: RenderLoop yields %d with ambience, %d without", a, total, none)
 		}
 	}

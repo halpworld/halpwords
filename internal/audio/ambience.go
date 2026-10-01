@@ -51,13 +51,13 @@ func RenderAmbience(s Song, rate int, yield func()) []float32 {
 	l := newLayer(n, rate, s.Seed, s.Ambience, yield)
 	switch s.Ambience {
 	case Dust:
-		l.bed(0.004, 0, 2, 0.6, 0.05)
+		l.bed(0.015, 0, 2, 0.6, 0.05)
 	case Crickets:
 		l.crickets(2.8)
 	case Drips:
 		l.drips(2.2)
 	case Rumble:
-		l.bed(0.006, 0, 3, 0.5, 0.07)
+		l.bed(0.012, 0, 3, 0.5, 0.07)
 		l.crackle(5)
 	case Wind:
 		l.bed(0.07, 0.008, 3, 0.8, 0.07)
@@ -75,8 +75,11 @@ func RenderAmbience(s Song, rate int, yield func()) []float32 {
 		l.bed(0.2, 0.05, 5, 0.9, 0.012)
 	}
 	peak := 0.0
-	for _, v := range l.buf {
+	for i, v := range l.buf {
 		peak = max(peak, math.Abs(v))
+		if i%yieldEvery == yieldEvery-1 {
+			l.pause()
+		}
 	}
 	g := 1.0
 	if peak > ambienceCap {
@@ -85,6 +88,9 @@ func RenderAmbience(s Song, rate int, yield func()) []float32 {
 	out := make([]float32, n)
 	for i, v := range l.buf {
 		out[i] = float32(v * g)
+		if i%yieldEvery == yieldEvery-1 {
+			l.pause()
+		}
 	}
 	return out
 }
@@ -97,11 +103,17 @@ func mixAmbience(out []float32, s Song, rate int, yield func()) {
 	for i, v := range amb {
 		out[i] += v
 		peak = max(peak, float32(math.Abs(float64(out[i]))))
+		if yield != nil && i%yieldEvery == yieldEvery-1 {
+			yield()
+		}
 	}
 	if peak > 0.98 {
 		g := 0.98 / peak
 		for i := range out {
 			out[i] *= g
+			if yield != nil && i%yieldEvery == yieldEvery-1 {
+				yield()
+			}
 		}
 	}
 }
@@ -114,6 +126,7 @@ type layer struct {
 	rate  float64
 	rng   *rand.Rand
 	yield func()
+	work  int // samples done since the last yield
 }
 
 func newLayer(n, rate int, seed uint64, a Ambience, yield func()) *layer {
@@ -123,15 +136,35 @@ func newLayer(n, rate int, seed uint64, a Ambience, yield func()) *layer {
 	}
 }
 
+// yieldEvery is how many samples of work pass between yields: about a
+// millisecond or two of work on a slow machine.
+const yieldEvery = 1 << 16
+
+// spend notes that n samples of work were done, and yields when enough
+// has piled up since the last time.
+func (l *layer) spend(n int) {
+	l.work += n
+	if l.work >= yieldEvery {
+		l.work = 0
+		l.pause()
+	}
+}
+
 func (l *layer) pause() {
 	if l.yield != nil {
 		l.yield()
 	}
 }
 
-// add puts v at sample i, wrapping round the loop.
-func (l *layer) add(i int, v float64) {
-	l.buf[((i%l.n)+l.n)%l.n] += v
+// start returns where sample at of an event is in the loop, wrapped.
+func (l *layer) start(at int) int { return ((at % l.n) + l.n) % l.n }
+
+// put adds v at index *i and moves on, wrapping round the loop.
+func (l *layer) put(i *int, v float64) {
+	l.buf[*i] += v
+	if *i++; *i == l.n {
+		*i = 0
+	}
 }
 
 // times picks about perSec events a second at random moments.
@@ -163,6 +196,7 @@ func (l *layer) bed(lo, hi float64, cycles int, depth, level float64) {
 	for i := range white {
 		white[i] = l.rng.Float64()*2 - 1
 	}
+	l.spend(m * 4) // the filters below run twice round
 	// Run the filters round the loop twice and keep the second time, so
 	// the end flows into the start.
 	var a, b float64
@@ -176,29 +210,39 @@ func (l *layer) bed(lo, hi float64, cycles int, depth, level float64) {
 				v -= b
 			}
 			out[i] = v
+			if i%yieldEvery == yieldEvery-1 {
+				l.pause()
+			}
 		}
 	}
-	l.pause()
 	phase := l.rng.Float64() * 2 * math.Pi
 	w := 2 * math.Pi * float64(cycles) / float64(m)
+	peak := 0.0
 	for i := range out {
 		out[i] *= 1 - depth + depth*(0.5+0.5*math.Sin(w*float64(i)+phase))
+		peak = max(peak, math.Abs(out[i]))
 	}
-	peak := 0.0
-	tmp := make([]float64, l.n)
-	for i := range tmp {
-		pos := float64(i) / k
-		j := int(pos)
-		f := pos - float64(j)
-		v := out[j%m]*(1-f) + out[(j+1)%m]*f
-		tmp[i] = v
-		peak = max(peak, math.Abs(v))
-	}
+	l.spend(m * 4)
 	if peak == 0 {
 		return
 	}
-	for i, v := range tmp {
-		l.buf[i] += v / peak * level
+	// The peak of the slow samples is a hair above the peak of the lines
+	// drawn between them: close enough for a level.
+	gain := level / peak
+	j, f, step := 0, 0.0, 1/k
+	for i := range l.buf {
+		jn := j + 1
+		if jn == m {
+			jn = 0
+		}
+		l.buf[i] += (out[j]*(1-f) + out[jn]*f) * gain
+		if f += step; f >= 1 {
+			f--
+			j++
+		}
+		if i%yieldEvery == yieldEvery-1 {
+			l.pause()
+		}
 	}
 }
 
@@ -208,47 +252,56 @@ func (l *layer) bed(lo, hi float64, cycles int, depth, level float64) {
 func (l *layer) ping(at int, f, glide, decay, length, amp float64) {
 	n := int(min(length, decay*8) * l.rate)
 	attack := 0.004 * l.rate
+	// The note is cut off at n, so ramp it to zero over its last few
+	// milliseconds instead of ending with a tick.
+	tail := min(attack, float64(n)/4)
 	phase := 0.0
 	env := amp
 	fall := math.Exp(-1 / (decay * l.rate))
+	i0 := l.start(at)
+	shape := func(i int) float64 {
+		v := env
+		if float64(i) < attack {
+			v *= float64(i) / attack
+		}
+		if r := float64(n-i) / tail; r < 1 {
+			v *= r
+		}
+		return v
+	}
 	if glide == 1 {
 		// A steady pitch: turn a point round a circle, no sines needed.
 		c, s := math.Cos(2*math.Pi*f/l.rate), math.Sin(2*math.Pi*f/l.rate)
 		x, y := 0.0, 1.0
 		for i := 0; i < n; i++ {
-			v := env
-			if float64(i) < attack {
-				v *= float64(i) / attack
-			}
-			l.add(at+i, y*v)
+			l.put(&i0, y*shape(i))
 			x, y = x*c-y*s, x*s+y*c
 			env *= fall
 		}
-		return
-	}
-	for i := 0; i < n; i++ {
-		fr := f * (1 + (glide-1)*float64(i)/float64(n))
-		phase += 2 * math.Pi * fr / l.rate
-		v := env
-		if float64(i) < attack {
-			v *= float64(i) / attack
+	} else {
+		for i := 0; i < n; i++ {
+			fr := f * (1 + (glide-1)*float64(i)/float64(n))
+			phase += 2 * math.Pi * fr / l.rate
+			l.put(&i0, math.Sin(phase)*shape(i))
+			env *= fall
 		}
-		l.add(at+i, math.Sin(phase)*v)
-		env *= fall
 	}
+	l.spend(n)
 }
 
 // burst adds a short soft puff of low passed noise.
 func (l *layer) burst(at int, length, tone, amp float64) {
 	n := int(length * l.rate)
 	var a float64
+	i0 := l.start(at)
 	for i := 0; i < n; i++ {
 		x := float64(i) / float64(n)
 		env := math.Sin(math.Pi * x)
 		env *= env
 		a += tone * (l.rng.Float64()*2 - 1 - a)
-		l.add(at+i, a*env*amp)
+		l.put(&i0, a*env*amp)
 	}
+	l.spend(n)
 }
 
 func (l *layer) drips(perSec float64) {
@@ -258,7 +311,6 @@ func (l *layer) drips(perSec float64) {
 		l.ping(at, f, 1.5, 0.03, 0.2, amp)
 		// A softer echo off the cave walls.
 		l.ping(at+int(0.19*l.rate), f, 1.5, 0.03, 0.2, amp*0.3)
-		l.pause()
 	}
 }
 
@@ -270,7 +322,6 @@ func (l *layer) crickets(perSec float64) {
 		for p := 0; p < pulses; p++ {
 			l.ping(at+int(float64(p)*0.06*l.rate), f, 1, 0.012, 0.05, amp)
 		}
-		l.pause()
 	}
 }
 
@@ -283,7 +334,6 @@ func (l *layer) birds(perSec float64) {
 		for p := 0; p < notes; p++ {
 			l.ping(at+int(float64(p)*0.11*l.rate), f*(1+0.06*float64(p%2)), glide, 0.04, 0.09, amp)
 		}
-		l.pause()
 	}
 }
 
@@ -291,13 +341,11 @@ func (l *layer) crackle(perSec float64) {
 	for _, at := range l.times(perSec) {
 		l.burst(at, 0.004+l.rng.Float64()*0.01, 0.25, 0.04+l.rng.Float64()*0.05)
 	}
-	l.pause()
 }
 
 func (l *layer) pages(perSec float64) {
 	for _, at := range l.times(perSec / 5) {
 		l.burst(at, 0.15+l.rng.Float64()*0.2, 0.12, 0.2)
-		l.pause()
 	}
 }
 
@@ -335,6 +383,5 @@ func (l *layer) chimes(s Song, perSec float64) {
 		amp := 0.04 + l.rng.Float64()*0.02
 		l.ping(at, f, 1, 0.5, 1.8, amp)
 		l.ping(at, f*2.01, 1, 0.25, 1.2, amp*0.25)
-		l.pause()
 	}
 }
