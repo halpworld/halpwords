@@ -153,3 +153,26 @@ func TestLostRefreshReplyWithGrace(t *testing.T) {
 		t.Error("the answer not sent wasn't kept")
 	}
 }
+
+// TestMeLastSeqOutOfRange: a last_seq below 0 or past 1<<53 (more than a
+// JSON number holds exactly) is ignored, not taken as the next number.
+func TestMeLastSeqOutOfRange(t *testing.T) {
+	for _, last := range []int64{-5, 1<<53 + 1, 1 << 62} {
+		f, c, _, _ := linked(t)
+		c.mu.Lock()
+		before := c.st.NextSeq
+		c.mu.Unlock()
+		f.mu.Lock()
+		f.meSeq, f.lastSeq = true, last
+		f.mu.Unlock()
+		if err := c.Sync(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		c.mu.Lock()
+		got := c.st.NextSeq
+		c.mu.Unlock()
+		if got != before {
+			t.Errorf("last_seq %d: NextSeq %d, was %d", last, got, before)
+		}
+	}
+}

@@ -198,7 +198,7 @@ func (c *Client) syncMe(ctx context.Context, gen int) error {
 	defer c.mu.Unlock()
 	c.aiOff = false // the learner, as the server says now
 	save := false
-	if got.LastSeq != nil && *got.LastSeq+1 > c.st.NextSeq {
+	if got.LastSeq != nil && saneSeq(*got.LastSeq) && *got.LastSeq+1 > c.st.NextSeq {
 		// The saved number was too low (a game that quit without
 		// saving it): new events would be taken as duplicates.
 		c.st.NextSeq = *got.LastSeq + 1
@@ -266,7 +266,9 @@ func (c *Client) upload(ctx context.Context, gen int) error {
 			c.uploads++
 			// A lost queue file must not make new events look like
 			// ones the server already has.
-			c.st.NextSeq = max(c.st.NextSeq, res.LastSeq+1)
+			if saneSeq(res.LastSeq) {
+				c.st.NextSeq = max(c.st.NextSeq, res.LastSeq+1)
+			}
 			c.batch = min(MaxBatch, c.batch*2)
 			// Saved at once, so a game that quits now, or a sync that
 			// fails later, never hands out these numbers again. If it

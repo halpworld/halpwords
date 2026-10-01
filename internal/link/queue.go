@@ -97,6 +97,14 @@ func (q *queue) maxSeq() int64 {
 	return m
 }
 
+// seqLimit is the highest sequence number the game takes from the server:
+// the most a JSON number holds exactly. A last_seq past it, or below 0,
+// is a broken answer, not a reason to skip numbers for ever.
+const seqLimit = 1 << 53
+
+// saneSeq reports whether a last_seq from the server can be believed.
+func saneSeq(s int64) bool { return s >= 0 && s <= seqLimit }
+
 // nextSeq hands out a sequence number. c.mu is held.
 func (c *Client) nextSeq() int64 {
 	s := c.st.NextSeq
