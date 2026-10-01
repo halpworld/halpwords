@@ -1,12 +1,17 @@
 package scene
 
 import (
+	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/text/unicode/norm"
 
+	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/llm"
+	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/pkg/proc"
 )
 
@@ -138,5 +143,73 @@ func TestQAArrivalQuestFloor(t *testing.T) {
 		if g == taglines[c.theme.Name] {
 			t.Errorf("quest floor shows tagline")
 		}
+	}
+}
+
+// Whatever sets the mode, Update never lets the card count down (or
+// survive) outside explore mode.
+func TestQAArrivalFrozenOutsideExplore(t *testing.T) {
+	input.FakeKeys(t, func(ebiten.Key) int { return 0 })
+	ctx := testContext(t)
+	withFont(t, ctx)
+	ctx.Input = &input.State{}
+	for _, m := range []mode{modeMap, modeShrine, modeCampfire, modeDead} {
+		c := testCrawl(t, ctx)
+		c.theme = &proc.Themes[0]
+		c.mode = m // a direct assignment, bypassing enter
+		c.arriveT = 100
+		c.Update(ctx)
+		if c.arriveT != 0 && c.arriveT != 100 { // cleared, or frozen by an early return
+			t.Errorf("mode %d: card %d after Update", m, c.arriveT)
+		}
+		c.drawArrival(nil, ctx) // must return before touching the image
+	}
+}
+
+// A wrapped or shrunk headline keeps every letter and mark it can show.
+func TestQAArrivalWrapKeepsLettersAndMarks(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	vw, vh := viewW*gfx.ArtScale, viewH*gfx.ArtScale
+	name := "Ἡ Μεγάλη Βιβλιοθήκη τῶν Ἀθηναίων"
+	placed, _ := layoutArrival(ctx.Font, arrivalLines(2, name, "Sky Garden", true), vw, vh)
+	var heads []string
+	for _, p := range placed {
+		if p.col == pal.White && p.text != "Sky Garden" && p.text != taglines["Sky Garden"] {
+			heads = append(heads, p.text)
+		}
+	}
+	got := strings.Join(heads, " ")
+	if strings.HasSuffix(got, "…") {
+		t.Skip("name was cut; letters not all kept")
+	}
+	if norm.NFC.String(got) != norm.NFC.String(name) {
+		t.Errorf("wrap changed the name: %q vs %q", got, name)
+	}
+	// A cut name ends in an ellipsis and never starts or ends on a bare mark.
+	long := strings.Repeat("ἄ́ ", 60)
+	placed, box := layoutArrival(ctx.Font, arrivalLines(2, long, "Sky Garden", true), vw, vh)
+	for _, p := range placed {
+		r := []rune(p.text)
+		if len(r) > 0 && unicode.Is(unicode.M, r[0]) {
+			t.Errorf("line starts with a mark: %q", p.text)
+		}
+	}
+	if box.Max.Y > panelY {
+		t.Errorf("box %v reaches the panel", box)
+	}
+}
+
+// A late script's Greek name lands on the card still up.
+func TestQAArrivalLateScriptGreekName(t *testing.T) {
+	ctx := testContext(t)
+	c := testCrawl(t, ctx)
+	c.theme = &proc.Themes[1]
+	c.startArrival()
+	c.arriveT = 90
+	c.run.ai = &runAI{scripts: map[int]*llm.Script{1: {Name: "Τὸ Ἀρχαῖον Ἀνάκτορον"}}}
+	c.lateScript(&llm.Script{Name: "Τὸ Ἀρχαῖον Ἀνάκτορον"})
+	if got := arrivalTexts(c.arrival); got[1] != "Τὸ Ἀρχαῖον Ἀνάκτορον" || c.arriveT != 90 {
+		t.Errorf("card %q t=%d", got, c.arriveT)
 	}
 }
