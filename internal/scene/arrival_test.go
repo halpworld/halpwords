@@ -294,7 +294,7 @@ func TestArrivalLongNamesWrapAndFit(t *testing.T) {
 		}
 		head := 0
 		for _, p := range placed {
-			if p.scale == 2 || (p.col == pal.White && p.scale == 1 && p.text != "Sky Garden" && p.text != taglines["Sky Garden"]) {
+			if !p.hint && (p.scale == 2 || (p.col == pal.White && p.scale == 1 && p.text != "Sky Garden" && p.text != taglines["Sky Garden"])) {
 				head++
 				if r := []rune(p.text); unicode.Is(unicode.M, r[0]) {
 					t.Errorf("line starts with a combining mark: %q", p.text)
@@ -341,7 +341,7 @@ func TestArrivalHasKeyHintInsideTheBox(t *testing.T) {
 		placed, box := layoutArrival(ctx.Font, arrivalLines(2, name, "Ice Halls", true), vw, vh)
 		last := placed[len(placed)-1]
 		r := image.Rect(last.x, last.y, last.x+ctx.Font.Width(last.text, last.scale), last.y+gfx.LineHeight)
-		if !last.hint || last.text != "Space" || !r.In(box) || r.Max.X < box.Max.X-12 {
+		if !last.hint || last.text != "Space to skip" || !r.In(box) || r.Max.X < box.Max.X-12 {
 			t.Errorf("%.8q: hint %q at %v, box %v", name, last.text, r, box)
 		}
 		for _, p := range placed[:len(placed)-1] {
@@ -358,7 +358,7 @@ func TestArrivalGlyphsAreInTheFont(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := "… ā ē ī ō ū Ā Ē Ī Ō Ū Space Floor 0123456789 · "
+	text := "… ā ē ī ō ū Ā Ē Ī Ō Ū Space to skip Floor 0123456789 · "
 	for _, tag := range taglines {
 		text += tag
 	}
@@ -387,8 +387,14 @@ func TestArrivalWorldsAreWiredIn(t *testing.T) {
 		if len(c.decor) != want {
 			t.Errorf("depth %d %s: %d props, want %d", d, c.theme.Name, len(c.decor), want)
 		}
-		if got := len(c.sprites(0)); got < want {
-			t.Errorf("depth %d %s: sprites drop the props", d, c.theme.Name)
+		near := 0
+		for _, s := range c.decor {
+			if (dungeon.Point{X: int(s.X), Y: int(s.Y)}).Manhattan(c.pos) <= 12 {
+				near++
+			}
+		}
+		if got := len(c.sprites(0)); got < near {
+			t.Errorf("depth %d %s: sprites drop the props near the hero", d, c.theme.Name)
 		}
 	}
 	if len(seen) < 2 {
@@ -427,5 +433,69 @@ func TestArrivalCalmReachesTheRaid(t *testing.T) {
 		if s.view.Calm != calm {
 			t.Errorf("calm %v: raid renderer has %v", calm, s.view.Calm)
 		}
+	}
+}
+
+// Props stay where they were after a monster dies, a chest opens and the
+// game is saved and resumed: only props on something live may change.
+func TestArrivalDecorSurvivesSaveWithKillsAndChests(t *testing.T) {
+	useTempDir(t)
+	ctx := testContext(t)
+	found := false
+	for _, d := range []int{2, 5, 8, 11, 14, 17} {
+		c := wiringCrawl(t, ctx, d)
+		if len(c.decor) == 0 {
+			continue
+		}
+		found = true
+		c.level.Monsters[0].HP = 0
+		for _, ch := range c.level.Chests {
+			ch.Open = true
+			break
+		}
+		for p := range c.level.Features {
+			delete(c.level.Features, p)
+			break
+		}
+		c.pos = c.level.Start
+		if !c.writeSave(ctx, true) {
+			t.Fatal("save")
+		}
+		got, err := loadCrawl(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		occupied := map[dungeon.Point]bool{}
+		for p := range got.level.Chests {
+			occupied[p] = true
+		}
+		for p := range got.level.Features {
+			occupied[p] = true
+		}
+		for _, m := range got.level.Monsters {
+			occupied[m.At] = true
+		}
+		after := map[[2]float64]bool{}
+		for _, s := range got.decor {
+			after[[2]float64{s.X, s.Y}] = true
+		}
+		for _, s := range c.decor {
+			cell := dungeon.Point{X: int(s.X), Y: int(s.Y)}
+			if !occupied[cell] && !after[[2]float64{s.X, s.Y}] {
+				t.Errorf("floor %d: prop at %v moved or vanished over a save", d, cell)
+			}
+		}
+	}
+	if !found {
+		t.Skip("no floor with props")
+	}
+}
+
+func TestArrivalSpritesDoNotAllocate(t *testing.T) {
+	ctx := testContext(t)
+	c := wiringCrawl(t, ctx, 5)
+	c.sprites(0) // sizes the buffer
+	if n := testing.AllocsPerRun(50, func() { c.sprites(7) }); n != 0 {
+		t.Errorf("sprites allocates %v times a frame", n)
 	}
 }

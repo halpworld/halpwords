@@ -367,7 +367,7 @@ func frac(v float64) float64 { return v - math.Floor(v) }
 const propNudge = 0.28
 
 // Decor places the world's props on a few empty floor cells against room
-// walls, away from doorways, chests, features, monsters, the start and the
+// walls, away from doorways, notes, chests, features, monsters, the start and the
 // stairs. It draws its random numbers from its own generator, seeded from
 // the level's seed and depth, and only reads the level: the look of a floor
 // never changes the floor.
@@ -377,15 +377,23 @@ func Decor(l *dungeon.Level, t *proc.Theme) []Sprite {
 	}
 	rng := proc.NewRand(mix64(l.Seed^decorSalt) ^ uint64(l.Depth)*0xd6e8feb86659fd93)
 	img := t.Prop(rng.Uint64())
+	// The spots are drawn from static data only (the rooms, walls, the
+	// start, the stairs and the notes), so they are the same before and after
+	// a save is restored. Props that land on something live are dropped
+	// afterwards, without drawing again.
 	busy := map[dungeon.Point]bool{l.Start: true, l.Exit: true}
-	for p := range l.Chests {
+	for p := range l.Notes {
 		busy[p] = true
+	}
+	live := map[dungeon.Point]bool{}
+	for p := range l.Chests {
+		live[p] = true
 	}
 	for p := range l.Features {
-		busy[p] = true
+		live[p] = true
 	}
 	for _, m := range l.Monsters {
-		busy[m.At] = true
+		live[m.At] = true
 	}
 	var out []Sprite
 	for _, room := range l.Rooms {
@@ -399,6 +407,9 @@ func Decor(l *dungeon.Level, t *proc.Theme) []Sprite {
 			s := spots[j]
 			spots[j] = spots[len(spots)-1]
 			spots = spots[:len(spots)-1]
+			if live[s.at] {
+				continue
+			}
 			out = append(out, Sprite{
 				X:    float64(s.at.X) + 0.5 + propNudge*float64(s.wall.X),
 				Y:    float64(s.at.Y) + 0.5 + propNudge*float64(s.wall.Y),

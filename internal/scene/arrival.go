@@ -38,7 +38,7 @@ var taglines = map[string]string{
 }
 
 // arrivalHint is the key that skips the card, in its corner.
-const arrivalHint = "Space"
+const arrivalHint = "Space to skip"
 
 // arrivalLine is one line of the arrival card.
 type arrivalLine struct {
@@ -221,7 +221,7 @@ func layoutArrival(f *gfx.Font, lines []arrivalLine, vw, vh int) ([]placedLine, 
 		y += gfx.LineHeight*l.scale + gap
 	}
 	placed = append(placed, placedLine{
-		arrivalLine: arrivalLine{arrivalHint, 1, pal.Ash, false},
+		arrivalLine: arrivalLine{arrivalHint, 1, pal.White, false},
 		x:           box.Max.X - pad - hw, y: box.Max.Y - pad - gfx.LineHeight, hint: true,
 	})
 	return placed, box

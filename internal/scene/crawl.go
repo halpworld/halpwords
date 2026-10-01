@@ -195,6 +195,7 @@ type Crawl struct {
 	arrival     []arrivalLine    // the floor-arrival card
 	arriveT     int              // ticks of the card left
 	decor       []raycast.Sprite // the world's props, from the look of the floor
+	spriteBuf   []raycast.Sprite // reused every frame
 	air         uint64           // ticks of moving air (particles), not counted while paused
 	floats      []floater
 }
@@ -751,7 +752,12 @@ func (c *Crawl) look(m *dungeon.Monster) [2]*proc.Indexed {
 }
 
 func (c *Crawl) sprites(tick uint64) []raycast.Sprite {
-	out := append([]raycast.Sprite(nil), c.decor...)
+	out := c.spriteBuf[:0]
+	for _, d := range c.decor {
+		if (dungeon.Point{X: int(d.X), Y: int(d.Y)}).Manhattan(c.pos) <= 12 {
+			out = append(out, d)
+		}
+	}
 	for p, ch := range c.level.Chests {
 		if p.Manhattan(c.pos) > 12 {
 			continue
@@ -793,6 +799,7 @@ func (c *Crawl) sprites(tick uint64) []raycast.Sprite {
 		}
 		out = append(out, s)
 	}
+	c.spriteBuf = out
 	return out
 }
 

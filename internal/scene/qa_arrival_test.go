@@ -175,7 +175,7 @@ func TestQAArrivalWrapKeepsLettersAndMarks(t *testing.T) {
 	placed, _ := layoutArrival(ctx.Font, arrivalLines(2, name, "Sky Garden", true), vw, vh)
 	var heads []string
 	for _, p := range placed {
-		if p.col == pal.White && p.text != "Sky Garden" && p.text != taglines["Sky Garden"] {
+		if p.col == pal.White && !p.hint && p.text != "Sky Garden" && p.text != taglines["Sky Garden"] {
 			heads = append(heads, p.text)
 		}
 	}
