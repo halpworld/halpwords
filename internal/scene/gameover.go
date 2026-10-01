@@ -102,7 +102,9 @@ func (g *GameOver) fame(name string) compete.Fame {
 // was still in the table.
 func (g *GameOver) rename(ctx *game.Context, name string) bool {
 	t := ctx.Profile.Fame.Table(compete.TableKey(g.mode, g.lang.Code))
-	for i := range t {
+	// A tie goes below the older entry, so the newest match is the last: an
+	// older run with the same code and score keeps its name.
+	for i := len(t) - 1; i >= 0; i-- {
 		if t[i].Code == g.code && t[i].Score == g.score {
 			t[i].Name = name
 			return true

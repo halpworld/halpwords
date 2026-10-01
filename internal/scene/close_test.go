@@ -222,3 +222,25 @@ func TestHiddenAtTheNamePromptKeepsThePromptOpen(t *testing.T) {
 		t.Fatalf("hall of fame %+v", got)
 	}
 }
+
+// Replaying a seed with the same score must rename the new provisional
+// entry, not the older one with the same code and score.
+func TestProvisionalRenameKeepsAnOlderTie(t *testing.T) {
+	useTempDir(t)
+	ctx := testContext(t)
+	c := hardcoreCrawl(t, ctx, 3)
+	c.die()
+	key := compete.TableKey(compete.Hardcore, "fr")
+	old := newGameOver(ctx, c.run, false)
+	old.name = []rune("Old")
+	old.record(ctx)
+	g := newGameOver(ctx, c.run, false)
+	g.name = []rune("Tmp")
+	g.OnHide(ctx)
+	g.name = []rune("New")
+	g.record(ctx)
+	table := ctx.Profile.Fame.Table(key)
+	if len(table) != 2 || table[0].Name != "Old" || table[1].Name != "New" {
+		t.Fatalf("hall of fame %+v", table)
+	}
+}

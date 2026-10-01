@@ -42,7 +42,7 @@ func replaceText() string {
 }
 
 // replaceNote is said as well when the saved run can't be got back.
-const replaceNote = "A Hardcore or Daily run can't be got back."
+const replaceNote = "This run can't be undone."
 
 // updateAsk answers the question of replacing the saved adventure. Nothing
 // is replaced unless the player chooses Yes.
@@ -199,5 +199,5 @@ func (p *ClassPick) drawAsk(dst *ebiten.Image, ctx *game.Context) {
 		}
 		f.DrawShadow(dst, label, x+80+i*190, y+92, 1, col)
 	}
-	f.DrawShadow(dst, "←/→ choose   Enter select   Y yes   N no", 8, game.ScreenH-20, 1, pal.Ash)
+	f.DrawShadow(dst, "←/→ choose   Enter select   Y yes   N no   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
 }
