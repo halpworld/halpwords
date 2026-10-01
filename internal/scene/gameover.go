@@ -88,6 +88,15 @@ func (g *GameOver) record(ctx *game.Context) {
 	g.entered = true
 }
 
+// OnClose implements game.Closer: a run that placed in the Hall of Fame is
+// recorded if the game closes at the name prompt, under the name typed so
+// far, or "Hero" (#50).
+func (g *GameOver) OnClose(ctx *game.Context) {
+	if g.place > 0 && !g.entered {
+		g.record(ctx)
+	}
+}
+
 // Update implements game.Scene.
 func (g *GameOver) Update(ctx *game.Context) error {
 	if g.place > 0 && !g.entered {

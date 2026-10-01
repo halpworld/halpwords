@@ -308,7 +308,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 	}
 	ctx.openLearners()
 	ctx.openLink()
-	watchPage(func() *link.Client { return ctx.Link })
+	watchPage(func() *link.Client { return ctx.Link }, ctx.SaveOnClose)
 	if err := ctx.LoadLists(); err != nil {
 		return nil, err
 	}
@@ -329,6 +329,12 @@ func New(first func(*Context) Scene) (*Game, error) {
 // Update implements ebiten.Game.
 func (g *Game) Update() error {
 	defer guard()
+	if ebiten.IsWindowBeingClosed() {
+		// The window's close button: main asked to handle it, so the
+		// run can be saved before the game ends.
+		g.ctx.SaveOnClose()
+		return ebiten.Termination
+	}
 	g.ctx.Tick++
 	g.ctx.syncFullscreen()
 	g.ctx.Input.Update()

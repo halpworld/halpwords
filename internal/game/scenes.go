@@ -35,6 +35,25 @@ type Musical interface {
 	Music() audio.Track
 }
 
+// Closer is a scene that keeps something when the game is closed from
+// outside: the window's close button, or a web page that is hidden or
+// closed. It must write at once and may be told more than once.
+type Closer interface {
+	OnClose(ctx *Context)
+}
+
+// SaveOnClose tells the scenes the game is closing, the one on top first,
+// so a run is saved and a score is recorded (#49, #50). A menu on top of
+// a run doesn't hide the run.
+func (c *Context) SaveOnClose() {
+	st := c.scenes.stack
+	for i := len(st) - 1; i >= 0; i-- {
+		if s, ok := st[i].(Closer); ok {
+			s.OnClose(c)
+		}
+	}
+}
+
 // TitleMusic is the music of the title screen and menus.
 var TitleMusic = audio.Track{Mood: audio.Title, Seed: 1}
 

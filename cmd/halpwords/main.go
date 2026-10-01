@@ -21,6 +21,7 @@ func main() {
 	ebiten.SetWindowSize(game.ScreenW*2, game.ScreenH*2)
 	ebiten.SetWindowSizeLimits(game.ScreenW, game.ScreenH, -1, -1)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetWindowClosingHandled(true) // game.Update saves the run, then ends
 	var icons []image.Image
 	for _, size := range []int{16, 32, 48, 64, 128, 256} {
 		icons = append(icons, proc.IconAt(size))

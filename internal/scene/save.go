@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"time"
 
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
@@ -304,4 +305,51 @@ func (c *Crawl) writeSave(ctx *game.Context, suspend bool) bool {
 	c.lastSave, _ = encodeSave(c.run, c.level, c.pos, c.facing, true)
 	c.unsaved = false
 	return true
+}
+
+// OnClose implements game.Closer: the window or the page is closing, so a
+// run that Suspend would keep is written the way Suspend writes it (#49).
+// An Adventure comes back where it was; a Hardcore or Daily run is a
+// suspend too, and so can be picked up once, like any suspend.
+//
+// Nothing is written where the pause menu would not offer Suspend: in a
+// battle or a puzzle, after a fall, or in a race. The save already on disk
+// is then left as it is.
+func (c *Crawl) OnClose(ctx *game.Context) {
+	if !c.canSuspend() {
+		return
+	}
+	if c.writeSave(ctx, true) && c.run.hardcore() {
+		c.closeSaved, c.closedAt = true, time.Now()
+	}
+}
+
+// canSuspend reports whether the game could be suspended now: the pause
+// menu offers Suspend when the hero is exploring and it is not a race.
+func (c *Crawl) canSuspend() bool {
+	m := c.mode
+	if m == modePause || m == modeQuit {
+		m = c.resume
+	}
+	return m == modeExplore && c.run.race == nil
+}
+
+// closeGrace is how long after OnClose the game must still be running
+// for it to count as going on: a web page may run one more frame after it
+// is hidden, and must not take its own save back then.
+const closeGrace = time.Second
+
+// afterClose is called every update, and does something when the game goes
+// on after OnClose, as a web page does when it is shown again. A Hardcore
+// run's suspend is taken back off the disk, so the run is in memory only
+// again: it can be picked up once, and a crash after that still loses it.
+func (c *Crawl) afterClose(now time.Time) {
+	if !c.closeSaved || now.Sub(c.closedAt) < closeGrace {
+		return
+	}
+	c.closeSaved = false
+	if c.run.hardcore() && c.run.onDisk {
+		save.Remove(saveName)
+		c.run.onDisk = false
+	}
 }
