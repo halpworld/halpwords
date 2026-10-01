@@ -178,6 +178,55 @@ version as its release notes.
   close. (#54)
 - **A school sign-in code survives a 403 `not_linkable`**, so the pupil
   doesn't start again. (#39)
+- **School sign-in waits as long as it takes.** A slow or failed poll no
+  longer ends the sign-in: the code is kept until it runs out, a 429 is
+  waited out (up to a minute), and an old poll can't undo a newer code
+  after Esc. (#37)
+- **The sign-in screen finishes when the tokens are saved**, not when the
+  first sync ends, and the first sync carries on in the background. Sync
+  now shows "Synced." or why it failed, and "Syncing..." no longer stays
+  up. (#36, #42)
+- **A remote unlink leaves the Play Together room**, background syncs stop
+  when a learner is switched or removed, and quitting offline no longer
+  waits about 7 seconds. (#42)
+- **A wrong article is no longer Perfect.** With articles optional,
+  `la chien` for `le chien` is a slip with a "Check the article" tip;
+  leaving the article out is still fine. (#43)
+- **No Graze for another word's answer.** Typing the answer to a different
+  word in the list (`mère` for `père`) is a Miss, and the game says which
+  word it was. (#44)
+- **Re-linking keeps newer word cards.** Progress made while unlinked is
+  kept when the server's card is older. (#40)
+- **A word card with a bad box number no longer crashes the game**, from a
+  file or from the server. (#52)
+- **Starting a new run asks before replacing the saved adventure.** The
+  hero picker shows the saved hero and floor, and says when a Hardcore or
+  Daily run can't be got back. The answer starts on No. (#48)
+- **Closing the game saves your run.** Closing the window or the web page
+  writes a suspend, as "Suspend and quit" does, so Continue picks the run
+  up. A Hardcore or Daily run can be picked up once; a crash after
+  resuming it still loses it. A Hall of Fame name typed when the game
+  closes is kept. (#49, #50)
+- **Small screen fixes.** Esc in the quest intro goes back to the hero
+  picker, the AI Helper text fits the screen, the Hall of Fame Rankings tab
+  shows its code box and hint, and a finished race asks for a second Esc
+  while it is reconnecting. (#47)
+- **Moving the web game never sends the link files.** Each learner's
+  tokens, answer queue and parked answers stay behind. (#61)
+- Test fixes: the learner tests no longer depend on the machine they run
+  on (#63), and the web build's vet passes again (#65).
+
+### Known limits
+
+- **The web game keeps its files in plain text in the browser**, including
+  the link tokens and answers not yet sent. On a shared computer, sign out
+  or unlink when you finish, and clear the site's data when the computer is
+  handed on. (#61)
+- **The picture or card lock keeps classmates out at the keyboard.** It is
+  not protection against someone who can copy `learners.json`: the
+  pictures can be tried offline. (#62)
+- **A learner linked with a grown-up's pairing code has no lock.** Anyone
+  at a shared computer can pick them in Switch learner. (#64)
 
 ## v1.0.0
 

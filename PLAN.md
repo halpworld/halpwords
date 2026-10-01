@@ -886,6 +886,12 @@ be chosen by anyone at the computer. Known and accepted: a game from
 before this fix can lose, once, the answers it queued before its first
 `/me`; and parked events are rarely counted twice (a stop between writing the queue and the
 parked file).
+Also documented as limits, not fixed (bug-fix round 2): the web
+build keeps link tokens, the answer queue and parked events as plain
+text in local storage (#61); the picture or card lock keeps classmates
+out at the keyboard but its few pictures can be tried offline by someone
+who can copy `learners.json` (#62); a pairing-code learner has no lock
+(#64, Q3 stands). The README says all three in its privacy notes.
 
 *Now (server W5.4, done):* **signing in with a school Google or
 Microsoft account.** The sign-in screen's *I have a school Google or
