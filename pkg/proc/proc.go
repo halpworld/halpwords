@@ -109,10 +109,10 @@ func BrickWall(w, h int, ramp []color.RGBA, seed uint64) *image.RGBA {
 func Vignette(img *image.RGBA, strength float64) {
 	b := img.Bounds()
 	cx, cy := float64(b.Dx())/2, float64(b.Dy())/2
-	maxd := math.Hypot(cx, cy)
+	maxd := hypot(cx, cy)
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			d := math.Hypot(float64(x)-cx, float64(y)-cy) / maxd
+			d := hypot(float64(x)-cx, float64(y)-cy) / maxd
 			k := 1 - strength*d*d
 			// Quantise the darkening with the dither matrix to keep it pixel-y.
 			k = math.Floor(k*6+bayer4[y&3][x&3]) / 6
@@ -124,3 +124,8 @@ func Vignette(img *image.RGBA, strength float64) {
 		}
 	}
 }
+
+// hypot is the length of (x, y). Unlike math.Hypot, which has its own
+// assembly on amd64, it rounds the same on every platform: the textures
+// and monsters it draws must not depend on the machine.
+func hypot(x, y float64) float64 { return math.Sqrt(x*x + y*y) }

@@ -3,6 +3,7 @@ package raycast
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"math"
 	"reflect"
 	"slices"
 	"testing"
@@ -253,5 +254,19 @@ func BenchmarkRenderWorlds(b *testing.B) {
 				s.draw(r, nil, uint64(k))
 			}
 		})
+	}
+}
+
+// The written-out linearisation table matches the sRGB formula.
+func TestLinearTable(t *testing.T) {
+	for v := range 256 {
+		s := float64(v) / 255
+		want := s / 12.92
+		if s > 0.04045 {
+			want = math.Pow((s+0.055)/1.055, 2.4)
+		}
+		if math.Abs(linear[v]-want) > 1e-12 {
+			t.Errorf("linear[%d] = %v, want %v", v, linear[v], want)
+		}
 	}
 }

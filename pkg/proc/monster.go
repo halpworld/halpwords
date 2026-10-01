@@ -99,7 +99,7 @@ func (c *canvas) line(x0, y0, x1, y1, width float64, p uint8) {
 		if l2 > 0 {
 			t = math.Max(0, math.Min(1, ((x-x0)*dx+(y-y0)*dy)/l2))
 		}
-		return math.Hypot(x-x0-t*dx, y-y0-t*dy) <= width/2
+		return hypot(x-x0-t*dx, y-y0-t*dy) <= width/2
 	})
 }
 

@@ -100,7 +100,7 @@ func nearest(x, y float64, pts [][2]float64) cell {
 	for i, p := range pts {
 		ox := math.Mod(x-p[0]+1.5*TexSize, TexSize) - TexSize/2
 		oy := math.Mod(y-p[1]+1.5*TexSize, TexSize) - TexSize/2
-		d := math.Hypot(ox, oy)
+		d := hypot(ox, oy)
 		switch {
 		case d < c.d1:
 			c.d2 = c.d1
@@ -741,7 +741,7 @@ func tips(m *Indexed, ramp []color.RGBA, n int, seed uint64) {
 		for dy := -3; dy <= 3; dy++ {
 			for dx := -3; dx <= 3; dx++ {
 				x, y := wrap(cx+dx, TexSize), wrap(cy+dy, TexSize)
-				switch d := math.Hypot(float64(dx), float64(dy)); {
+				switch d := hypot(float64(dx), float64(dy)); {
 				case d < 1:
 					m.Set(x, y, last(ramp))
 				case d < 2:
@@ -957,7 +957,7 @@ func ModGear(m *Indexed, l Look, seed uint64) {
 	for y := range TexSize {
 		for x := range TexSize {
 			dx, dy := float64(x)+0.5-cx, float64(y)+0.5-cy
-			d, a := math.Hypot(dx, dy), math.Atan2(dy, dx)
+			d, a := hypot(dx, dy), math.Atan2(dy, dx)
 			r := 8.5
 			if math.Mod(a+math.Pi+0.2, math.Pi/4) < math.Pi/8 {
 				r = 11 // a tooth

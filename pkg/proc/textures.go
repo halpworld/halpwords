@@ -135,7 +135,7 @@ func doorOn(m *Indexed, frame color.RGBA, seed uint64, sealed bool) *Indexed {
 		cx, cy := 16.0, 18.0
 		for y := 10; y < 27; y++ {
 			for x := 8; x < 25; x++ {
-				d := math.Hypot(float64(x)-cx+0.5, float64(y)-cy+0.5)
+				d := hypot(float64(x)-cx+0.5, float64(y)-cy+0.5)
 				if d > 5.5 && d < 7.2 {
 					c := pal.Sky
 					if hash2(x, y, 3) < 0.35 {

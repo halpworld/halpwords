@@ -191,7 +191,7 @@ func (r *Renderer) prepare(l *dungeon.Level) {
 			}
 			for y := max(0, ty-4); y <= min(l.H-1, ty+4); y++ {
 				for x := max(0, tx-4); x <= min(l.W-1, tx+4); x++ {
-					d := math.Hypot(float64(x-tx), float64(y-ty))
+					d := hypot(float64(x-tx), float64(y-ty))
 					v := 0.9 * (1 - d/reach)
 					if v > r.torchMap[y*l.W+x] {
 						r.torchMap[y*l.W+x] = v
@@ -235,7 +235,7 @@ func (r *Renderer) Render(l *dungeon.Level, tex *Textures, cam Camera, sprites [
 	r.prepare(l)
 	r.invLight = 1 / (r.Light * r.reach)
 	w, h := r.W, r.H
-	k := float64(w) / (2 * math.Hypot(cam.PlaneX, cam.PlaneY)) // pixels per map unit at distance 1
+	k := float64(w) / (2 * hypot(cam.PlaneX, cam.PlaneY)) // pixels per map unit at distance 1
 	horizon := float64(h) / 2
 	torch, floorTex := tex.Torch[0], tex.Floor
 	if !r.Calm {

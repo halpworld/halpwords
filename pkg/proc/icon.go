@@ -36,7 +36,7 @@ func Icon() *image.RGBA {
 	// Warm torchlight from above, then darkness at the edges.
 	for y := 0; y < n; y++ {
 		for x := 0; x < n; x++ {
-			d := math.Hypot(float64(x-n/2), float64(y-n/3)) / n
+			d := hypot(float64(x-n/2), float64(y-n/3)) / n
 			k := max(0, 0.55-d) * 0.9
 			k = math.Floor(k*8+bayer4[y&3][x&3]) / 8
 			c := img.RGBAAt(x, y)
@@ -109,7 +109,7 @@ func frame(img *image.RGBA) {
 		if cx == x || cy == y {
 			return float64(min(x, y, n-1-x, n-1-y))
 		}
-		return r - math.Hypot(float64(x-cx), float64(y-cy))
+		return r - hypot(float64(x-cx), float64(y-cy))
 	}
 	for y := 0; y < n; y++ {
 		for x := 0; x < n; x++ {
