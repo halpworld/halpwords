@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -316,5 +318,48 @@ func TestCloseOfflineDoesNotOutstayCloseTimeout(t *testing.T) {
 	c.Close()
 	if d := time.Since(start); d > closeTimeout+time.Second {
 		t.Fatalf("Close took %v", d)
+	}
+}
+
+// A sign-in is over as soon as the tokens are saved: the first sync goes
+// on in the background, however slowly the server answers it.
+func TestSignInDoesNotWaitForTheFirstSync(t *testing.T) {
+	f := newFake(t)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/link" {
+			time.Sleep(300 * time.Millisecond)
+		}
+		f.srv.Config.Handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(slow.Close)
+	c := Open(Options{Store: newMemStore(), Server: slow.URL, OwnDir: "words"})
+	c.SignIn(SignIn{Code: "abcd efgh"})
+	if !c.Status().Signing {
+		t.Fatal("not signing in right after asking")
+	}
+	start := time.Now()
+	for c.Status().Signing {
+		if time.Since(start) > 200*time.Millisecond {
+			t.Fatalf("still signing in after %v: %+v", time.Since(start), c.Status())
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if st := c.Status(); !st.Linked || st.Err != nil {
+		t.Fatalf("signed in: %+v", st)
+	}
+	// A wrong code ends it too, with the reason.
+	c2 := Open(Options{Store: newMemStore(), Server: slow.URL, OwnDir: "words"})
+	c2.SignIn(SignIn{Code: "wxyz wxyz"})
+	for start := time.Now(); c2.Status().Signing; time.Sleep(2 * time.Millisecond) {
+		if time.Since(start) > 200*time.Millisecond {
+			t.Fatal("a refused sign-in never finished")
+		}
+	}
+	if st := c2.Status(); st.Linked || !errors.Is(st.Err, ErrBadCode) {
+		t.Fatalf("refused: %+v", st)
+	}
+	// Let the background sync end before the servers go.
+	for c.Status().Busy {
+		time.Sleep(10 * time.Millisecond)
 	}
 }

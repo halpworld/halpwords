@@ -468,7 +468,7 @@ func (s *SignIn) Update(ctx *game.Context) error {
 		return nil
 	}
 	if s.linking {
-		if st := ctx.Link.Status(); !st.Busy {
+		if st := ctx.Link.Status(); !st.Signing {
 			s.linking = false
 			s.linked(ctx, st)
 		}

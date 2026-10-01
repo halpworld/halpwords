@@ -265,6 +265,10 @@ type Status struct {
 	Linked bool
 	// Busy is set while the game is linking or syncing.
 	Busy bool
+	// Signing is set while a sign-in waits for the server's answer. It
+	// ends when the tokens are saved (or the sign-in fails), not when the
+	// first sync does: Linked and Err then say how it went.
+	Signing bool
 	// Learner is the linked learner's display name.
 	Learner string
 	// SeenBy are the roles of the adults who can see the learner's
@@ -273,6 +277,9 @@ type Status struct {
 	LinkedAt time.Time
 	// LastSync is when the game last synced; zero before the first.
 	LastSync time.Time
+	// Syncs counts the syncs that have ended, well or not, since the game
+	// started: a screen that asked for one sees when it is done.
+	Syncs int
 	// Pending is how many events wait to be sent.
 	Pending int
 	// Err is why the last link or sync failed, or nil if it worked.
@@ -334,6 +341,8 @@ type Client struct {
 	changes int
 
 	busy     bool
+	signing  bool // a sign-in waits for its answer
+	syncs    int  // syncs ended
 	err      error
 	failures int
 	note     string
@@ -449,6 +458,8 @@ func (c *Client) Status() Status {
 	s := Status{
 		Linked:   c.st.linked(),
 		Busy:     c.busy,
+		Signing:  c.signing,
+		Syncs:    c.syncs,
 		LinkedAt: c.st.LinkedAt,
 		LastSync: c.st.LastSync,
 		Pending:  c.q.len(),

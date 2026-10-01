@@ -58,6 +58,7 @@ type Account struct {
 	linking bool
 	// signingOut reports when a sign-out has finished.
 	signingOut func() bool
+	syncUntil  int // Sync Now asked for: Status.Syncs says when it is done
 	msg        string
 	msgCol     color.RGBA
 }
@@ -92,7 +93,7 @@ func (a *Account) Update(ctx *game.Context) error {
 		return nil
 	}
 	st := ctx.Link.Status()
-	if a.linking && !st.Busy {
+	if a.linking && !st.Signing {
 		a.linking = false
 		switch {
 		case st.Linked:
@@ -103,6 +104,17 @@ func (a *Account) Update(ctx *game.Context) error {
 			ctx.Sound.Play(audio.Wrong)
 			a.say(upperFirst(link.Explain(st.Err))+".", pal.Rose)
 			a.mode = acCode
+		}
+	}
+	if a.syncUntil > 0 && (st.Syncs >= a.syncUntil && !st.Busy || !st.Linked) {
+		a.syncUntil = 0
+		switch {
+		case !st.Linked:
+			a.say("", pal.Steel)
+		case st.Err != nil:
+			a.say(upperFirst(link.Explain(st.Err))+".", pal.Rose)
+		default:
+			a.say("Synced.", pal.Lime)
 		}
 	}
 	switch a.mode {
@@ -151,6 +163,13 @@ func (a *Account) Update(ctx *game.Context) error {
 			a.say("", pal.Steel)
 		case acSync:
 			ctx.Sound.Play(audio.Select)
+			st := ctx.Link.Status()
+			// A sync already running ends before the one asked for
+			// starts.
+			a.syncUntil = st.Syncs + 1
+			if st.Busy {
+				a.syncUntil++
+			}
 			ctx.Link.SyncNow()
 			a.say("Syncing…", pal.Ice)
 		case acUnlinkItem:

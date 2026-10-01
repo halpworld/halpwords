@@ -11,6 +11,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/link"
+	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/pkg/compete"
@@ -140,5 +141,69 @@ func TestAccountHelpers(t *testing.T) {
 	ctx = linkedContext(t)
 	if items := a.items(ctx); len(items) != 3 || items[0] != acSync {
 		t.Fatalf("linked menu %v", items)
+	}
+}
+
+// Sync Now says "Syncing…" while it runs and shows how it went after,
+// instead of leaving the first message up.
+func TestAccountSyncMessageClears(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/api/v1/link" {
+			w.WriteHeader(http.StatusBadRequest) // a sync that fails at once
+			json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": "invalid_request", "message": "no"}})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"device_id": "dev_1", "token_type": "Bearer",
+			"access_token": "hwd_1", "expires_in": 86400, "refresh_token": "hwr_1", "refresh_expires_in": 86400})
+	}))
+	t.Cleanup(srv.Close)
+	ctx := testContext(t)
+	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
+		t.Fatal(err)
+	}
+	a := NewAccount(ctx).(*Account)
+	a.say("Syncing…", pal.Ice)
+	a.syncUntil = ctx.Link.Status().Syncs + 1
+	a.Update(ctx)
+	if a.msg != "Syncing…" {
+		t.Fatalf("message before the sync ended: %q", a.msg)
+	}
+	ctx.Link.Sync(context.Background())
+	a.Update(ctx)
+	if a.msg == "Syncing…" || a.msg == "" || a.syncUntil != 0 {
+		t.Fatalf("message after the sync ended: %q", a.msg)
+	}
+}
+
+// A sign-in screen is done when the tokens are saved, not when the
+// first sync after it ends.
+func TestSignInScreenFinishesBeforeTheFirstSync(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/link" {
+			time.Sleep(time.Second) // the first sync is slow
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"device_id": "dev_1", "token_type": "Bearer",
+			"access_token": "hwd_1", "expires_in": 86400, "refresh_token": "hwr_1", "refresh_expires_in": 86400})
+	}))
+	t.Cleanup(srv.Close)
+	ctx := testContext(t)
+	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	a := NewAccount(ctx).(*Account)
+	ctx.Link.Link("ABCD-EFGH")
+	a.linking = true
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for a.linking {
+		if time.Now().After(deadline) {
+			t.Fatalf("Account still linking: %+v", ctx.Link.Status())
+		}
+		a.Update(ctx)
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !ctx.Link.Linked() {
+		t.Fatal("not linked")
 	}
 }

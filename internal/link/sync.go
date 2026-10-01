@@ -11,15 +11,16 @@ import (
 )
 
 // Link links the game with a pairing code from the website, or a login
-// card's code, in the background: Status says when it is done (Busy goes
-// false, and Linked or Err is set). The first sync follows at once.
+// card's code, in the background: Status says when it is done (Signing goes
+// false, and Linked or Err is set). The first sync follows at once, and
+// goes on in the background.
 func (c *Client) Link(code string) { c.SignIn(SignIn{Code: code}) }
 
 // SignIn signs a learner in, in the background, as Link does: with a
 // pairing code, a login card, or a class code and pictures.
 func (c *Client) SignIn(s SignIn) {
 	c.mu.Lock()
-	c.busy, c.err = true, nil
+	c.busy, c.signing, c.err = true, true, nil
 	c.mu.Unlock()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
@@ -42,14 +43,14 @@ func (c *Client) SignInNow(ctx context.Context, s SignIn) error {
 	defer c.syncMu.Unlock()
 	c.mu.Lock()
 	linked := c.st.linked()
-	c.busy = true
+	c.busy, c.signing = true, true
 	c.mu.Unlock()
 	err := ErrLinked
 	if !linked {
 		err = c.link(ctx, s)
 	}
 	c.mu.Lock()
-	c.busy, c.err = false, err
+	c.busy, c.signing, c.err = false, false, err
 	c.mu.Unlock()
 	return err
 }
@@ -113,6 +114,7 @@ func (c *Client) Sync(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.busy = false
+	c.syncs++
 	switch {
 	case err == nil:
 		c.err, c.failures = nil, 0
