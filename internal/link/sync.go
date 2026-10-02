@@ -498,11 +498,8 @@ func (c *Client) Close() {
 		}
 		c.syncMu.Unlock()
 	}
-	c.saveQueue()
+	c.save(false)
 	c.mu.Lock()
-	if c.parkedUnsaved {
-		c.writeParked()
-	}
 	if c.stateUnsaved && c.saveState() == nil {
 		c.stateUnsaved = false
 	}
@@ -536,7 +533,7 @@ func (c *Client) Unlink() {
 	c.mu.Lock()
 	access, refresh, exp := c.st.Access, c.st.Refresh, c.st.AccessExp
 	linked := c.st.linked()
-	c.unlink()
+	c.unlink(false)
 	play := c.play
 	c.mu.Unlock()
 	play.Leave()
@@ -600,9 +597,9 @@ func (c *Client) lost(gen int) {
 	}
 	// The events not sent wait for this learner to link again; the
 	// server may only have lost track of a refresh (a lost answer).
-	// When they can't be written now, Close tries again.
-	_ = c.park()
-	c.unlink()
+	// They must not be lost when they can't be written now (full local
+	// storage): see parkForUnlink.
+	c.unlink(c.parkForUnlink())
 	c.note = "This game was unlinked. Your progress is still here."
 	play := c.play
 	c.mu.Unlock()
@@ -610,8 +607,9 @@ func (c *Client) lost(gen int) {
 	play.Leave()
 }
 
-// unlink does Unlink. c.mu is held.
-func (c *Client) unlink() {
+// unlink does Unlink. c.mu is held. With keepFiles, the queue file and the
+// state file are left as they are on disk (parkForUnlink says when).
+func (c *Client) unlink(keepFiles bool) {
 	if c.o.Store != nil {
 		for _, li := range c.st.Lists {
 			c.moveOut(li)
@@ -624,12 +622,15 @@ func (c *Client) unlink() {
 	c.st = state{NextSeq: c.st.NextSeq}
 	c.q = queue{}
 	c.dirty = false
-	if c.o.Store != nil {
+	c.unlinkPending = keepFiles
+	if c.o.Store != nil && !keepFiles {
 		c.o.Store.Remove(queueFile)
 	}
 	c.memories, c.packFails = map[string]*fetched{}, nil
 	c.err, c.failures, c.note = nil, 0, ""
 	c.loadLists()
-	c.saveState()
+	if !keepFiles {
+		c.saveState()
+	}
 	c.changes++
 }

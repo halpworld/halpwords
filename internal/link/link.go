@@ -324,9 +324,12 @@ type Client struct {
 	// parked are events kept after the link was lost, for the learner
 	// they belong to (parked.go).
 	parked []parked
-	// parkedUnsaved: the parked events couldn't be written; Close tries
-	// again.
+	// parkedUnsaved: the parked events couldn't be written; Save, TrySave
+	// and Close try again.
 	parkedUnsaved bool
+	// unlinkPending: the link was lost but its files are still on disk,
+	// as the parked events couldn't be written (parkForUnlink).
+	unlinkPending bool
 	// stateUnsaved: new tokens are in use but couldn't be written; Close
 	// tries again.
 	stateUnsaved bool

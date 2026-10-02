@@ -65,6 +65,56 @@ func (c *Client) park() error {
 	return c.writeParked()
 }
 
+// parkForUnlink parks the queue for the learner before unlink forgets
+// them, so the events are never only in memory: a web game never gets to
+// Close, and a tab that closes takes them with it. When the parked file
+// can't be written (local storage is full), the queue file, which holds
+// the same events, is removed to make room and parking is tried again. If
+// that fails too, keepFiles is true: unlink leaves the queue file and the
+// link's state file on disk, so a game started again is still linked as
+// that learner, with the events queued, and loses the link again (its
+// tokens are dead) with more room, if there is. Meanwhile the parked
+// events are in memory, and retryParked (from Save, TrySave and Close)
+// writes them as soon as it can, and then lets go of the old files. c.mu
+// is held.
+func (c *Client) parkForUnlink() (keepFiles bool) {
+	q := c.q
+	err := c.park()
+	if err != nil && c.o.Store != nil && q.len() > 0 {
+		c.o.Store.Remove(queueFile)
+		if err = c.writeParked(); err != nil {
+			// Put back what was removed (there is room for it).
+			if data, merr := json.Marshal(q); merr == nil {
+				c.o.Store.Write(queueFile, data)
+			}
+		}
+	}
+	return err != nil
+}
+
+// retryParked writes the parked events again if they couldn't be written.
+// Written, they let the old queue and state files go (parkForUnlink),
+// which the caller does by writing the queue (wrote). It reports the error
+// if they still can't be written. c.mu is held.
+func (c *Client) retryParked() (wrote bool, err error) {
+	if !c.parkedUnsaved {
+		return false, nil
+	}
+	if err := c.writeParked(); err != nil {
+		return false, err
+	}
+	if c.unlinkPending {
+		c.unlinkPending = false
+		if !c.st.linked() {
+			c.saveState()
+		}
+		// The queue file goes, or is replaced by the queue now.
+		c.dirty = true
+		return true, nil
+	}
+	return false, nil
+}
+
 // unpark adds the events kept for the learner to the queue, and reports
 // whether there were any. c.mu is held; the caller saves the queue, then
 // the parked events.

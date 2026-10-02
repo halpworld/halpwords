@@ -8,7 +8,8 @@ import (
 	"github.com/halpworld/halpwords/internal/link"
 )
 
-// watchPage saves the link's queue when the page is hidden or closed, as a
+// watchPage saves the link's queue (and any parked events that couldn't be
+// written before: Save and TrySave retry them) when the page is hidden or closed, as a
 // web game never gets to quit, and syncs when it is hidden so a closed tab
 // loses as little as it can. It also calls save, which keeps the run being
 // played and any score not yet recorded: a closed tab must not lose them. hide is the lighter save for a page

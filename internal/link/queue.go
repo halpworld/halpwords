@@ -321,13 +321,34 @@ func (c *Client) writeQueue(try bool) error {
 // errBusy is a TrySave that found the link busy.
 var errBusy = errors.New("link: busy")
 
-// Save writes the queue of events to disk, if it changed. The link saves
-// it every few seconds by itself once started, and on Close.
+// Save writes the queue of events to disk, if it changed, and the parked
+// events if they couldn't be written before (retryParked). The link saves
+// them every few seconds by itself once started, and on Close.
 func (c *Client) Save() error {
 	if c == nil {
 		return nil
 	}
-	return c.saveQueue()
+	return c.save(false)
+}
+
+// save writes the queue and retries the parked events. With try, it gives
+// up rather than wait for the lock.
+func (c *Client) save(try bool) error {
+	err := c.writeQueue(try)
+	if try {
+		if !c.mu.TryLock() {
+			return errors.Join(err, errBusy)
+		}
+	} else {
+		c.mu.Lock()
+	}
+	wrote, perr := c.retryParked()
+	c.mu.Unlock()
+	if wrote {
+		// The kept queue file goes (or is replaced by the queue now).
+		err = errors.Join(err, c.writeQueue(try))
+	}
+	return errors.Join(err, perr)
 }
 
 // TrySave is Save that never waits: it fails if the link is busy. A web
@@ -336,7 +357,7 @@ func (c *Client) TrySave() error {
 	if c == nil {
 		return nil
 	}
-	return c.writeQueue(true)
+	return c.save(true)
 }
 
 // The wire format of POST /api/v1/events (docs/api/events.request).
