@@ -564,7 +564,7 @@ func (c *Client) unlink() {
 	if c.o.Store != nil {
 		c.o.Store.Remove(queueFile)
 	}
-	c.memories = map[string]*fetched{}
+	c.memories, c.packFails = map[string]*fetched{}, nil
 	c.err, c.failures, c.note = nil, 0, ""
 	c.loadLists()
 	c.saveState()

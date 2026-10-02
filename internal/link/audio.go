@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/halpworld/halpwords/pkg/audiopack"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -34,57 +35,122 @@ func (c *Client) pronunciationOn() bool {
 	return c.st.linked() && c.st.Me != nil && c.st.Me.Pronunciation != nil && c.st.Me.Pronunciation.Available
 }
 
-// syncAudio downloads the audio pack of each assigned list that has none
-// for its version yet. Failures are left for the next sync: the words
-// are heard a little later, and nothing else waits for them. A 202 means
-// the server is still making the pack. syncMu is held.
-func (c *Client) syncAudio(ctx context.Context, gen int) error {
+// packFail is how a list's pack download has been going: how many times
+// in a row it failed, and when it may be tried again.
+type packFail struct {
+	n     int
+	retry time.Time
+}
+
+// packBackoff is the wait after a pack's nth failure in a row: none after
+// the first (the next sync tries again), then 10 minutes, doubling up to
+// 2 hours.
+func packBackoff(n int) time.Duration {
+	if n < 2 {
+		return 0
+	}
+	return min(10*time.Minute<<min(n-2, 4), 2*time.Hour)
+}
+
+// packKey names a list's pack in packFails.
+func packKey(li ListInfo) string { return li.ID + "@" + strconv.Itoa(li.Version) }
+
+// syncAudio starts downloading the audio pack of each assigned list that
+// has none for its version yet, in the background: a big pack takes
+// longer than a sync may, and the sync lock isn't held meanwhile, so
+// nothing else waits for it (an AI call, joining a room). It returns at
+// once. A pack that failed is tried again later and later (packBackoff);
+// the words are heard a little later, and nothing else waits for them.
+// A 202 means the server is still making the pack. syncMu is held.
+func (c *Client) syncAudio(_ context.Context, gen int) error {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.gen != gen {
-		c.mu.Unlock()
 		return ErrNotLinked
 	}
-	var want []ListInfo
-	if c.pronunciationOn() && c.o.Store != nil {
-		for _, li := range c.st.Lists {
-			if _, ok := c.packs[li.ID]; ok && c.packs[li.ID].Version == li.Version {
-				continue
-			}
-			if li.Audio != li.Version || inBrowser {
-				want = append(want, li)
-			}
-		}
+	if c.audioRunning || c.life.Err() != nil || !c.pronunciationOn() || c.o.Store == nil {
+		return nil
 	}
-	c.mu.Unlock()
+	now := c.now()
+	var want []ListInfo
+	keep := map[string]packFail{}
+	for _, li := range c.st.Lists {
+		if _, ok := c.packs[li.ID]; ok && c.packs[li.ID].Version == li.Version {
+			continue
+		}
+		if li.Audio == li.Version && !inBrowser {
+			continue
+		}
+		fail := c.packFails[packKey(li)]
+		if fail.n > 0 {
+			keep[packKey(li)] = fail
+		}
+		if now.Before(fail.retry) {
+			continue
+		}
+		want = append(want, li)
+	}
+	c.packFails = keep // those of lists no longer wanted are forgotten
+	if len(want) == 0 {
+		return nil
+	}
+	c.audioRunning = true
+	c.bg.Add(1)
+	go c.downloadPacks(gen, want)
+	return nil
+}
+
+// downloadPacks downloads the packs of the lists, until the client is
+// closed or the game unlinked.
+func (c *Client) downloadPacks(gen int, want []ListInfo) {
+	defer c.bg.Done()
+	defer func() {
+		c.mu.Lock()
+		c.audioRunning = false
+		c.mu.Unlock()
+	}()
 	got := 0
 	for _, li := range want {
-		if got >= packsPerSync {
-			break
+		if got >= packsPerSync || c.life.Err() != nil {
+			return
 		}
-		var data []byte
-		hdr := http.Header{"Accept": {audiopack.MediaType}}
-		path := "/api/v1/lists/" + url.PathEscape(li.ID) + "/audio?version=" + strconv.Itoa(li.Version)
-		status, _, err := c.authed(ctx, gen, http.MethodGet, path, hdr, nil, &data)
+		data, status, err := c.fetchPack(c.life, gen, li)
 		if errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) {
-			return err
+			return
 		}
 		var e *Error
 		if errors.As(err, &e) && e.Status == http.StatusForbidden {
-			return nil // off for this account: the next sync reads /me again
+			return // off for this account: the next sync reads /me again
 		}
-		if err != nil || status != http.StatusOK {
-			continue
+		if err == nil && status == http.StatusAccepted {
+			continue // still being made: not a failure
 		}
-		p, err := audiopack.Read(data)
-		if err != nil || p.List != li.ID || p.Version != li.Version {
-			continue
+		var p *audiopack.Pack
+		if err == nil && status == http.StatusOK {
+			if p, err = audiopack.Read(data); err == nil && (p.List != li.ID || p.Version != li.Version) {
+				err = errors.New("link: an audio pack for another list")
+			}
+		} else if err == nil {
+			err = errors.New("link: no audio pack")
 		}
-		got++
 		c.mu.Lock()
 		if c.gen != gen {
 			c.mu.Unlock()
-			return ErrNotLinked
+			return
 		}
+		if err != nil {
+			f := c.packFails[packKey(li)]
+			f.n++
+			f.retry = c.now().Add(packBackoff(f.n))
+			if c.packFails == nil {
+				c.packFails = map[string]packFail{}
+			}
+			c.packFails[packKey(li)] = f
+			c.mu.Unlock()
+			continue
+		}
+		delete(c.packFails, packKey(li))
+		got++
 		for i := range c.st.Lists {
 			if c.st.Lists[i].ID != li.ID || c.st.Lists[i].Version != li.Version {
 				continue
@@ -98,7 +164,36 @@ func (c *Client) syncAudio(ctx context.Context, gen int) error {
 		}
 		c.mu.Unlock()
 	}
-	return nil
+}
+
+// fetchPack downloads a list's pack. It has its own limits (packIdle,
+// packMax), not a request's, and holds syncMu only to get a token (as
+// AskAI does). In a web browser the whole answer may arrive at once, so
+// only packMax applies.
+func (c *Client) fetchPack(ctx context.Context, gen int, li ListInfo) ([]byte, int, error) {
+	token, err := c.aiToken(ctx, gen, "")
+	if err != nil {
+		return nil, 0, err
+	}
+	hc := *c.hc
+	hc.Timeout = 0 // the limits are the request's
+	idle := packIdle
+	if inBrowser {
+		idle = packMax
+	}
+	hdr := http.Header{"Accept": {audiopack.MediaType}}
+	path := "/api/v1/lists/" + url.PathEscape(li.ID) + "/audio?version=" + strconv.Itoa(li.Version)
+	var data []byte
+	status, _, err := c.request(ctx, &hc, packMax, idle, http.MethodGet, path, token, hdr, nil, &data)
+	var e *Error
+	if errors.As(err, &e) && e.Status == http.StatusUnauthorized {
+		if token, err = c.aiToken(ctx, gen, token); err != nil {
+			return nil, 0, err
+		}
+		data = nil
+		status, _, err = c.request(ctx, &hc, packMax, idle, http.MethodGet, path, token, hdr, nil, &data)
+	}
+	return data, status, err
 }
 
 // Pronunciation returns the spoken word for entry (its first answer) in

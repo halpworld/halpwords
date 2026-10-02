@@ -74,6 +74,11 @@ var (
 	// requestTimeout limits each request; syncTimeout a whole sync.
 	requestTimeout = 20 * time.Second
 	syncTimeout    = 2 * time.Minute
+	// packIdle is how long an audio pack download may go without a byte
+	// (or its start without an answer) and packMax how long it may take
+	// in all: packs are big, and a slow link is still a link.
+	packIdle = 45 * time.Second
+	packMax  = 10 * time.Minute
 	// closeTimeout is how long quitting waits to send the last events.
 	closeTimeout = 3 * time.Second
 	// refreshEarly is how long before the access token runs out it is
@@ -368,6 +373,11 @@ type Client struct {
 	// aiOff is set when the server said Halpwords AI is off for this
 	// account, until the next sync reads the learner again.
 	aiOff bool
+
+	// audioRunning: audio packs are downloading in the background
+	// (audio.go); packFails are the lists whose pack failed.
+	audioRunning bool
+	packFails    map[string]packFail
 }
 
 // listRef is the list an answer names.

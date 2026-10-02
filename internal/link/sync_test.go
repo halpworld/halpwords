@@ -421,6 +421,7 @@ func TestFailingStageDoesntBlockLaterOnes(t *testing.T) {
 		base[p] = f.count(p)
 	}
 	err := c.Sync(context.Background())
+	waitAudio(t, c)
 	var e *Error
 	if !errors.As(err, &e) || e.Status != 500 {
 		t.Fatalf("sync: %v", err)
