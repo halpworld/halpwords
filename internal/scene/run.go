@@ -154,7 +154,15 @@ func (r *run) suspendNote(t time.Time) string {
 	case r.ranked(t):
 		return "Suspended. Finish it today to be ranked."
 	}
-	return "Suspended. This Daily will not be ranked."
+	return "Suspended. This Daily will not be ranked online."
+}
+
+// dailyNote is the pause menu's note for a Daily Dungeon at t.
+func (r *run) dailyNote(t time.Time) string {
+	if r.ranked(t) {
+		return "Finish this Daily today to be ranked."
+	}
+	return "This Daily will not be ranked online."
 }
 
 // dailySetup is today's Daily Dungeon in lang.

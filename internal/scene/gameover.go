@@ -17,9 +17,12 @@ import (
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
-// unrankedText is shown when a Daily Dungeon is not sent for the
-// rankings. Its XP and word practice still count.
-const unrankedText = "Not ranked: finished on another day"
+// Shown when a Daily Dungeon is not sent for the rankings. Its XP and
+// word practice still count.
+const (
+	unrankedLate  = "Not ranked online: finished on another day"
+	unrankedNoDay = "Not ranked online"
+)
 
 // maxName is the longest name the Hall of Fame keeps.
 const maxName = 12
@@ -41,6 +44,8 @@ type GameOver struct {
 	// unranked is set for a Daily Dungeon finished on another day, or
 	// one whose day is not known: it is not sent for the rankings.
 	unranked bool
+	// unrankedNote says why, on the screen.
+	unrankedNote string
 
 	place   int    // where the run would go in the Hall of Fame, or 0
 	name    []rune // the name being typed for the Hall of Fame
@@ -68,7 +73,12 @@ func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
 		}
 	}
 	g.code = share.Code()
-	g.unranked = !r.ranked(runNow())
+	if g.unranked = !r.ranked(runNow()); g.unranked {
+		g.unrankedNote = unrankedLate
+		if _, err := time.Parse(time.DateOnly, r.day); err != nil {
+			g.unrankedNote = unrankedNoDay // no date was missed
+		}
+	}
 	if r.mode.Scored() && r.race == nil && r.quest == nil && r.assign == nil && r.deck != nil && !g.unranked {
 		// Sent for the rankings when the game is linked; the server
 		// ranks it only if a grown-up put the learner on a board.
@@ -253,7 +263,7 @@ func (g *GameOver) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawCentered(dst, g.code, rcx, y+136, f.FitScale(g.code, rw-20, 2), pal.White)
 	f.DrawCentered(dst, "Check codes in the Hall of Fame.", rcx, y+172, 1, pal.Ash)
 	if g.unranked {
-		f.DrawCentered(dst, unrankedText, rcx, y+158, 1, pal.Orange)
+		f.DrawCentered(dst, g.unrankedNote, rcx, y+152, 1, pal.Yellow)
 	}
 
 	help := "Enter title screen · H Hall of Fame"

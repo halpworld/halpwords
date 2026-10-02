@@ -236,7 +236,7 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 	case c.resume != modeExplore:
 		note, ncol = "Win or flee the battle to suspend.", pal.Tan
 	case c.run.mode == compete.Daily:
-		note, ncol = "Finish this Daily today to be ranked.", pal.Tan
+		note, ncol = c.run.dailyNote(runNow()), pal.Tan
 	case c.run.hardcore():
 		note, ncol = "One life! Suspend to keep this run.", pal.Tan
 	case c.lastSave == nil || c.unsaved:

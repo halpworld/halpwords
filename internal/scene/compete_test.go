@@ -314,7 +314,7 @@ func TestSuspendingADailyTellsTheRule(t *testing.T) {
 	if n := r.suspendNote(day); n != "Suspended. Finish it today to be ranked." {
 		t.Fatalf("on its day: %q", n)
 	}
-	if n := r.suspendNote(day.AddDate(0, 0, 1)); n != "Suspended. This Daily will not be ranked." {
+	if n := r.suspendNote(day.AddDate(0, 0, 1)); n != "Suspended. This Daily will not be ranked online." {
 		t.Fatalf("after its day: %q", n)
 	}
 	h := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Hardcore})
@@ -366,4 +366,41 @@ func TestFastestHonestRunPassesCheck(t *testing.T) {
 		}
 	}
 	t.Logf("shortest walk to any stairs: %d cells", least)
+}
+
+// The pause note and the game-over line follow the clock: after midnight
+// the Daily is unranked, and an empty day says no date was missed.
+func TestDailyNotesAfterMidnight(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	fr, _ := words.Lookup("fr")
+	oldSend, oldNow := sendRun, runNow
+	t.Cleanup(func() { sendRun, runNow = oldSend, oldNow })
+	sendRun = func(*game.Context, compete.Run, string) {}
+	before := time.Date(2026, time.September, 24, 23, 59, 59, 0, time.Local)
+	runNow = func() time.Time { return before }
+	r := newRun(ctx, fr, rpg.Rogue, dailySetup(ctx, fr))
+	r.sound = &game.Sound{Muted: true}
+	if n := r.dailyNote(before); n != "Finish this Daily today to be ranked." {
+		t.Fatalf("before midnight: %q", n)
+	}
+	after := before.Add(time.Second)
+	if n := r.dailyNote(after); n != "This Daily will not be ranked online." {
+		t.Fatalf("after midnight: %q", n)
+	}
+	runNow = func() time.Time { return after }
+	g := newGameOver(ctx, r, true)
+	if g.unrankedNote != "Not ranked online: finished on another day" {
+		t.Fatalf("late note %q", g.unrankedNote)
+	}
+	r.day = ""
+	g = newGameOver(ctx, r, true)
+	if g.unrankedNote != "Not ranked online" {
+		t.Fatalf("empty day note %q", g.unrankedNote)
+	}
+	for _, s := range []string{g.unrankedNote, unrankedLate, r.dailyNote(after), r.suspendNote(after)} {
+		if w := ctx.Font.Width(s, 1); w > 314-20 {
+			t.Errorf("%q is %dpx wide", s, w)
+		}
+	}
 }
