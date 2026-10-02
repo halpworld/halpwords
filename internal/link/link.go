@@ -288,7 +288,7 @@ type Status struct {
 	// keeps trying, less often, and says nothing more.
 	Offline bool
 	// Note is something to tell the player once, such as that the game
-	// was unlinked on the website.
+	// was unlinked.
 	Note string
 	// Outdated is set when the server says this game is too old for
 	// some of its features.
@@ -340,9 +340,12 @@ type Client struct {
 	// learner's settings or memory.
 	changes int
 
-	busy     bool
-	signing  bool // a sign-in waits for its answer
-	syncs    int  // syncs ended
+	busy    bool
+	signing bool // a sign-in waits for its answer
+	// signSeq numbers the sign-ins that SignIn started and CancelSignIn
+	// ended: a sign-in whose number is no longer signSeq was given up.
+	signSeq  int
+	syncs    int // syncs ended
 	err      error
 	failures int
 	note     string

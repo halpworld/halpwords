@@ -54,9 +54,9 @@ var (
 	ErrBadCode = errors.New("that code didn't work: codes work once, for 15 minutes")
 	// ErrNotLinkable is a learner who can't be linked now.
 	ErrNotLinkable = errors.New("this learner can't be linked right now: ask your grown-up to check the website")
-	// ErrUnlinked is a game the website unlinked, or whose tokens are
+	// ErrUnlinked is a game that was unlinked (on the website, say), or whose tokens are
 	// no longer good: it has to be linked again.
-	ErrUnlinked = errors.New("this game was unlinked on the website")
+	ErrUnlinked = errors.New("this game was unlinked")
 	// ErrNotLinked is a sync of a game that isn't linked.
 	ErrNotLinked = errors.New("this game isn't linked")
 	// ErrLinked is a link of a game that already is.
@@ -71,7 +71,7 @@ func Explain(err error) string {
 		return ""
 	case errors.Is(err, ErrBadCode), errors.Is(err, ErrNotLinkable), errors.Is(err, ErrUnlinked),
 		errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked),
-		errors.Is(err, ErrSSOPending), errors.Is(err, ErrSSOExpired), errors.Is(err, ErrSSORefused), errors.Is(err, ErrSSOOff):
+		errors.Is(err, ErrSSOPending), errors.Is(err, ErrSSOExpired), errors.Is(err, ErrSSORefused), errors.Is(err, ErrSSOOff), errors.Is(err, ErrSSOBusy):
 		return err.Error()
 	case errors.Is(err, context.DeadlineExceeded):
 		return "the server took too long to answer"

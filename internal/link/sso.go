@@ -2,8 +2,12 @@ package link
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -23,7 +27,22 @@ var (
 	ErrSSORefused = errors.New("that account can't sign in here: ask your teacher")
 	// ErrSSOOff: the server doesn't offer school accounts.
 	ErrSSOOff = errors.New("school accounts can't be used with this server")
+	// ErrSSOBusy: too many tries in a short time. The error explainSSO
+	// returns for it also unwraps to the *Error, with its RetryAfter.
+	ErrSSOBusy = errors.New("too many tries: wait a moment and try again")
 )
+
+// busyError is a rate_limited answer to the sign-in, for the screens.
+type busyError struct{ e *Error }
+
+func (b *busyError) Error() string {
+	if s := int((b.e.RetryAfter + time.Second - 1) / time.Second); s > 0 && s < 60 {
+		return fmt.Sprintf("too many tries: wait %d seconds and try again", s)
+	}
+	return ErrSSOBusy.Error()
+}
+
+func (b *busyError) Unwrap() []error { return []error{ErrSSOBusy, b.e} }
 
 // The device flow's error codes (RFC 8628).
 const (
@@ -48,6 +67,32 @@ type SSOCode struct {
 	Started time.Time `json:"started,omitempty"`
 	// Every is how often the game may poll.
 	Every time.Duration `json:"every"`
+	// Verifier is the secret whose S256 challenge the game sent with the
+	// start (PKCE, RFC 7636): the server gives the tokens only to a poll
+	// that sends it, so a copy of DeviceCode alone is no use. It stays
+	// in link.json (never exported, see move.Exportable), is never
+	// logged, and the copies of the code the game hands out leave it
+	// out.
+	Verifier string `json:"code_verifier,omitempty"`
+}
+
+// public is a copy of the code for the screens, without the verifier.
+func (c *SSOCode) public() *SSOCode {
+	cp := *c
+	cp.Verifier = ""
+	return &cp
+}
+
+// newVerifier makes a PKCE code verifier: 32 random bytes, unpadded
+// base64url (43 characters), and its S256 challenge.
+func newVerifier() (verifier, challenge string, err error) {
+	var b [32]byte
+	if _, err = rand.Read(b[:]); err != nil {
+		return "", "", err
+	}
+	verifier = base64.RawURLEncoding.EncodeToString(b[:])
+	sum := sha256.Sum256([]byte(verifier))
+	return verifier, base64.RawURLEncoding.EncodeToString(sum[:]), nil
 }
 
 // minPoll is the least time between polls, whatever the server says.
@@ -59,12 +104,20 @@ const maxPoll = time.Minute
 
 // StartSSO asks the server for a code to sign in with a school account.
 // returnTo is where the web game wants the website to send the pupil
-// back to, or "". It waits for the answer, so call it from a goroutine.
+// back to, or "". It binds the code to this game with a PKCE verifier. A
+// server from before that (halpwords-server#98) ignores the challenge
+// and the verifier, and the code works as it did. A start whose ctx is
+// cancelled keeps nothing. It waits for the answer, so call it from a
+// goroutine.
 func (c *Client) StartSSO(ctx context.Context, returnTo string) (*SSOCode, error) {
 	if c.Linked() {
 		return nil, ErrLinked
 	}
-	body := map[string]string{}
+	verifier, challenge, err := newVerifier()
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]string{"code_challenge": challenge}
 	if returnTo != "" {
 		body["return_to"] = returnTo
 	}
@@ -76,7 +129,7 @@ func (c *Client) StartSSO(ctx context.Context, returnTo string) (*SSOCode, error
 		ExpiresIn  int64  `json:"expires_in"`
 		Interval   int64  `json:"interval"`
 	}
-	_, _, err := c.call(ctx, http.MethodPost, "/api/v1/sso/start", "", nil, body, &out)
+	_, _, err = c.call(ctx, http.MethodPost, "/api/v1/sso/start", "", nil, body, &out)
 	if err = explainSSO(err); err != nil {
 		return nil, err
 	}
@@ -84,7 +137,7 @@ func (c *Client) StartSSO(ctx context.Context, returnTo string) (*SSOCode, error
 		return nil, errors.New("link: the server sent no code")
 	}
 	code := &SSOCode{DeviceCode: out.DeviceCode, UserCode: out.UserCode, URL: out.URL, VerifyURL: out.VerifyURL,
-		Started: c.now(),
+		Verifier: verifier, Started: c.now(),
 		Expires: c.now().Add(time.Duration(out.ExpiresIn) * time.Second),
 		Every:   min(max(time.Duration(out.Interval)*time.Second, minPoll), maxPoll)}
 	if !strings.HasPrefix(code.VerifyURL, "http") {
@@ -92,9 +145,14 @@ func (c *Client) StartSSO(ctx context.Context, returnTo string) (*SSOCode, error
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if ctx.Err() != nil || c.st.linked() {
+		// Cancelled (Esc) while the answer was on its way: the pupil
+		// chose to stop, and nothing was signed in with the code.
+		return nil, ErrSSOExpired
+	}
 	c.st.SSO = code
 	c.saveState()
-	return code, nil
+	return code.public(), nil
 }
 
 // PendingSSO is the sign-in with a school account on its way, or nil
@@ -108,8 +166,7 @@ func (c *Client) PendingSSO() *SSOCode {
 	if c.st.SSO == nil || c.st.linked() || !c.now().Before(c.st.SSO.Expires) {
 		return nil
 	}
-	code := *c.st.SSO
-	return &code
+	return c.st.SSO.public()
 }
 
 // CancelSSO forgets the sign-in with a school account on its way.
@@ -142,7 +199,11 @@ func (c *Client) PollSSO(ctx context.Context) error {
 		c.dropSSO(code)
 		return ErrSSOExpired
 	}
-	payload, _ := json.Marshal(map[string]string{"device_code": code.DeviceCode, "name": c.deviceName()})
+	req := map[string]string{"device_code": code.DeviceCode, "name": c.deviceName()}
+	if code.Verifier != "" {
+		req["code_verifier"] = code.Verifier
+	}
+	payload, _ := json.Marshal(req)
 	var t tokens
 	_, _, err := c.once(ctx, http.MethodPost, "/api/v1/sso/token", "", nil, payload, &t)
 	var apiErr *Error
@@ -160,12 +221,16 @@ func (c *Client) PollSSO(ctx context.Context) error {
 		err = errors.New("link: the server sent no tokens")
 	case err == nil:
 		c.mu.Lock()
-		defer c.mu.Unlock()
 		if c.st.SSO != code || c.st.linked() {
+			c.mu.Unlock()
 			// Cancelled (Esc) or replaced while the answer was on its
-			// way: the pupil chose to stop, so the tokens are dropped.
+			// way: the pupil chose to stop, so the tokens are dropped,
+			// and the server told, so the device isn't left signed in
+			// with nobody holding it.
+			c.revoke(t)
 			return ErrSSOExpired
 		}
+		defer c.mu.Unlock()
 		c.signedIn(t, WaySSO)
 		return nil
 	}
@@ -229,6 +294,11 @@ func explainSSO(err error) error {
 		return ErrSSOOff
 	case codeNotLinkable:
 		return ErrNotLinkable
+	case codeRateLimited:
+		return &busyError{e}
+	}
+	if e.Status == http.StatusTooManyRequests {
+		return &busyError{e}
 	}
 	return err
 }

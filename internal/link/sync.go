@@ -19,16 +19,39 @@ func (c *Client) Link(code string) { c.SignIn(SignIn{Code: code}) }
 // SignIn signs a learner in, in the background, as Link does: with a
 // pairing code, a login card, or a class code and pictures.
 func (c *Client) SignIn(s SignIn) {
+	ctx, cancel := context.WithTimeout(c.life, syncTimeout)
 	c.mu.Lock()
 	c.busy, c.signing, c.err = true, true, nil
+	c.signSeq++
+	seq := c.signSeq
 	c.mu.Unlock()
 	go func() {
-		ctx, cancel := context.WithTimeout(c.life, syncTimeout)
 		defer cancel()
-		if err := c.SignInNow(ctx, s); err == nil {
+		if err := c.signInNow(ctx, s, seq); err == nil {
 			c.Sync(ctx)
 		}
 	}()
+}
+
+// errSignInCancelled is the end of a sign-in the player gave up.
+var errSignInCancelled = errors.New("link: sign-in cancelled")
+
+// CancelSignIn gives up the sign-in SignIn has on its way (the player
+// pressed Esc): Status stops saying Signing, and tokens that come back
+// are not kept but revoked on the server. Its request is left to finish
+// (bounded by the request timeout) and not cancelled, because a server
+// that has already made tokens for it can only be told about them when
+// they arrive. It returns false when there is no such sign-in or it has
+// finished already (the game is linked), which then stands.
+func (c *Client) CancelSignIn() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.signing || c.st.linked() {
+		return false
+	}
+	c.signSeq++
+	c.busy, c.signing = false, false
+	return true
 }
 
 // LinkNow links the game with a pairing code or a login card's code and
@@ -39,6 +62,13 @@ func (c *Client) LinkNow(ctx context.Context, code string) error {
 
 // SignInNow signs a learner in and waits for the answer.
 func (c *Client) SignInNow(ctx context.Context, s SignIn) error {
+	return c.signInNow(ctx, s, -1)
+}
+
+// signInNow is SignInNow for the sign-in numbered seq (see SignIn), or -1
+// for one that can't be cancelled. One that was cancelled leaves Status
+// alone: another sign-in may be on its way by now.
+func (c *Client) signInNow(ctx context.Context, s SignIn, seq int) error {
 	c.syncMu.Lock()
 	defer c.syncMu.Unlock()
 	c.mu.Lock()
@@ -47,15 +77,17 @@ func (c *Client) SignInNow(ctx context.Context, s SignIn) error {
 	c.mu.Unlock()
 	err := ErrLinked
 	if !linked {
-		err = c.link(ctx, s)
+		err = c.link(ctx, s, seq)
 	}
 	c.mu.Lock()
-	c.busy, c.signing, c.err = false, false, err
+	if seq < 0 || seq == c.signSeq {
+		c.busy, c.signing, c.err = false, false, err
+	}
 	c.mu.Unlock()
 	return err
 }
 
-func (c *Client) link(ctx context.Context, s SignIn) error {
+func (c *Client) link(ctx context.Context, s SignIn, seq int) error {
 	body, err := s.body()
 	if err != nil {
 		return err
@@ -74,6 +106,12 @@ func (c *Client) link(ctx context.Context, s SignIn) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if seq >= 0 && seq != c.signSeq {
+		// Given up (Esc) while the answer was on its way: the tokens are
+		// dropped, and the server told.
+		c.revoke(t)
+		return errSignInCancelled
+	}
 	c.signedIn(t, s.Way())
 	return nil
 }
@@ -512,6 +550,21 @@ func (c *Client) tellUnlinked(ctx context.Context, access, refresh string, exp t
 	return err
 }
 
+// revoke tells the server, in the background and best effort, to unlink
+// the device whose tokens t are, for tokens the game got but won't keep
+// (a sign-in the player gave up on while the answer was on its way). It
+// uses the existing POST /api/v1/unlink, as Unlink does.
+func (c *Client) revoke(t tokens) {
+	exp := c.now().Add(time.Duration(t.ExpiresIn) * time.Second)
+	c.bg.Add(1)
+	go func() {
+		defer c.bg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), unlinkTimeout)
+		defer cancel()
+		c.tellUnlinked(ctx, t.AccessToken, t.RefreshToken, exp)
+	}()
+}
+
 // lost unlinks the game because the server no longer takes its tokens.
 // The events not sent are kept for the learner (park), not forgotten.
 func (c *Client) lost(gen int) {
@@ -525,7 +578,7 @@ func (c *Client) lost(gen int) {
 	// When they can't be written now, Close tries again.
 	_ = c.park()
 	c.unlink()
-	c.note = "This game was unlinked on the website. Your progress is still here."
+	c.note = "This game was unlinked. Your progress is still here."
 	play := c.play
 	c.mu.Unlock()
 	// As Unlink does: a game that isn't linked has no room to be in.
