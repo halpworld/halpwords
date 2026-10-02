@@ -87,10 +87,22 @@ func Exportable(name string) bool {
 		base == "link-parked.json",
 		base == "crash.txt",
 		strings.HasSuffix(name, ".bad"),
-		strings.HasPrefix(name, stashDir):
+		strings.HasPrefix(name, stashDir),
+		isReports(name):
 		return false
 	}
 	return true
+}
+
+// isReports reports whether name is in the report queue's folder, at the
+// root or in a learner's folder. It holds what the child wrote in their
+// reports and whole crash reports.
+func isReports(name string) bool {
+	parts := strings.Split(name, "/")
+	if parts[0] == "profiles" && len(parts) >= 3 {
+		parts = parts[2:]
+	}
+	return len(parts) > 1 && parts[0] == "reports"
 }
 
 // validName reports whether name is a clean relative file name: forward

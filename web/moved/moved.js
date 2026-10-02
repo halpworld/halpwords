@@ -24,13 +24,20 @@
 
   // exportable reports whether a save file moves.
   function exportable(name) {
-    if (!name || name.length > 255 || name.startsWith("/") || name.endsWith("/") ||
-        name.includes("//") || /[\u0000-\u001f\u007f-\u009f\\]/.test(name)) {
+    // As validName in Go: at most 255 bytes of UTF-8, and only printable
+    // characters (Go's unicode.IsPrint: no controls, format, private-use or
+    // separator characters, except the space).
+    if (!name || new TextEncoder().encode(name).length > 255 || name.startsWith("/") || name.endsWith("/") ||
+        name.includes("//") || name.includes("\\") || /[\p{C}\p{Z}]/u.test(name.replace(/ /g, ""))) {
       return false;
     }
     if (name.split("/").some((p) => p === "." || p === "..")) return false;
     const base = name.slice(name.lastIndexOf("/") + 1);
-    return !(STAY.includes(base) || name.endsWith(".bad") || name.startsWith("move/"));
+    // The reports folder, at the root or in a learner's folder.
+    let parts = name.split("/");
+    if (parts[0] === "profiles" && parts.length >= 3) parts = parts.slice(2);
+    const reports = parts.length > 1 && parts[0] === "reports";
+    return !(STAY.includes(base) || name.endsWith(".bad") || name.startsWith("move/") || reports);
   }
 
   // collect returns the game's files in storage (local storage, or

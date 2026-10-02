@@ -75,7 +75,7 @@ func TestExportable(t *testing.T) {
 		"adventure.json": true, "words/x.txt": true, "ai/bank-fr.json": true, "ai-spend.json": true,
 		"ai.json": false, "link.json": false, "link-queue.json": false, "link-parked.json": false, "crash.txt": false, "fame.json.bad": false, "move/done": false,
 		"profiles/x/link.json": false, "profiles/x/link-queue.json": false, "profiles/x/link-parked.json": false,
-		"profiles/x/link.json.bad": false, "profiles/x/ai.json": false, "profiles/x/adventure.json": true, "learners.json": true,
+		"profiles/x/link.json.bad": false, "profiles/x/ai.json": false, "reports/queue.json": false, "profiles/x/reports/queue.json": false, "profiles/x/reports/a/b": false, "report/queue.json": true, "words/reports/x.txt": true, "profiles/x/adventure.json": true, "learners.json": true,
 		"": false, "/abs": false, "../x": false, "a/../b": false, "a//b": false, "a\\b": false, "a\nb": false,
 	} {
 		if got := Exportable(name); got != want {
