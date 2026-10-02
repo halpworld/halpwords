@@ -173,6 +173,21 @@ version as its release notes.
 
 ### Fixed
 
+- **Answers too long to type are never dealt.** The typing field took 40
+  letters, so a monster or puzzle with a longer answer could not be
+  beaten. It now takes 60 (`words.MaxAnswerRunes`, also a raid's answer
+  cap: it was 40, so the server must be deployed first), and monsters,
+  puzzles and practice skip an entry whose answer is longer, and a map
+  lock that names one makes a random puzzle. `words.TooLong` and
+  `List.TooLong` let the server warn a teacher; the map check does. A
+  Daily or seeded run deals differently only for a list that has such an
+  entry, and `ListHash` is unchanged.
+
+- **Daily and seed runs now give the same monsters on every machine.**
+  Monster HP no longer rounds differently on Apple Silicon, so a few
+  monsters have 1 more HP than before. `HALPWORDS_SEED` is now masked to a
+  30-bit seed like other seeds.
+
 - **A sign-out on a shared computer no longer opens another child's
   progress.** After a sign-out or removal at school, the game plays as a
   new guest (no lock, no sign-in, a name it gave), or as one who played

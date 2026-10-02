@@ -158,9 +158,9 @@ func OneWord(k Kind) bool {
 // word was chosen by hand. It returns nil when k is not a OneWord kind, when
 // id is not in the deck, or when that word cannot make k: too short to
 // scramble or to put on a tumbler lock, no riddle, or no gap-fill sentence
-// in gen.
+// in gen, or when its answer is too long to type (words.TooLong).
 func MakeWord(k Kind, lock Lock, depth int, deck *words.Deck, id int, lang *words.Language, rules words.Rules, rng *rand.Rand, gen *Generated) Puzzle {
-	if !OneWord(k) || id < 0 || id >= deck.Len() {
+	if !OneWord(k) || id < 0 || id >= deck.Len() || words.TooLong(deck.Entries()[id]) {
 		return nil
 	}
 	p := makeKind(k, lock, depth, deck, fixed{deck, id}, lang, rng, gen)

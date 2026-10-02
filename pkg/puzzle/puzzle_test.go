@@ -278,3 +278,16 @@ func TestLetters(t *testing.T) {
 		}
 	}
 }
+
+func TestMakeWordRefusesAnswerTooLongToType(t *testing.T) {
+	long := words.Entry{Prompt: "long", Answers: []string{strings.Repeat("a", words.MaxAnswerRunes+1)}}
+	es := []words.Entry{{Prompt: "dog", Answers: []string{"le chien"}}, long}
+	fr, _ := words.Lookup("fr")
+	d := words.NewDeck(es, rand.New(rand.NewPCG(1, 2)))
+	if p := MakeWord(Spell, Door, 1, d, 1, fr, fr.Defaults, rand.New(rand.NewPCG(1, 2)), nil); p != nil {
+		t.Fatalf("made a puzzle about a word that cannot be typed: %v", p.Kind())
+	}
+	if p := MakeWord(Spell, Door, 1, d, 0, fr, fr.Defaults, rand.New(rand.NewPCG(1, 2)), nil); p == nil {
+		t.Fatal("refused a word that can be typed")
+	}
+}

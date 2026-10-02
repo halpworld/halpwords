@@ -1595,3 +1595,99 @@ func TestPeekFolderFailsClosed(t *testing.T) {
 		t.Errorf("good file: %+v", p)
 	}
 }
+
+// A totals event that was sent is never changed, even if the send failed
+// (the server may have stored it): later answers go into a new event.
+func TestTotalsNotChangedAfterFailedSend(t *testing.T) {
+	f, c, st, _ := linked(t)
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	f.failNext("/api/v1/events", 503, 503, 503)
+	if err := c.Sync(context.Background()); err == nil {
+		t.Fatal("the upload didn't fail")
+	}
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	c.mu.Lock()
+	if len(c.q.Totals) != 2 || c.q.Totals[0].Answers != 1 || c.q.Totals[1].Answers != 1 || c.q.Totals[0].Seq == c.q.Totals[1].Seq {
+		t.Errorf("an answer was added to totals already sent: %+v", c.q.Totals)
+	}
+	c.mu.Unlock()
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	// The mark survives a restart.
+	c2 := Open(Options{Store: st, Server: f.srv.URL, Now: c.now})
+	c2.Answer("fr", own, "practice", words.Answer{Tier: words.Correct})
+	c2.mu.Lock()
+	if n := len(c2.q.Totals); n != 2 || !c2.q.Totals[0].Sent || c2.q.Totals[0].Answers != 1 || c2.q.Totals[1].Answers != 2 {
+		t.Errorf("after a restart: %+v", c2.q.Totals)
+	}
+	c2.mu.Unlock()
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got := 0
+	for _, e := range f.eventsOf("totals") {
+		got += int(e.Raw["answers"].(float64))
+	}
+	if got != 3 {
+		t.Errorf("the server has %d answers in totals, want 3", got)
+	}
+}
+
+// The Sent mark is written even when nothing else changed after the batch
+// was taken (a game that quits while the send is still on its way).
+func TestSentMarkIsSaved(t *testing.T) {
+	_, c, st, _ := linked(t)
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	c.Save()
+	c.mu.Lock()
+	c.takeBatch(MaxBatch)
+	c.mu.Unlock()
+	c.Save()
+	if !strings.Contains(string(st.files[queueFile]), `"Sent":true`) {
+		t.Errorf("queue file: %s", st.files[queueFile])
+	}
+}
+
+// An assigned list whose file is gone comes back at the next sync, even
+// though the server's lists haven't changed.
+func TestMissingListFileIsFetchedAgain(t *testing.T) {
+	f, _, st, clk := linked(t)
+	for _, damage := range []func(){
+		func() { delete(st.files, "assigned/lst_animals.txt") },
+		func() { st.files["assigned/lst_animals.txt"] = []byte("nonsense") },
+	} {
+		damage()
+		c2 := reopen(f, st, clk)
+		if len(c2.Lists()) != 0 {
+			t.Fatalf("a damaged list is kept: %v", c2.Lists())
+		}
+		if err := c2.Sync(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if len(c2.Lists()) != 1 || !strings.Contains(string(st.files["assigned/lst_animals.txt"]), "le chien") {
+			t.Fatalf("the list didn't come back: %v", c2.Lists())
+		}
+	}
+}
+
+// A game of another version may read what an older one skipped: the ETag
+// of the old one isn't used.
+func TestListsETagIsForOneGameVersion(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Close()
+	c2 := Open(Options{Store: st, Server: f.srv.URL, OwnDir: "words", Now: clk.now, Version: "v9.9.9"})
+	c2.sleep = func(time.Duration) {}
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f.notMod != 0 {
+		t.Errorf("an ETag from another game version was sent (%d 304s)", f.notMod)
+	}
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f.notMod != 1 {
+		t.Errorf("the ETag isn't used by the game that made it (%d 304s)", f.notMod)
+	}
+}

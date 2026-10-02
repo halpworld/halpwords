@@ -6,7 +6,7 @@ import "github.com/halpworld/halpwords/pkg/words"
 // TargetTime is the time in seconds a fluent typist needs for an answer of n
 // characters. Answering faster than this gives a speed bonus.
 func TargetTime(n int) float64 {
-	return 0.8 + 0.28*float64(n)
+	return 0.8 + float64(0.28*float64(n))
 }
 
 // Speed returns the speed multiplier for an answer typed in taken seconds.
@@ -46,7 +46,7 @@ const MaxCombo = 2.0
 
 // Combo returns the damage multiplier for a streak of good answers in a row.
 func Combo(streak int) float64 {
-	return min(1+0.1*float64(streak), MaxCombo)
+	return min(1+float64(0.1*float64(streak)), MaxCombo)
 }
 
 // Damage returns the damage of an attack by a hero with attack power atk,
@@ -87,7 +87,7 @@ func Block(tier words.Tier) float64 {
 // quick typist still needs a few words a fight when the lists hold very
 // short words (numbers, colours).
 func WordTarget(depth int, boss bool) float64 {
-	t := max(6, 4.5+0.6*float64(depth-1))
+	t := max(6, 4.5+float64(0.6*float64(depth-1)))
 	if boss {
 		t += 2
 	}

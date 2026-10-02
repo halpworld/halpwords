@@ -2,7 +2,6 @@ package scene
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -112,7 +111,7 @@ func setupText(s runSetup) string {
 	case s.mode == compete.Daily && s.day != "":
 		return "Daily Dungeon · " + s.day
 	case s.mode == compete.Daily:
-		return "Daily Dungeon · " + time.Now().Format(time.DateOnly)
+		return "Daily Dungeon · " + dailyDay(runNow())
 	case s.seeded:
 		return s.mode.String() + " · seed " + compete.SeedCode(s.seed)
 	}

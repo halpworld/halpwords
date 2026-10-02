@@ -239,11 +239,11 @@ func (h *Hero) LuckyCrit() float64 { return min(0.3, 0.02*float64(h.Stats().Luck
 
 // GoldFind scales gold found in chests and on monsters.
 func (h *Hero) GoldFind(gold int, chest bool) int {
-	k := 1 + 0.05*float64(h.Stats().Luck)
+	pct := 100 + 5*h.Stats().Luck
 	if chest && h.Class == Rogue {
-		k += 0.5
+		pct += 50
 	}
-	return int(float64(gold)*k + 0.5)
+	return (gold*pct + 50) / 100
 }
 
 // SpeedDamage returns the speed multiplier used for damage. Scribes get

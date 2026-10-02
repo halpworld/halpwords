@@ -37,8 +37,9 @@ const (
 )
 
 // MaxAnswer is the longest answer a raider may send, in characters: the
-// game's typing field holds no more.
-const MaxAnswer = 40
+// game's typing field holds no more
+// (words.MaxAnswerRunes).
+const MaxAnswer = words.MaxAnswerRunes
 
 // HPPerRaider is the boss's health for each raider. A raider answering
 // steadily deals about 100 a minute, so a class that keeps typing

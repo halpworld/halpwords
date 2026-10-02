@@ -170,30 +170,48 @@ func (c *Client) Sync(ctx context.Context) error {
 }
 
 func (c *Client) syncAll(ctx context.Context, gen int) error {
+	// The learner and the upload are gates: they cover the link itself
+	// and the core data.
 	if err := c.syncMe(ctx, gen); err != nil {
 		return err
 	}
 	if err := c.upload(ctx, gen); err != nil {
 		return err
 	}
-	if err := c.syncLists(ctx, gen); err != nil {
-		return err
+	// The rest don't depend on each other: one that fails (a bad list,
+	// an endpoint with a problem) doesn't hold back the others, which
+	// would leave finished runs unsent until the server refuses them as
+	// stale. The first error is reported. Rankings come late, so a
+	// server without them never holds back the rest, and audio packs
+	// last of all: they are the biggest downloads.
+	var first error
+	for _, stage := range []func(context.Context, int) error{
+		c.syncLists, c.syncQuests, c.syncMemory, c.uploadRuns, c.syncRanks, c.syncAudio,
+	} {
+		err := stage(ctx, gen)
+		if err == nil {
+			continue
+		}
+		if first == nil {
+			first = err
+		}
+		if stopsSync(ctx, err) {
+			if errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) {
+				first = err // Sync treats an unlink differently from a failure
+			}
+			break
+		}
 	}
-	if err := c.syncQuests(ctx, gen); err != nil {
-		return err
-	}
-	if err := c.syncMemory(ctx, gen); err != nil {
-		return err
-	}
-	// Rankings last, so a server without them never holds back the rest.
-	if err := c.uploadRuns(ctx, gen); err != nil {
-		return err
-	}
-	if err := c.syncRanks(ctx, gen); err != nil {
-		return err
-	}
-	// Audio packs last of all: they are the biggest downloads.
-	return c.syncAudio(ctx, gen)
+	return first
+}
+
+// stopsSync reports whether err (of a stage that may fail on its own) is
+// one that makes the stages after it pointless: the game is unlinked,
+// its tokens are refused, or the sync ran out of time.
+func stopsSync(ctx context.Context, err error) bool {
+	var e *Error
+	return errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) || ctx.Err() != nil ||
+		(errors.As(err, &e) && e.Status == http.StatusUnauthorized)
 }
 
 // syncMe fetches the learner. syncMu is held.
@@ -276,6 +294,11 @@ func (c *Client) upload(ctx context.Context, gen int) error {
 		}
 		b, seqs := c.takeBatch(c.batch)
 		c.mu.Unlock()
+		// The sent mark of totals is on disk before the request: a game
+		// that dies after the server stored the batch must not change
+		// those events when it starts again. If it can't be written, the
+		// send goes on (and Close tries again).
+		c.saveQueue()
 
 		var res struct {
 			LastSeq    int64 `json:"last_seq"`
@@ -455,7 +478,9 @@ func (c *Client) Close() {
 	// Stop a sign-in or sync still on its way, and give it a moment to
 	// end: it writes the learner's folder, which the game may move or
 	// remove as soon as Close returns.
-	c.endLife()
+	c.mu.Lock()
+	c.endLife() // under c.mu: no audio run starts (bg.Add) after it
+	c.mu.Unlock()
 	gotSync := false
 	for deadline := time.Now().Add(syncStopWait); ; time.Sleep(5 * time.Millisecond) {
 		if gotSync = c.syncMu.TryLock(); gotSync || time.Now().After(deadline) {
@@ -593,13 +618,16 @@ func (c *Client) unlink() {
 		}
 	}
 	c.gen++
+	if c.audioCancel != nil {
+		c.audioCancel() // the pack downloads of the old link
+	}
 	c.st = state{NextSeq: c.st.NextSeq}
 	c.q = queue{}
 	c.dirty = false
 	if c.o.Store != nil {
 		c.o.Store.Remove(queueFile)
 	}
-	c.memories = map[string]*fetched{}
+	c.memories, c.packFails = map[string]*fetched{}, nil
 	c.err, c.failures, c.note = nil, 0, ""
 	c.loadLists()
 	c.saveState()
