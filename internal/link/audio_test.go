@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/pkg/audiopack"
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 func animalsPack(t *testing.T, version int) []byte {
@@ -120,6 +121,7 @@ func TestAudioPacks(t *testing.T) {
 		t.Fatal("no pack for version 3")
 	}
 	c.Unlink()
+	c.bg.Wait() // the unlink told the server: don't leak into the next test
 	if st.has("assigned/lst_animals.audio") {
 		t.Error("the pack is kept after unlinking")
 	}
@@ -264,3 +266,75 @@ func TestAudioPackBacksOff(t *testing.T) {
 		t.Error("the pack didn't come after the wait")
 	}
 }
+
+// Unlinking stops a pack download on its way, and a learner who links
+// again isn't held back by it.
+func TestUnlinkStopsAudioDownload(t *testing.T) {
+	f, c, _, _ := linked(t)
+	started := make(chan struct{}, 1)
+	f.mu.Lock()
+	f.me["pronunciation"] = map[string]any{"available": true}
+	f.audio = func(id, version string) (int, []byte) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		time.Sleep(300 * time.Millisecond)
+		return 200, animalsPack(t, 3)
+	}
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	c.Unlink()
+	waitAudio(t, c)
+	c.bg.Wait()
+	if _, ok := c.Pronunciation("fr", dog); ok {
+		t.Error("a pack from the old link is used")
+	}
+	c.mu.Lock()
+	n := len(c.packs)
+	c.mu.Unlock()
+	if n != 0 {
+		t.Errorf("%d packs kept after unlinking", n)
+	}
+}
+
+// totals sent are marked on disk before the request: a game killed after
+// the server stored the batch (no Save, no Close) doesn't change them.
+func TestSentMarkOnDiskBeforeRequest(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	c.Save()
+	snap := newMemStore()
+	c.hc = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		resp, err := http.DefaultTransport.RoundTrip(r)
+		if r.URL.Path == "/api/v1/events" {
+			// the server has it; the game is killed right now
+			st.mu.Lock()
+			for k, v := range st.files {
+				snap.files[k] = append([]byte(nil), v...)
+			}
+			st.mu.Unlock()
+		}
+		return resp, err
+	})}
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.eventsOf("totals")) != 1 {
+		t.Fatal("the server didn't store the totals")
+	}
+	c2 := reopen(f, snap, clk)
+	c2.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	c2.mu.Lock()
+	defer c2.mu.Unlock()
+	if len(c2.q.Totals) != 2 || c2.q.Totals[0].Answers != 1 {
+		t.Errorf("after the kill: %+v", c2.q.Totals)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

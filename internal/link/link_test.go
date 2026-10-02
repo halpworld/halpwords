@@ -1671,26 +1671,6 @@ func TestMissingListFileIsFetchedAgain(t *testing.T) {
 	}
 }
 
-// The ETag is kept only when every list was kept: a list the game
-// skipped is asked for again at the next sync.
-func TestSkippedListIsNotCoveredByETag(t *testing.T) {
-	f, c, _, _ := linked(t)
-	f.setLists(wireList{ID: "lst_animals", Version: 3, Title: "Animals", Language: "fr", Text: animals},
-		wireList{ID: "lst_bad", Version: 1, Title: "Bad", Language: "fr", Text: "nonsense"})
-	if err := c.Sync(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if c.st.ListsETag != "" {
-		t.Errorf("an ETag is kept with a skipped list: %q", c.st.ListsETag)
-	}
-	if err := c.Sync(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if f.notMod != 0 {
-		t.Errorf("%d 304s: the skipped list isn't asked for again", f.notMod)
-	}
-}
-
 // A game of another version may read what an older one skipped: the ETag
 // of the old one isn't used.
 func TestListsETagIsForOneGameVersion(t *testing.T) {

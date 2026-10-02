@@ -256,6 +256,11 @@ func (c *Client) upload(ctx context.Context, gen int) error {
 		}
 		b, seqs := c.takeBatch(c.batch)
 		c.mu.Unlock()
+		// The sent mark of totals is on disk before the request: a game
+		// that dies after the server stored the batch must not change
+		// those events when it starts again. If it can't be written, the
+		// send goes on (and Close tries again).
+		c.saveQueue()
 
 		var res struct {
 			LastSeq    int64 `json:"last_seq"`
@@ -435,7 +440,9 @@ func (c *Client) Close() {
 	// Stop a sign-in or sync still on its way, and give it a moment to
 	// end: it writes the learner's folder, which the game may move or
 	// remove as soon as Close returns.
-	c.endLife()
+	c.mu.Lock()
+	c.endLife() // under c.mu: no audio run starts (bg.Add) after it
+	c.mu.Unlock()
 	gotSync := false
 	for deadline := time.Now().Add(syncStopWait); ; time.Sleep(5 * time.Millisecond) {
 		if gotSync = c.syncMu.TryLock(); gotSync || time.Now().After(deadline) {
@@ -558,6 +565,9 @@ func (c *Client) unlink() {
 		}
 	}
 	c.gen++
+	if c.audioCancel != nil {
+		c.audioCancel() // the pack downloads of the old link
+	}
 	c.st = state{NextSeq: c.st.NextSeq}
 	c.q = queue{}
 	c.dirty = false

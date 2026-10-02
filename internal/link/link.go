@@ -377,6 +377,7 @@ type Client struct {
 	// audioRunning: audio packs are downloading in the background
 	// (audio.go); packFails are the lists whose pack failed.
 	audioRunning bool
+	audioCancel  context.CancelFunc
 	packFails    map[string]packFail
 }
 

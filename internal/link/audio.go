@@ -94,27 +94,29 @@ func (c *Client) syncAudio(_ context.Context, gen int) error {
 	if len(want) == 0 {
 		return nil
 	}
-	c.audioRunning = true
+	ctx, cancel := context.WithCancel(c.life)
+	c.audioRunning, c.audioCancel = true, cancel
 	c.bg.Add(1)
-	go c.downloadPacks(gen, want)
+	go c.downloadPacks(ctx, cancel, gen, want)
 	return nil
 }
 
-// downloadPacks downloads the packs of the lists, until the client is
-// closed or the game unlinked.
-func (c *Client) downloadPacks(gen int, want []ListInfo) {
+// downloadPacks downloads the packs of the lists, until ctx ends (the
+// client is closed or the game unlinked).
+func (c *Client) downloadPacks(ctx context.Context, cancel context.CancelFunc, gen int, want []ListInfo) {
 	defer c.bg.Done()
 	defer func() {
+		cancel()
 		c.mu.Lock()
 		c.audioRunning = false
 		c.mu.Unlock()
 	}()
 	got := 0
 	for _, li := range want {
-		if got >= packsPerSync || c.life.Err() != nil {
+		if got >= packsPerSync || ctx.Err() != nil {
 			return
 		}
-		data, status, err := c.fetchPack(c.life, gen, li)
+		data, status, err := c.fetchPack(ctx, gen, li)
 		if errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) {
 			return
 		}
@@ -134,7 +136,7 @@ func (c *Client) downloadPacks(gen int, want []ListInfo) {
 			err = errors.New("link: no audio pack")
 		}
 		c.mu.Lock()
-		if c.gen != gen {
+		if c.gen != gen || ctx.Err() != nil {
 			c.mu.Unlock()
 			return
 		}
