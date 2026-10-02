@@ -132,30 +132,48 @@ func (c *Client) Sync(ctx context.Context) error {
 }
 
 func (c *Client) syncAll(ctx context.Context, gen int) error {
+	// The learner and the upload are gates: they cover the link itself
+	// and the core data.
 	if err := c.syncMe(ctx, gen); err != nil {
 		return err
 	}
 	if err := c.upload(ctx, gen); err != nil {
 		return err
 	}
-	if err := c.syncLists(ctx, gen); err != nil {
-		return err
+	// The rest don't depend on each other: one that fails (a bad list,
+	// an endpoint with a problem) doesn't hold back the others, which
+	// would leave finished runs unsent until the server refuses them as
+	// stale. The first error is reported. Rankings come late, so a
+	// server without them never holds back the rest, and audio packs
+	// last of all: they are the biggest downloads.
+	var first error
+	for _, stage := range []func(context.Context, int) error{
+		c.syncLists, c.syncQuests, c.syncMemory, c.uploadRuns, c.syncRanks, c.syncAudio,
+	} {
+		err := stage(ctx, gen)
+		if err == nil {
+			continue
+		}
+		if first == nil {
+			first = err
+		}
+		if stopsSync(ctx, err) {
+			if errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) {
+				first = err // Sync treats an unlink differently from a failure
+			}
+			break
+		}
 	}
-	if err := c.syncQuests(ctx, gen); err != nil {
-		return err
-	}
-	if err := c.syncMemory(ctx, gen); err != nil {
-		return err
-	}
-	// Rankings last, so a server without them never holds back the rest.
-	if err := c.uploadRuns(ctx, gen); err != nil {
-		return err
-	}
-	if err := c.syncRanks(ctx, gen); err != nil {
-		return err
-	}
-	// Audio packs last of all: they are the biggest downloads.
-	return c.syncAudio(ctx, gen)
+	return first
+}
+
+// stopsSync reports whether err (of a stage that may fail on its own) is
+// one that makes the stages after it pointless: the game is unlinked,
+// its tokens are refused, or the sync ran out of time.
+func stopsSync(ctx context.Context, err error) bool {
+	var e *Error
+	return errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) || ctx.Err() != nil ||
+		(errors.As(err, &e) && e.Status == http.StatusUnauthorized)
 }
 
 // syncMe fetches the learner. syncMu is held.

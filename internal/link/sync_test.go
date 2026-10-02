@@ -6,9 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/halpworld/halpwords/pkg/compete"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -396,5 +398,58 @@ func TestCloseStopsTheFirstSync(t *testing.T) {
 	c.Close()
 	if st := c.Status(); st.Busy {
 		t.Fatalf("a sync is still running after Close: %+v", st)
+	}
+}
+
+// One failing stage doesn't hold back the independent stages after it,
+// and the first error is the one reported.
+func TestFailingStageDoesntBlockLaterOnes(t *testing.T) {
+	f, c, _, _ := linked(t)
+	f.mu.Lock()
+	f.boards = []any{}
+	f.me["pronunciation"] = map[string]any{"available": true}
+	f.audio = func(id, version string) (int, []byte) { return 200, animalsPack(t, 3) }
+	f.mu.Unlock()
+	run := compete.Run{Share: compete.Share{Lang: "fr", Seed: 42, Floor: 3, Score: 10}, Secs: 200}
+	c.Run(run, "0123456789abcdef")
+	f.setLists(wireList{ID: "lst_animals", Version: 4, Title: "Animals", Language: "fr", Text: strings.Replace(animals, "version: 3", "version: 4", 1)})
+	f.failNext("/api/v1/lists", 500, 500, 500)
+	f.failNext("/api/v1/assignments", 500, 500, 500)
+	base := map[string]int{}
+	paths := []string{"/api/v1/lists", "/api/v1/assignments", "/api/v1/memory", "/api/v1/runs", "/api/v1/ranks", "/api/v1/lists/lst_animals/audio"}
+	for _, p := range paths {
+		base[p] = f.count(p)
+	}
+	err := c.Sync(context.Background())
+	var e *Error
+	if !errors.As(err, &e) || e.Status != 500 {
+		t.Fatalf("sync: %v", err)
+	}
+	if got := f.count("/api/v1/lists") - base["/api/v1/lists"]; got != 3 {
+		t.Errorf("lists asked %d times", got)
+	}
+	for _, p := range paths[2:] {
+		if f.count(p) == base[p] {
+			t.Errorf("%s was not asked after earlier stages failed", p)
+		}
+	}
+	if c.Status().Err == nil {
+		t.Error("the failure isn't reported in the status")
+	}
+}
+
+// An auth failure still stops every later stage.
+func TestUnlinkedStopsLaterStages(t *testing.T) {
+	f, c, _, _ := linked(t)
+	f.mu.Lock()
+	f.refresh = "" // the refresh token is no longer good
+	f.mu.Unlock()
+	f.failNext("/api/v1/lists", 401)
+	mem, ass := f.count("/api/v1/memory"), f.count("/api/v1/assignments")
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	if f.count("/api/v1/memory") != mem || f.count("/api/v1/assignments") != ass {
+		t.Error("stages went on after the game was unlinked")
 	}
 }
