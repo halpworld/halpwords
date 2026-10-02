@@ -10,10 +10,13 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/browser"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
+	"github.com/halpworld/halpwords/internal/unifont"
 )
 
 // slowServer answers the sign-in requests only when release is closed, and
@@ -147,5 +150,23 @@ func TestSignInEscWhileSigningIn(t *testing.T) {
 	defer f.mu.Unlock()
 	if ctx.Link.Linked() || len(f.unlinks) != 1 || f.unlinks[0] != "Bearer hwd_late" || s.step != siPairing {
 		t.Fatalf("linked %v, unlinks %q, step %d", ctx.Link.Linked(), f.unlinks, s.step)
+	}
+}
+
+// While a question to the server is on its way, the screen draws with the
+// hint that says what Esc does (the text is drawn, so only the wording is
+// checked).
+func TestSignInPendingHint(t *testing.T) {
+	f, srv := newSlowServer(t)
+	s, ctx := signInScreen(t, f, srv)
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.Font = gfx.NewFont(face)
+	s.pending = make(chan siResult, 1)
+	s.Draw(ebiten.NewImage(game.ScreenW, game.ScreenH), ctx)
+	if siPendingHint != "Esc stop waiting" {
+		t.Fatalf("hint %q", siPendingHint)
 	}
 }

@@ -37,7 +37,7 @@ type busyError struct{ e *Error }
 
 func (b *busyError) Error() string {
 	if s := int((b.e.RetryAfter + time.Second - 1) / time.Second); s > 0 && s < 60 {
-		return fmt.Sprintf("too many tries: wait %d seconds and try again", s)
+		return fmt.Sprintf("too many tries: wait %d %s and try again", s, plural(s, "second", "seconds"))
 	}
 	return ErrSSOBusy.Error()
 }

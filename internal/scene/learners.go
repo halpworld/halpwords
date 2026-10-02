@@ -340,6 +340,9 @@ func (s *Learners) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 }
 
+// siPendingHint is the key hint while a question to the server is on its way.
+const siPendingHint = "Esc stop waiting"
+
 // siStep is what the sign-in screen is doing.
 type siStep int
 
@@ -1002,6 +1005,7 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 		hint = "Esc back"
 	}
 	if s.pending != nil {
+		hint = siPendingHint
 		f.DrawCentered(dst, "Asking the website…", cx, game.ScreenH-44, 1, pal.Ice)
 	} else if s.msg != "" && s.step != siWaiting {
 		f.DrawCentered(dst, fit(f, s.msg, game.ScreenW-20, 1), cx, game.ScreenH-44, 1, s.msgCol)

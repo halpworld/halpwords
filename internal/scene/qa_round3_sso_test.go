@@ -31,7 +31,6 @@ type qaServer struct {
 	polls     []map[string]string
 	limit     string // Retry-After of a 429 on poll; "" for tokens
 	limited   bool
-	startHdr  string
 }
 
 func newQAServer(t *testing.T) (*qaServer, *httptest.Server) {

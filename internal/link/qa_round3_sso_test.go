@@ -128,7 +128,7 @@ func TestQASSORateLimitRetryAfterVariants(t *testing.T) {
 		after  time.Duration
 	}{
 		{"", "too many tries: wait a moment and try again", 0},
-		{"1", "too many tries: wait 1 seconds and try again", time.Second},
+		{"1", "too many tries: wait 1 second and try again", time.Second},
 		{"59", "too many tries: wait 59 seconds and try again", 59 * time.Second},
 		{"60", "too many tries: wait a moment and try again", 60 * time.Second},
 		{"120", "too many tries: wait a moment and try again", 120 * time.Second},
