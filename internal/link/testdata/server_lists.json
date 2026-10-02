@@ -1,0 +1,39 @@
+{
+  "lists": [
+    {
+      "id": "01a0fe22-ad56-755e-b21d-ac452697b3ba",
+      "version": 1,
+      "title": "Colours",
+      "language": "fr",
+      "words": 3,
+      "text": "title: Colours\nlanguage: fr\nid: 01a0fe22-ad56-755e-b21d-ac452697b3ba\nversion: 1\n\nred = rouge\nblue = bleu\ngreen = vert\n",
+      "riddles": [],
+      "source": "sent",
+      "sent_at": "2026-09-25T12:00:00Z",
+      "locked": false
+    },
+    {
+      "id": "01a0fe22-ad56-7563-9c87-b91e1a3102c6",
+      "version": 1,
+      "title": "Unit 3: animals",
+      "language": "fr",
+      "words": 2,
+      "text": "title: Unit 3: animals\nlanguage: fr\nid: 01a0fe22-ad56-7563-9c87-b91e1a3102c6\nversion: 1\n\nthe dog = le chien\nthe cat = le chat\n",
+      "riddles": [],
+      "source": "assignment",
+      "locked": true
+    },
+    {
+      "id": "01a0fe22-ad57-7091-abfc-58279ff80a7c",
+      "version": 1,
+      "title": "Food",
+      "language": "fr",
+      "words": 2,
+      "text": "title: Food\nlanguage: fr\nid: 01a0fe22-ad57-7091-abfc-58279ff80a7c\nversion: 1\n\nbread = le pain\ncheese = le fromage\n",
+      "riddles": [],
+      "source": "assignment",
+      "locked": false
+    }
+  ]
+}
+

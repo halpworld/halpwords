@@ -2,6 +2,7 @@ package link
 
 import (
 	"context"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -176,5 +177,46 @@ func TestOldServerLists(t *testing.T) {
 	}
 	if qs := c.Quests(); len(qs) != 1 || qs[0].Settings.LockLists {
 		t.Errorf("quests %+v", qs)
+	}
+}
+
+// TestServerListsFixture replays a GET /api/v1/lists answer recorded from
+// the server (halpwords-server internal/web/testdata/game_lists/lists.json,
+// TestListsFixture, #126): a list sent to the class, one locked by an
+// assignment that has started, and one both assigned and sent, which the
+// server gives as the assignment's.
+func TestServerListsFixture(t *testing.T) {
+	data, err := os.ReadFile("testdata/server_lists.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, c, _, _ := linked(t)
+	f.mu.Lock()
+	f.listsRaw, f.etag = data, `"fixture"`
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]ListInfo{}
+	n := map[string]int{}
+	for _, l := range c.Lists() {
+		li, ok := c.Info(l)
+		if !ok || li.ID != l.ID || l.Language != "fr" {
+			t.Fatalf("%s: %+v %v", l.Title, li, ok)
+		}
+		got[l.Title], n[l.Title] = li, len(l.Entries)
+	}
+	if len(got) != 3 || n["Colours"] != 3 || n["Unit 3: animals"] != 2 || n["Food"] != 2 {
+		t.Fatalf("lists %v", n)
+	}
+	sentAt := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	if li := got["Colours"]; li.Source != SourceSent || !li.SentAt.Equal(sentAt) || li.Locked {
+		t.Errorf("sent list %+v", li)
+	}
+	if li := got["Unit 3: animals"]; li.Source != SourceAssignment || !li.SentAt.IsZero() || !li.Locked {
+		t.Errorf("locked list %+v", li)
+	}
+	if li := got["Food"]; li.Source != SourceAssignment || !li.SentAt.IsZero() || li.Locked {
+		t.Errorf("assigned and sent list %+v", li)
 	}
 }

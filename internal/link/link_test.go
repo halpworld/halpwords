@@ -107,6 +107,7 @@ type fake struct {
 	n         int // tokens handed out
 	expires   int // expires_in of access tokens
 	lists     []wireList
+	listsRaw  []byte // when set, GET /api/v1/lists answers this as it is
 	quests    []byte // the answer to GET /api/v1/assignments; nil is none
 	etag      string
 	memory    map[string]*words.Memory
@@ -329,6 +330,11 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") == f.etag && f.etag != "" {
 			f.notMod++
 			w.WriteHeader(304)
+			return
+		}
+		if f.listsRaw != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(f.listsRaw)
 			return
 		}
 		lists := f.lists
