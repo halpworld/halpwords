@@ -403,6 +403,8 @@ func (c *checker) words(all []*words.List) {
 		}
 		switch {
 		case !named:
+		case id >= 0 && words.TooLong(entries[id]):
+			c.at(l.X, l.Y, "“%s” has an answer too long to type (over %d letters).", l.Word, words.MaxAnswerRunes)
 		case id >= 0 && puzzle.OneWord(k):
 			if !made(func() puzzle.Puzzle {
 				return puzzle.MakeWord(k, lock, m.Level(), deck, id, lang, lang.Defaults, rng, gen)

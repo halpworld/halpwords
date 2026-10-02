@@ -56,14 +56,16 @@ func (d *Deck) Len() int { return len(d.entries) }
 func (d *Deck) Entries() []Entry { return d.entries }
 
 // Review returns how many words are waiting to be practised again.
-func (d *Deck) Review() int { return len(d.review) }
+func (d *Deck) Review() int { return len(d.Missed()) }
 
 // Missed returns the words waiting to be practised again, most recently
 // missed first. Each is an id as Next returns.
 func (d *Deck) Missed() []int {
 	out := make([]int, 0, len(d.review))
 	for i := len(d.review) - 1; i >= 0; i-- {
-		out = append(out, d.review[i])
+		if id := d.review[i]; d.skip == nil || !d.skip[id] {
+			out = append(out, id)
+		}
 	}
 	return out
 }

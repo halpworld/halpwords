@@ -45,7 +45,7 @@ func TestQA3CombiningAccentOnTheLastLetter(t *testing.T) {
 	}
 	f.Type('e')
 	if !f.Type('\u0301') {
-		t.Skip("round 3: Field.Type checks MaxLen before composing a combining mark, so the accent on the 60th letter of a 60-letter answer is refused (typing.go:84)")
+		t.Fatal("the accent on the 60th letter was refused")
 	}
 	if f.Len() != words.MaxAnswerRunes || !strings.HasSuffix(f.Text(), "\u00e9") {
 		t.Fatalf("len %d text %q", f.Len(), f.Text())

@@ -81,16 +81,18 @@ func (f *Field) Type(r rune) bool {
 			return false // j and v have no Greek letter
 		}
 	}
-	if len(f.runes) >= MaxLen {
-		return false
-	}
-	// Keep everything precomposed so Backspace removes whole letters.
+	// Keep everything precomposed so Backspace removes whole letters. A mark
+	// that composes into the last letter is not a new character, so it is
+	// taken even when the field is full.
 	if unicode.Is(unicode.Mn, r) && len(f.runes) > 0 {
 		c := []rune(norm.NFC.String(string(f.runes[len(f.runes)-1]) + string(r)))
 		if len(c) == 1 {
 			f.runes[len(f.runes)-1] = c[0]
 			return true
 		}
+		return false
+	}
+	if len(f.runes) >= MaxLen {
 		return false
 	}
 	f.runes = append(f.runes, r)

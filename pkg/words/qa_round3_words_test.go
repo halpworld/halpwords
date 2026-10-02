@@ -161,7 +161,7 @@ func TestQA3ReviewQueueWithTooLongEntryDoesNotLoop(t *testing.T) {
 	d := NewDeck(es, rand.New(rand.NewPCG(5, 6)))
 	d.SetMemory(NewMemory())
 	d.SetState(DeckState{Recent: []int{4}, Review: []int{4}})
-	if d.Review() != 1 {
+	if d.Review() != 0 {
 		t.Fatalf("review = %d", d.Review())
 	}
 	for n := 0; n < 500; n++ {
@@ -171,8 +171,8 @@ func TestQA3ReviewQueueWithTooLongEntryDoesNotLoop(t *testing.T) {
 		}
 		d.Answer(i, Answer{Tier: Correct})
 	}
-	// Missed lists it still; callers get an id that indexes Entries.
-	if m := d.Missed(); len(m) != 1 || m[0] != 4 || d.Entries()[m[0]].Prompt != "long" {
+	// Missed leaves it out, as it is never dealt again.
+	if m := d.Missed(); len(m) != 0 {
 		t.Errorf("Missed = %v", m)
 	}
 }

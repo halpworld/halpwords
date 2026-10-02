@@ -156,7 +156,7 @@ func longEntry(prompt string) Entry {
 }
 
 func TestTooLong(t *testing.T) {
-	if TooLong(Entry{Answers: []string{strings.Repeat("é", MaxAnswerRunes)}}) {
+	if TooLong(Entry{Answers: []string{strings.Repeat("a", MaxAnswerRunes)}}) {
 		t.Error("an answer of exactly the limit is too long")
 	}
 	if !TooLong(longEntry("x")) {
@@ -167,7 +167,7 @@ func TestTooLong(t *testing.T) {
 		t.Error("combining marks are counted as letters")
 	}
 	if TooLong(Entry{}) {
-		t.Error("an entry with no answers is too long")
+		t.Error("an entry with no answers is called too long")
 	}
 	l := &List{Entries: []Entry{{Prompt: "a", Answers: []string{"x"}}, longEntry("b")}}
 	if got := l.TooLong(); len(got) != 1 || got[0].Prompt != "b" {
@@ -201,5 +201,14 @@ func TestDeckWithOnlyLongAnswersStillDeals(t *testing.T) {
 		if _, i := d.Next(); i < 0 {
 			t.Fatal("dealt nothing")
 		}
+	}
+}
+
+func TestDeckMissedLeavesOutAnswersTooLongToType(t *testing.T) {
+	d := NewDeck(append(testEntries(3), longEntry("long")), rand.New(rand.NewPCG(1, 2)))
+	d.Mark(3, false)
+	d.Mark(1, false)
+	if got := d.Missed(); len(got) != 1 || got[0] != 1 || d.Review() != 1 {
+		t.Fatalf("Missed %v, Review %d", got, d.Review())
 	}
 }
