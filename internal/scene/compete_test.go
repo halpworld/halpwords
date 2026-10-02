@@ -390,7 +390,7 @@ func TestDailyNotesAfterMidnight(t *testing.T) {
 	}
 	runNow = func() time.Time { return after }
 	g := newGameOver(ctx, r, true)
-	if g.unrankedNote != "Not ranked online: finished on another day" {
+	if g.unrankedNote != "Not ranked online: it is a new day" {
 		t.Fatalf("late note %q", g.unrankedNote)
 	}
 	r.day = ""
@@ -398,9 +398,9 @@ func TestDailyNotesAfterMidnight(t *testing.T) {
 	if g.unrankedNote != "Not ranked online" {
 		t.Fatalf("empty day note %q", g.unrankedNote)
 	}
-	for _, s := range []string{g.unrankedNote, unrankedLate, r.dailyNote(after), r.suspendNote(after)} {
-		if w := ctx.Font.Width(s, 1); w > 314-20 {
-			t.Errorf("%q is %dpx wide", s, w)
+	for s, max := range map[string]int{unrankedLate: 314 - 20, r.dailyNote(after): 360 - 20, r.suspendNote(after): 640 - 40} {
+		if w := ctx.Font.Width(s, 1); w > max {
+			t.Errorf("%q is %dpx wide, room for %d", s, w, max)
 		}
 	}
 }

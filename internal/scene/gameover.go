@@ -20,7 +20,7 @@ import (
 // Shown when a Daily Dungeon is not sent for the rankings. Its XP and
 // word practice still count.
 const (
-	unrankedLate  = "Not ranked online: finished on another day"
+	unrankedLate  = "Not ranked online: it is a new day"
 	unrankedNoDay = "Not ranked online"
 )
 
