@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/halpworld/halpwords/internal/save"
 )
 
 // memStore is a Store in memory.
@@ -329,5 +331,39 @@ func TestDocsUseWebURL(t *testing.T) {
 		if f == "../../README.md" && strings.Contains(string(data), other) {
 			t.Errorf("%s still links to %s", f, other)
 		}
+	}
+}
+
+// The game's own store is relative to the save root, not to the learner
+// playing: importing with a learner chosen puts every name where it says.
+func TestSavesAreRootRelative(t *testing.T) {
+	save.UseMemory()
+	save.Use("profiles/cur")
+	t.Cleanup(func() { save.Use(save.Root) })
+	files := map[string][]byte{
+		"learners.json":                  []byte(`{"Learners":[{"ID":"abc"}]}`),
+		"profiles/abc/progress.json":     []byte(`{"XP":3}`),
+		"profiles/abc/words/animaux.txt": []byte("title: Animaux\n"),
+		"adventure.json":                 []byte(`{"Version":2}`),
+	}
+	in := &Incoming{ID: "0123456789abcdef", Files: files}
+	if err := in.Apply(Saves); err != nil {
+		t.Fatal(err)
+	}
+	for n, want := range files {
+		got, err := save.Root.Read(n)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Errorf("%s at the root = %q, %v; want %q", n, got, err, want)
+		}
+	}
+	names, _ := Saves.All()
+	for _, n := range names {
+		if strings.HasPrefix(n, "profiles/cur/") {
+			t.Errorf("%s was written into the current learner's folder", n)
+		}
+	}
+	// Conflicts sees the files at the root, whichever learner is current.
+	if here, _ := Conflicts(Saves); len(here) != len(files) {
+		t.Errorf("conflicts = %v", here)
 	}
 }

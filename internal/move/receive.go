@@ -19,15 +19,17 @@ type Store interface {
 	All() ([]string, error) // every file name, in every folder
 }
 
-// Saves is the game's own store.
+// Saves is the game's own store. It works on the save root, not on the
+// folder of the learner playing: the names that move include learners.json
+// and profiles/<id>/..., which are relative to the root.
 var Saves Store = saveStore{}
 
 type saveStore struct{}
 
-func (saveStore) Read(name string) ([]byte, error)     { return save.Read(name) }
-func (saveStore) Write(name string, data []byte) error { return save.Write(name, data) }
-func (saveStore) Remove(name string) error             { return save.Remove(name) }
-func (saveStore) All() ([]string, error)               { return save.All() }
+func (saveStore) Read(name string) ([]byte, error)     { return save.Root.Read(name) }
+func (saveStore) Write(name string, data []byte) error { return save.Root.Write(name, data) }
+func (saveStore) Remove(name string) error             { return save.Root.Remove(name) }
+func (saveStore) All() ([]string, error)               { return save.Root.All() }
 
 // The package keeps parts that have arrived, and the IDs of payloads
 // already dealt with, in the stash folder. Nothing in it moves.
