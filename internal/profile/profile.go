@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"slices"
 
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/pkg/compete"
@@ -48,12 +49,51 @@ type Settings struct {
 	Langs map[string]LangSettings `json:",omitempty"`
 	// Game is nil until the game settings are first changed.
 	Game *Options `json:",omitempty"`
+	// Lists are the word lists the learner ticked for their runs (#89).
+	// Settings from before have none: every list is ticked.
+	Lists Lists `json:",omitzero"`
 	// Locked are settings a grown-up set on the website, by language, for
 	// a game linked to their account. They replace the player's own, which
 	// are kept for when the lock goes, and are never saved here.
 	Locked map[string]LangSettings `json:"-"`
 	// LockNote says who set the locked settings.
 	LockNote string `json:"-"`
+}
+
+// Lists are the word lists ticked on the checklist before a run, by
+// language code, and the sent lists already announced as new.
+type Lists struct {
+	// Selected are the keys of the lists ticked last, by language code.
+	// A language with none saved has every list ticked.
+	Selected map[string][]string `json:",omitempty"`
+	// Seen are the server ids of the sent lists the learner has been
+	// told about ("New: <title>").
+	Seen []string `json:",omitempty"`
+}
+
+// Picked returns the keys of the lists ticked last in language code, and
+// whether there are any: false means every list is ticked.
+func (l Lists) Picked(code string) ([]string, bool) {
+	keys, ok := l.Selected[code]
+	return keys, ok && len(keys) > 0
+}
+
+// Pick keeps keys as the lists ticked in language code.
+func (l *Lists) Pick(code string, keys []string) {
+	if l.Selected == nil {
+		l.Selected = map[string][]string{}
+	}
+	l.Selected[code] = slices.Clone(keys)
+}
+
+// WasSeen reports whether the sent list with server id was announced.
+func (l Lists) WasSeen(id string) bool { return slices.Contains(l.Seen, id) }
+
+// See marks the sent list with server id as announced.
+func (l *Lists) See(id string) {
+	if !l.WasSeen(id) {
+		l.Seen = append(l.Seen, id)
+	}
 }
 
 // CRT is how much the screen looks like an old monitor.

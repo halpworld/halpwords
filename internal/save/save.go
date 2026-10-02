@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // memory holds every file while the game keeps its files in memory (see
@@ -119,6 +120,10 @@ func WritePrivate(name string, data []byte) error { return Current().WritePrivat
 // Remove deletes the named file in the current folder.
 func Remove(name string) error { return Current().Remove(name) }
 
+// ModTime returns when the named file in the current folder was last
+// written, or the zero time where that is not known (see Folder.ModTime).
+func ModTime(name string) time.Time { return Current().ModTime(name) }
+
 // List returns the names of the files in the folder dir of the current
 // folder.
 func List(dir string) ([]string, error) { return Current().List(dir) }
@@ -175,6 +180,16 @@ func (f Folder) Remove(name string) error {
 	}
 	delete(memory, name)
 	return nil
+}
+
+// ModTime returns when the named file was last written. It is the zero
+// time for a file that is not there, in a web browser (local storage
+// keeps no times) and while files are kept in memory.
+func (f Folder) ModTime(name string) time.Time {
+	if InMemory() {
+		return time.Time{}
+	}
+	return diskModTime(f.name(name))
 }
 
 // List returns the names of the files in the folder dir, sorted. A folder

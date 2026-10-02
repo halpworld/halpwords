@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"syscall/js"
+	"time"
 )
 
 const prefix = "halpwords/"
@@ -42,6 +43,9 @@ func diskRead(name string) ([]byte, error) {
 	}
 	return []byte(v.String()), nil
 }
+
+// diskModTime is the zero time: local storage keeps no times.
+func diskModTime(string) time.Time { return time.Time{} }
 
 // diskWrite replaces the named file.
 func diskWrite(name string, data []byte) error {

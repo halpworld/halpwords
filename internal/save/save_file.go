@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"time"
 )
 
 // diskDir is where saves, settings and the user's own word lists live, e.g.
@@ -27,6 +28,20 @@ func diskRead(name string) ([]byte, error) {
 		return nil, err
 	}
 	return os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+}
+
+// diskModTime returns when the named file was last written, or the zero
+// time.
+func diskModTime(name string) time.Time {
+	dir, err := diskDir()
+	if err != nil {
+		return time.Time{}
+	}
+	fi, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name)))
+	if err != nil {
+		return time.Time{}
+	}
+	return fi.ModTime()
 }
 
 // diskWrite replaces the named file. It writes a temporary file first, so a

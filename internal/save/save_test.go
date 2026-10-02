@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func useTempDir(t *testing.T) {
@@ -155,5 +156,23 @@ func TestAll(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
 		}
+	}
+}
+
+func TestModTime(t *testing.T) {
+	useTempDir(t)
+	if !ModTime("words/a.txt").IsZero() {
+		t.Fatal("a missing file has a time")
+	}
+	if err := Write("words/a.txt", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	dir, _ := Dir()
+	if err := os.Chtimes(filepath.Join(dir, "words", "a.txt"), old, old); err != nil {
+		t.Fatal(err)
+	}
+	if got := ModTime("words/a.txt"); !got.Equal(old) {
+		t.Errorf("mod time %v, want %v", got, old)
 	}
 }
