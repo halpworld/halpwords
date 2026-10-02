@@ -22,6 +22,9 @@ type shelfRow struct {
 	// assigned is a list a grown-up assigned on the website: read-only,
 	// and kept by the link, not in the words folder.
 	assigned bool
+	// broken is what is wrong with a file in the words folder that the game
+	// can't read. The game skips the file; the row warns about it.
+	broken []words.Problem
 }
 
 // deletable reports whether the row can be deleted. A starter list can't,
@@ -52,6 +55,25 @@ func newShelf(starters, user []*words.List) *shelf {
 	return s
 }
 
+// addBroken adds a row for each file in the words folder that could not be
+// read, with its good lines as the words, so it shows on the screen with a
+// warning. A file named like a starter list marks that starter's row.
+func (s *shelf) addBroken(files []brokenFile) {
+	for _, b := range files {
+		if r := s.find(b.list.File); r != nil {
+			r.broken, r.own, r.onDisk = b.probs, true, true
+			continue
+		}
+		s.rows = append(s.rows, &shelfRow{file: b.list.File, list: b.list, own: true, onDisk: true, broken: b.probs})
+	}
+}
+
+// brokenFile is a file in the words folder that the game can't read.
+type brokenFile struct {
+	list  *words.List // the lines that were fine
+	probs []words.Problem
+}
+
 // addAssigned puts the assigned lists first, as a group of their own.
 func (s *shelf) addAssigned(lists []*words.List) {
 	var rows []*shelfRow
@@ -59,6 +81,16 @@ func (s *shelf) addAssigned(lists []*words.List) {
 		rows = append(rows, &shelfRow{file: l.File, list: l, assigned: true})
 	}
 	s.rows = append(rows, s.rows...)
+}
+
+// brokenCount returns how many rows are files the game can't read.
+func (s *shelf) brokenCount() (n int) {
+	for _, r := range s.rows {
+		if r.broken != nil {
+			n++
+		}
+	}
+	return n
 }
 
 func (s *shelf) find(file string) *shelfRow {
@@ -79,7 +111,7 @@ func (s *shelf) unsaved() bool {
 func (s *shelf) targets(lang string) []int {
 	var out []int
 	for i, r := range s.rows {
-		if r.list.Language == lang && !r.assigned {
+		if r.list.Language == lang && !r.assigned && r.broken == nil {
 			out = append(out, i)
 		}
 	}

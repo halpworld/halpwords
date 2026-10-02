@@ -7,6 +7,18 @@ version as its release notes.
 
 ### Added
 
+- **Type a word list in the game.** On the Word Lists screen, N opens a quick
+  editor: a title, a language and one `english = answer` word per line,
+  checked as you type, with a one-screen format hint. E edits one of your own
+  lists. It works offline and in the web build, and children can use it.
+  Lists you type stay on your computer.
+- **Importing checks the file first.** A file with lines the game can't use
+  (no `=`, an empty answer, a gap-fill answer that isn't in the list, a
+  repeated word, an answer too long to type) shows "8 words found, 2 lines
+  skipped" with each line and why. Enter imports the good lines, Esc imports
+  nothing. A file in the `words` folder that the game can't read is listed
+  on the Word Lists screen with a warning (W shows why, E fixes it) instead
+  of just an error message.
 - **Every floor is a different world.** Ten of them, in this order: The
   Crypt, Mossy Cellars, Flooded Caves, Lava Forge, Ice Halls, Whispering
   Library, Sky Garden, Clockwork Workshop, Amethyst Vaults and Sandstone

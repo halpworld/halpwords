@@ -698,12 +698,62 @@ HALPWORDS_SEED=42 make run
 
 ## Your own word lists
 
-Choose **Word Lists** on the title screen to manage your lists in the game:
+**In 30 seconds, with no internet:** on the title screen choose **Word Lists**
+and press <kbd>N</kbd>. Type a title, pick the language with <kbd>←</kbd> /
+<kbd>→</kbd>, then type one word on each line, like `dog = chien`, pressing
+<kbd>Enter</kbd> after each. A line that isn't a word gets a red `!` and says
+why. Press <kbd>Ctrl</kbd>+<kbd>S</kbd> (<kbd>Cmd</kbd>+<kbd>S</kbd> on a Mac)
+to save. <kbd>Tab</kbd> adds an accent to the letter before it. Children can
+use it too. A list you type stays on your computer: the game never sends it
+anywhere.
+
+You can also write the list in any text editor and drag the file onto the
+game. Here are 8 words to copy into a file called `homework.txt`:
+
+```text
+title: Farm animals
+language: fr
+
+cow = la vache
+pig = le cochon
+hen = la poule
+horse = le cheval
+sheep = le mouton
+duck = le canard
+friend = l'ami | l'amie
+# Lines starting with # are notes.
+goat = la chèvre
+```
+
+Only `english = answer` lines are needed; the rest is optional. The rules:
+
+- One word per line: `english = answer`. Put other answers that are also
+  right after `|`.
+- `title:` names the list and `language:` is `fr` (French), `la` (Latin), `grc`
+  (Ancient Greek) or `ga` (Irish). A file without a `language:` line asks you
+  for the language when you import it.
+- An English word can be on only one line, and an answer can be up to 60
+  letters long.
+
+**What the game tells you.** When you import a file with lines it can't use,
+it shows a check first: `8 words found, 2 lines skipped`, then each skipped
+line with its number and the reason, such as `no '=' here. Write it as:
+english = answer`. <kbd>Enter</kbd> imports the good lines and <kbd>Esc</kbd>
+imports nothing. A file that is fine goes straight to choosing where its
+words go. Nothing is imported without you pressing a key. A file in the
+`words` folder that the game can't read doesn't stop the game: it is skipped,
+and the Word Lists screen lists it with a red `!`. Press <kbd>W</kbd> to see
+the lines and <kbd>E</kbd> to fix them in the editor.
+
+More ways to manage your lists in the game:
 
 <p align="center">
   <img src="docs/media/word-lists.png" width="640" alt="The Word Lists screen, importing a list of farm animals: it can become a new list or be added to French - First Steps">
 </p>
 
+- **Type or edit:** <kbd>N</kbd> types a new list. <kbd>E</kbd> edits one of
+  your own lists. Starter lists and lists assigned on the website can't be
+  edited; make your own, or import words to add to a starter list.
 - **Import:** drag one or more files onto the game window (or the web page),
   or press <kbd>I</kbd> and type the file's path. Then choose to make it
   **a new list** or **add** its words to an existing list in the same
@@ -722,14 +772,16 @@ Choose **Word Lists** on the title screen to manage your lists in the game:
 Imported files can use the format below, or be a plain two-column
 `english<Tab>answer` file, as spreadsheets and flashcard sites export them.
 
-You can also put `.txt` files in the game's `words` folder yourself (in a web
-browser, lists are kept in the page's local storage instead):
+You can also put `.txt` files in the `words` folder yourself. It is inside the
+folder of the learner who is playing (`profiles/<learner>/words`), in your
+user folder (in a web browser, lists are kept in the page's local storage
+instead):
 
 | OS | Folder |
 |---|---|
-| macOS | `~/Library/Application Support/halpwords/words/` |
-| Windows | `%AppData%\halpwords\words\` |
-| Linux | `~/.config/halpwords/words/` |
+| macOS | `~/Library/Application Support/halpwords/` |
+| Windows | `%AppData%\halpwords\` |
+| Linux | `~/.config/halpwords/` |
 
 ```text
 # Lines starting with # are comments.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -36,6 +37,8 @@ const (
 	wlLeaving        // asking whether to save before leaving
 	wlForge          // ordering a new list from the Word Forge
 	wlForging        // waiting for the Word Forge
+	wlPreview        // the lines of a file that were skipped
+	wlEdit           // the quick list editor
 )
 
 // Layout of the Word Lists screen.
@@ -58,11 +61,25 @@ type WordLists struct {
 	msgCol color.RGBA
 
 	path  []rune // the path being typed
-	queue []*words.List
+	queue []queuedList
+
+	// The skipped lines of a file, shown before it is imported (or, with
+	// pvRow set, the lines of a file in the words folder that the game can't
+	// read).
+	pvProbs  []words.Problem
+	pvScroll int
+	pvRow    *shelfRow
+
+	// The quick list editor, and the row it edits (nil for a new list).
+	ed     *listEditor
+	edRow  *shelfRow
+	edAsk  int    // edAskNone, or a question being asked
+	edNote string // a problem to show in the editor
 
 	// The import being placed.
 	imp      *words.List
-	pickLang bool // the file did not say its language
+	impProbs []words.Problem // the lines of imp's file that were skipped
+	pickLang bool            // the file did not say its language
 	langIdx  int
 	opt      int // 0 = a new list, then the rows in targets
 	targets  []int
@@ -81,8 +98,10 @@ type WordLists struct {
 func NewWordLists(ctx *game.Context) game.Scene {
 	w := &WordLists{bg: backdrop(5, 1.3)}
 	w.reload(ctx)
-	w.say("Drop word list files on the window, or press I to import.", pal.Steel)
-	if len(ctx.ListErrors) > 0 {
+	w.say("Press N to type a new list, or drop word list files on the window.", pal.Steel)
+	if n := w.shelf.brokenCount(); n > 0 {
+		w.say(brokenMessage(n), pal.Rose)
+	} else if len(ctx.ListErrors) > 0 {
 		w.say("Error: "+ctx.ListErrors[0], pal.Rose)
 	}
 	return w
@@ -96,8 +115,50 @@ func (w *WordLists) reload(ctx *game.Context) {
 	}
 	user, _ := game.UserLists()
 	w.shelf = newShelf(starters, user)
+	w.shelf.addBroken(brokenFiles())
 	w.shelf.addAssigned(ctx.Link.Lists())
 	w.sel = min(w.sel, len(w.shelf.rows)-1)
+}
+
+// brokenMessage warns that n files in the words folder can't be used.
+func brokenMessage(n int) string {
+	if n == 1 {
+		return "! 1 file has lines I can't read: W shows, E fixes"
+	}
+	return fmt.Sprintf("! %d files have lines I can't read: W shows, E fixes", n)
+}
+
+// brokenFiles describes the files in the words folder that the game could
+// not load, so the screen can warn about them. The game skips them and
+// carries on.
+func brokenFiles() []brokenFile {
+	names, err := save.List(game.WordsDir)
+	if err != nil {
+		return nil
+	}
+	var out []brokenFile
+	for _, n := range names {
+		if !strings.EqualFold(path.Ext(n), ".txt") {
+			continue
+		}
+		data, err := save.Read(game.WordsDir + "/" + n)
+		if err != nil {
+			continue
+		}
+		perr := func() error { _, err := words.Parse(bytes.NewReader(data), n); return err }()
+		if perr == nil {
+			continue
+		}
+		l, probs := words.ParseLenient(bytes.NewReader(data), n)
+		if l.Language == "" && !slices.ContainsFunc(probs, func(p words.Problem) bool { return strings.Contains(p.Reason, "language") }) {
+			probs = append(probs, words.Problem{Reason: `there is no "language:" line, such as: language: fr`})
+		}
+		if len(probs) == 0 {
+			probs = append(probs, words.Problem{Reason: strings.TrimPrefix(perr.Error(), n+": ")})
+		}
+		out = append(out, brokenFile{list: l, probs: probs})
+	}
+	return out
 }
 
 func (w *WordLists) say(msg string, c color.RGBA) { w.msg, w.msgCol = msg, c }
@@ -124,6 +185,10 @@ func (w *WordLists) Update(ctx *game.Context) error {
 		w.updateForge(ctx)
 	case wlForging:
 		w.updateForging(ctx)
+	case wlPreview:
+		w.updatePreview(ctx)
+	case wlEdit:
+		w.updateEdit(ctx)
 	}
 	if w.mode == wlBrowse && len(w.queue) > 0 {
 		w.startImport(ctx)
@@ -164,12 +229,19 @@ func (w *WordLists) queueFile(name string, data []byte) error {
 	default:
 		return fmt.Errorf("%s is not a text file", name)
 	}
-	l, err := words.ParseImport(bytes.NewReader(data), name)
-	if err != nil {
-		return err
+	l, probs := words.ParseLenient(bytes.NewReader(data), name)
+	if len(l.Entries) == 0 && len(probs) == 0 {
+		return fmt.Errorf("%s: no words", name)
 	}
-	w.queue = append(w.queue, l)
+	w.queue = append(w.queue, queuedList{l, probs})
 	return nil
+}
+
+// queuedList is a file waiting to be imported: its good lines, and a
+// description of the lines that were skipped.
+type queuedList struct {
+	list  *words.List
+	probs []words.Problem
 }
 
 func (w *WordLists) move(ctx *game.Context, step int) {
@@ -232,6 +304,12 @@ func (w *WordLists) updateBrowse(ctx *game.Context) {
 		w.saveAll(ctx)
 	case input.Pressed(ebiten.KeyF):
 		w.openForge(ctx)
+	case input.Pressed(ebiten.KeyN):
+		w.openEditor(ctx, nil)
+	case input.Pressed(ebiten.KeyE):
+		w.openEditor(ctx, rows[w.sel])
+	case input.Pressed(ebiten.KeyW):
+		w.openProblems(ctx, rows[w.sel])
 	}
 }
 
@@ -342,7 +420,7 @@ func (w *WordLists) updateForging(ctx *game.Context) {
 	}
 	ctx.Sound.Play(audio.Correct)
 	w.topic = w.topic[:0]
-	w.queue = append(w.queue, l)
+	w.queue = append(w.queue, queuedList{list: l})
 	w.say(fmt.Sprintf("Forged %q: check the words on the right, then press S to save.", l.Title), pal.Lime)
 }
 
@@ -492,7 +570,21 @@ func cleanPath(p string) string {
 
 // startImport opens the next queued import.
 func (w *WordLists) startImport(ctx *game.Context) {
-	w.imp, w.queue = w.queue[0], w.queue[1:]
+	q := w.queue[0]
+	w.imp, w.impProbs, w.queue = q.list, q.probs, w.queue[1:]
+	if len(q.probs) > 0 {
+		// Show what was skipped, and let them decide, before anything is
+		// imported.
+		w.pvProbs, w.pvScroll, w.pvRow = q.probs, 0, nil
+		ctx.Sound.Play(audio.Select)
+		w.mode = wlPreview
+		return
+	}
+	w.beginPlacement(ctx)
+}
+
+// beginPlacement asks where the words of the import go.
+func (w *WordLists) beginPlacement(ctx *game.Context) {
 	w.pickLang = w.imp.Language == ""
 	w.langIdx = 0
 	if !w.pickLang {
@@ -585,14 +677,23 @@ func (w *WordLists) Draw(dst *ebiten.Image, ctx *game.Context) {
 	w.drawList(dst, ctx)
 	w.drawInfo(dst, ctx)
 
+	if w.mode == wlPreview {
+		// The window has its own words; keep these from showing through.
+		w.drawDialogs(dst, ctx)
+		return
+	}
 	f.DrawShadow(dst, fit(f, w.msg, game.ScreenW-24, 1), 12, 306, 1, w.msgCol)
-	help1, help2 := "↑/↓ choose   Space mark   A mark all   X delete   F Word Forge", "I import (or drop files)   S save all   Esc back"
+	help1, help2 := "↑/↓ choose  N new list  E edit  Space mark  X delete  F Word Forge", "I import (or drop files)  A mark all  S save all  Esc back"
 	if onWeb() {
-		help2 = "Drop .txt files on the page to import   S save all   Esc back"
+		help2 = "Drop .txt files on the page to import  A mark all  S save all  Esc back"
 	}
 	f.DrawShadow(dst, help1, 12, 324, 1, pal.Ash)
 	f.DrawShadow(dst, help2, 12, 340, 1, pal.Ash)
 
+	w.drawDialogs(dst, ctx)
+}
+
+func (w *WordLists) drawDialogs(dst *ebiten.Image, ctx *game.Context) {
 	switch w.mode {
 	case wlPath:
 		w.drawPath(dst, ctx)
@@ -604,6 +705,10 @@ func (w *WordLists) Draw(dst *ebiten.Image, ctx *game.Context) {
 		w.drawLeaving(dst, ctx)
 	case wlForge, wlForging:
 		w.drawForge(dst, ctx)
+	case wlPreview:
+		w.drawPreview(dst, ctx)
+	case wlEdit:
+		w.drawEdit(dst, ctx)
 	}
 }
 
@@ -661,6 +766,8 @@ func (w *WordLists) drawList(dst *ebiten.Image, ctx *game.Context) {
 		switch {
 		case r.assigned:
 			f.Draw(dst, "◆", x+12, ry, 1, pal.Sky)
+		case r.broken != nil:
+			f.Draw(dst, "!", x+12, ry, 1, pal.Rose)
 		case r.marked:
 			f.Draw(dst, "■", x+12, ry, 1, pal.Rose)
 		case r.deletable():
@@ -727,6 +834,8 @@ func (w *WordLists) drawInfo(dst *ebiten.Image, ctx *game.Context) {
 		line("Starter list", pal.Steel)
 	}
 	switch {
+	case r.broken != nil:
+		line("! Skipped by the game", pal.Rose)
 	case r.assigned:
 		line("Read-only: it updates when the game syncs", pal.Ash)
 	case r.dirty:
@@ -739,6 +848,23 @@ func (w *WordLists) drawInfo(dst *ebiten.Image, ctx *game.Context) {
 	y += 4
 	gfx.FillRect(dst, tx, y, tw, 1, pal.Indigo)
 	y += 6
+	if r.broken != nil {
+		line(plural(len(r.broken), "bad line"), pal.Rose)
+		for i, p := range r.broken {
+			if y > wlListY+wlListH-44 {
+				line(fmt.Sprintf("… and %d more", len(r.broken)-i), pal.Ash)
+				break
+			}
+			if p.Line > 0 {
+				line(fmt.Sprintf("line %d", p.Line), pal.Steel)
+			} else {
+				line("the whole file", pal.Steel)
+			}
+		}
+		line("W see why", pal.Tan)
+		line("E fix it", pal.Tan)
+		return
+	}
 	for i, e := range l.Entries {
 		if y > wlListY+wlListH-28 {
 			line(fmt.Sprintf("… and %d more", len(l.Entries)-i), pal.Ash)
@@ -783,7 +909,7 @@ func (w *WordLists) drawImport(dst *ebiten.Image, ctx *game.Context) {
 	shown := min(n, maxOpts)
 	x, y := dialog(dst, ctx, "IMPORT", dw, 150+shown*18)
 	iw := dw - 40
-	f.DrawShadow(dst, fit(f, fmt.Sprintf("“%s” · %s", w.imp.Title, plural(len(w.imp.Entries), "word")), iw, 1), x, y, 1, pal.White)
+	f.DrawShadow(dst, fit(f, fmt.Sprintf("“%s” · %s found", w.imp.Title, plural(len(w.imp.Entries), "word")), iw, 1), x, y, 1, pal.White)
 	lang := words.Languages[w.langIdx].Name
 	if w.pickLang {
 		f.DrawShadow(dst, "Language:", x, y+20, 1, pal.Tan)
