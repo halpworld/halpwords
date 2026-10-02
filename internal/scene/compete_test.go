@@ -322,3 +322,48 @@ func TestSuspendingADailyTellsTheRule(t *testing.T) {
 		t.Fatalf("Hardcore: %q", n)
 	}
 }
+
+// An honest run's played time, counted in ticks of walking alone (the
+// fastest it can be: no pause, no fights, a straight way to every stairs),
+// still passes the rankings' plausibility check. Menus and pauses add
+// nothing, so this is the least a run reaching a floor can send.
+func TestFastestHonestRunPassesCheck(t *testing.T) {
+	steps := func(l *dungeon.Level) int {
+		dist := map[dungeon.Point]int{l.Start: 0}
+		queue := []dungeon.Point{l.Start}
+		for len(queue) > 0 {
+			p := queue[0]
+			queue = queue[1:]
+			if p == l.Exit {
+				return dist[p]
+			}
+			for d := dungeon.North; d <= dungeon.West; d++ {
+				q := p.Step(d)
+				if _, seen := dist[q]; !seen && (q == l.Exit || l.At(q).Walkable() || l.At(q) == dungeon.Door || l.At(q) == dungeon.Sealed) {
+					dist[q] = dist[p] + 1
+					queue = append(queue, q)
+				}
+			}
+		}
+		t.Fatalf("the stairs can't be reached: start %v exit %v tile %v, %d cells seen", l.Start, l.Exit, l.At(l.Exit), len(dist))
+		return 0
+	}
+	least := 1 << 30
+	for seed := uint64(1); seed <= 300; seed++ {
+		ticks := 0
+		for depth := 1; depth <= 12; depth++ {
+			n := steps(dungeon.Generate(seed*31+uint64(depth)*7919, depth))
+			least = min(least, n)
+			ticks += n * stepTicks
+			floor := depth + 1
+			run := compete.Run{
+				Share: compete.Share{Lang: "fr", Seed: seed, Floor: floor, Score: compete.Tally{}.Score(floor)},
+				Secs:  int(float64(ticks) / 60),
+			}
+			if err := run.Check(); err != nil {
+				t.Fatalf("seed %d reaching floor %d in %d ticks (%d s): %v", seed, floor, ticks, run.Secs, err)
+			}
+		}
+	}
+	t.Logf("shortest walk to any stairs: %d cells", least)
+}
