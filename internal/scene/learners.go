@@ -397,6 +397,7 @@ type SignIn struct {
 
 	card    string        // the card's code, once sent
 	pending chan siResult // an answer from the server on its way
+	cancel  func()        // stops the request pending waits for
 	linking bool          // a sign-in on its way
 	msg     string
 	msgCol  color.RGBA
@@ -461,9 +462,12 @@ func (s *SignIn) Update(ctx *game.Context) error {
 	if s.pending != nil {
 		select {
 		case r := <-s.pending:
-			s.pending = nil
+			s.pending, s.cancel = nil, nil
 			s.answer(ctx, r)
 		default:
+			if input.Back() {
+				s.stopAsking(ctx)
+			}
 		}
 		return nil
 	}
@@ -471,6 +475,14 @@ func (s *SignIn) Update(ctx *game.Context) error {
 		if st := ctx.Link.Status(); !st.Signing {
 			s.linking = false
 			s.linked(ctx, st)
+		} else if input.Back() && ctx.Link.CancelSignIn() {
+			// A sign-in whose answer comes late is dropped (and its
+			// tokens revoked) by the link.
+			s.linking = false
+			ctx.Sound.Play(audio.Back)
+			s.say("", pal.Steel)
+			s.text = s.text[:0]
+			s.retry()
 		}
 		return nil
 	}
@@ -487,6 +499,25 @@ func (s *SignIn) Update(ctx *game.Context) error {
 		s.updatePictures(ctx)
 	}
 	return nil
+}
+
+// stopAsking gives up the question to the server that is on its way (Esc
+// during "Asking the website…"): its request is cancelled and its answer,
+// should one still come, is not read. It goes back a step, but from the
+// first it stays (a second Esc leaves).
+func (s *SignIn) stopAsking(ctx *game.Context) {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.pending, s.cancel = nil, nil
+	// A code the server gave just as Esc was pressed is forgotten.
+	ctx.Link.CancelSSO()
+	if s.step == siChoose {
+		ctx.Sound.Play(audio.Back)
+		s.say("", pal.Steel)
+		return
+	}
+	s.back(ctx)
 }
 
 // back goes back a step, and from the first gives up.
@@ -600,8 +631,9 @@ func (s *SignIn) ask(ctx *game.Context, learnerID, username string) {
 	s.pending = make(chan siResult, 1)
 	s.say("Asking the website…", pal.Ice)
 	lc, code, out := ctx.Link, s.classCode, s.pending
+	c, cancel := context.WithTimeout(context.Background(), askTimeout)
+	s.cancel = cancel
 	go func() {
-		c, cancel := context.WithTimeout(context.Background(), askTimeout)
 		defer cancel()
 		cl, err := lc.FindClass(c, code, learnerID, username)
 		out <- siResult{class: cl, err: err}
@@ -810,15 +842,7 @@ func (s *SignIn) linked(ctx *game.Context, st link.Status) {
 		ctx.Sound.Play(audio.Wrong)
 		s.say(upperFirst(explainSignIn(st.Err))+".", pal.Rose)
 		s.text = s.text[:0]
-		switch {
-		case s.card != "":
-			s.step = siCard
-		case s.classCode != "":
-			s.picks = s.picks[:0]
-			s.step = siPictures
-		default:
-			s.step = siPairing
-		}
+		s.retry()
 		return
 	}
 	var lock *profile.Lock
@@ -841,6 +865,20 @@ func (s *SignIn) linked(ctx *game.Context, st link.Status) {
 	ctx.Sound.Play(audio.Perfect)
 	ctx.Notify("Signed in! Lists may take a moment.")
 	ctx.Replace(NewTitle(ctx))
+}
+
+// retry goes back to the step of the sign-in that was sent, to try it
+// again.
+func (s *SignIn) retry() {
+	switch {
+	case s.card != "":
+		s.step = siCard
+	case s.classCode != "":
+		s.picks = s.picks[:0]
+		s.step = siPictures
+	default:
+		s.step = siPairing
+	}
 }
 
 // tryUnlock opens the learner's folder with secret.
@@ -961,7 +999,7 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 		hint = "Arrows or 1-9 choose   Enter tap   Backspace undo   Esc back"
 	case siWaiting:
 		f.DrawCentered(dst, "Signing in…", cx, 150, 2, pal.Ice)
-		hint = ""
+		hint = "Esc back"
 	}
 	if s.pending != nil {
 		f.DrawCentered(dst, "Asking the website…", cx, game.ScreenH-44, 1, pal.Ice)

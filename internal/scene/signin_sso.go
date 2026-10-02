@@ -45,8 +45,9 @@ func (s *SignIn) startSSO(ctx *game.Context) {
 	s.pending = make(chan siResult, 1)
 	s.say("Asking the website…", pal.Ice)
 	lc, out := ctx.Link, s.pending
+	c, cancel := context.WithTimeout(context.Background(), askTimeout)
+	s.cancel = cancel
 	go func() {
-		c, cancel := context.WithTimeout(context.Background(), askTimeout)
 		defer cancel()
 		code, err := lc.StartSSO(c, browser.Here())
 		out <- siResult{sso: code, err: err}
@@ -96,6 +97,8 @@ func (s *SignIn) updateSSO(ctx *game.Context) {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
 		ctx.Link.CancelSSO()
+		// A poll still on its way is left to finish: tokens it gets are
+		// dropped and revoked by the link.
 		s.sso, s.polling = nil, nil
 		s.say("", pal.Steel)
 		s.step = siChoose

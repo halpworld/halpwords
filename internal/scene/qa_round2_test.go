@@ -78,62 +78,6 @@ func TestSignInSSOTakesSlowDown(t *testing.T) {
 	}
 }
 
-// Esc while the /link request is on its way does nothing: the sign-in
-// goes through and the screen finishes it (the tokens are saved either
-// way, so leaving would hide a game that is now signed in).
-func TestSignInEscDuringLinkRequest(t *testing.T) {
-	gate, in := make(chan struct{}), make(chan struct{}, 1)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/link" {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		in <- struct{}{}
-		<-gate
-		json.NewEncoder(w).Encode(map[string]any{"device_id": "dev_1", "token_type": "Bearer",
-			"access_token": "hwd_1", "expires_in": 86400, "refresh_token": "hwr_1", "refresh_expires_in": 86400})
-	}))
-	t.Cleanup(srv.Close)
-	esc := 0
-	input.FakeKeys(t, func(k ebiten.Key) int {
-		if k == ebiten.KeyEscape {
-			return esc
-		}
-		return 0
-	})
-	ctx := testContext(t)
-	ctx.Input = &input.State{}
-	ctx.Link = link.Open(link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
-	s := NewSignIn(ctx, "").(*SignIn)
-	next := ctx.TestScenes(s)
-	s.signIn(ctx, link.SignIn{Code: "ABCD-EFGH"})
-	<-in
-	esc = 1
-	if err := s.Update(ctx); err != nil {
-		t.Fatal(err)
-	}
-	esc = 0
-	if next() != nil {
-		t.Fatal("Esc left the screen")
-	}
-	if !s.linking || s.step != siWaiting {
-		t.Fatalf("Esc changed the screen: linking %v step %d", s.linking, s.step)
-	}
-	close(gate)
-	deadline := time.Now().Add(5 * time.Second)
-	for s.linking && time.Now().Before(deadline) {
-		s.Update(ctx)
-		time.Sleep(2 * time.Millisecond)
-	}
-	if s.linking || !ctx.Link.Linked() {
-		t.Fatalf("sign-in did not finish: linking %v, %+v", s.linking, ctx.Link.Status())
-	}
-	if next() == nil {
-		t.Fatal("the screen did not move on after signing in")
-	}
-}
-
 // syncServer links, and answers /me from a gate it can hold; everything
 // else is an empty success, so a sync can end well.
 type syncServer struct {
