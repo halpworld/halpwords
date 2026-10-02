@@ -38,6 +38,10 @@ type checkpoint struct {
 	Floor  *dungeon.State `json:",omitempty"`
 	At     dungeon.Point
 	Facing dungeon.Dir
+	// Perfect are the words spelled perfectly by then, so falling takes
+	// back the first-perfect XP with the rest of the hero. It is null
+	// (nil) in saves from before this was kept.
+	Perfect []int
 }
 
 // logLine is one message in the crawl's message log.
@@ -262,7 +266,7 @@ func startRunWith(ctx *game.Context, lang *words.Language, class rpg.Class, seed
 	}
 	r.mode = compete.Adventure
 	r.settings = profile.Preset(lang)
-	r.shrine = checkpoint{Depth: 1, Hero: r.hero.Clone()}
+	r.shrine = checkpoint{Depth: 1, Hero: r.hero.Clone(), Perfect: r.perfectIDs()}
 	return r
 }
 
@@ -352,7 +356,17 @@ func (r *run) enter(cp checkpoint) (*dungeon.Level, dungeon.Point, dungeon.Dir, 
 // here is a checkpoint of the adventure as it is now.
 func (r *run) here(l *dungeon.Level, at dungeon.Point, facing dungeon.Dir) checkpoint {
 	s := l.State()
-	return checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone(), Floor: &s, At: at, Facing: facing}
+	return checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone(), Floor: &s, At: at, Facing: facing, Perfect: r.perfectIDs()}
+}
+
+// perfectIDs lists the words spelled perfectly, in order and never nil.
+func (r *run) perfectIDs() []int {
+	ids := make([]int, 0, len(r.perfect))
+	for id := range r.perfect {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 const maxLog = 50

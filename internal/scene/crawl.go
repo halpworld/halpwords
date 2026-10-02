@@ -698,11 +698,18 @@ func (c *Crawl) woken(ctx *game.Context) *Crawl {
 	r.regen++
 	r.depth = r.shrine.Depth
 	r.hero = r.shrine.Hero.Clone()
+	if r.shrine.Perfect != nil {
+		// The XP for first perfects since the shrine went with the hero.
+		r.perfect = map[int]bool{}
+		for _, id := range r.shrine.Perfect {
+			r.perfect[id] = true
+		}
+	}
 	lost := int(float64(r.hero.Gold)*goldLost + 0.5)
 	r.hero.Gold -= lost
 	r.hero.HP, r.hero.MP = r.hero.MaxHP(), r.hero.MaxMP()
 	r.hero.Streak = 0
-	r.shrine = checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone()}
+	r.shrine = checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone(), Perfect: r.perfectIDs()}
 	next := newCrawl(r)
 	msg := fmt.Sprintf("You wake at the shrine on floor %d.", r.depth)
 	if r.depth == 1 && !dungeon.ShrineFloor(1) {

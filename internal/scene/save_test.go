@@ -250,3 +250,54 @@ func TestFallingDoesNotSaveNewRun(t *testing.T) {
 		t.Fatal("falling saved an adventure that was never saved")
 	}
 }
+
+// Falling takes back the first-perfect XP with the rest of the hero, so
+// the words can earn it again.
+func TestFallingForgetsPerfectsSinceShrine(t *testing.T) {
+	useTempDir(t)
+	ctx := testContext(t)
+	c := testCrawl(t, ctx)
+	c.run.perfect[3] = true
+	c.pray(ctx)
+	c.run.perfect[7] = true // spelled perfectly after the shrine
+	c.die()
+	r := c.woken(ctx).run
+	if !r.perfect[3] || r.perfect[7] {
+		t.Fatalf("woke with perfect %v, want only word 3", r.perfect)
+	}
+	loaded, err := loadCrawl(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := loaded.run.perfect; !p[3] || p[7] {
+		t.Fatalf("the save has perfect %v, want only word 3", p)
+	}
+}
+
+// A shrine from before saves kept the perfect words falls back to what
+// was known when the save was loaded, and never loses it all.
+func TestOldShrineSaveKeepsPerfects(t *testing.T) {
+	useTempDir(t)
+	ctx := testContext(t)
+	r, l := testRun(t, ctx)
+	data, err := encodeSave(r, l, l.Start, dungeon.South, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	delete(m["Shrine"].(map[string]any), "Perfect")
+	if data, err = json.Marshal(m); err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodeSave(ctx, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Crawl{run: got.run, level: got.level, pos: got.at, facing: got.facing}
+	if w := c.woken(ctx).run; !w.perfect[3] {
+		t.Fatalf("an old save forgot its perfect words: %v", w.perfect)
+	}
+}
