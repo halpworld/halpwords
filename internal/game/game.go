@@ -5,6 +5,7 @@ package game
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"math"
@@ -254,17 +255,64 @@ func (c *Context) LoadLists() error {
 	return nil
 }
 
-// ReloadSaves reads everything kept in the user's folder again: word lists,
-// the profile and the AI settings. It is used after progress moves in from
-// another address.
+// ReloadSaves starts the game over on the files in the user's folder, as
+// a start-up does: the learners, the learner playing, their link, word
+// lists, profile and AI settings. It is used after progress moves in from
+// another address (see PrepareMove), which replaces every learner's
+// folder.
 func (c *Context) ReloadSaves() error {
+	c.Learners, c.needWho, c.addedID, c.adopting = nil, false, "", ""
+	c.openLearners()
+	c.openLink()
+	c.linkSeen = c.Link.Changes()
 	if err := c.LoadLists(); err != nil {
 		return err
 	}
 	c.loadProfile()
+	c.lockSettings()
 	c.ApplyOptions()
 	c.AI = c.loadAI()
 	return nil
+}
+
+// PrepareMove is called before progress moves in from another address
+// (move.Incoming.Apply) with the files that come. It ends the play session
+// and closes the link, so nothing writes the folders that are about to be
+// replaced. Then it unlinks every folder whose learner isn't in the
+// incoming list of learners (all of them, if the list doesn't come): the
+// tokens of a link that no learner points to any more would otherwise stay
+// on disk for ever, and the folder come back as a learner when the list
+// is rebuilt. The server is told in the background, best effort.
+func (c *Context) PrepareMove(files map[string][]byte) {
+	c.EndSession()
+	c.Link.Close()
+	keep := map[string]bool{}
+	var list struct{ List []struct{ ID string } }
+	if json.Unmarshal(files["learners.json"], &list) == nil {
+		for _, l := range list.List {
+			keep[l.ID] = true
+		}
+	}
+	names, _ := save.Root.All()
+	folders := []save.Folder{save.Root}
+	seen := map[string]bool{}
+	for _, n := range names {
+		rest, ok := strings.CutPrefix(n, profile.ProfilesDir+"/")
+		id, _, found := strings.Cut(rest, "/")
+		if ok && found && !seen[id] && !keep[id] {
+			seen[id] = true
+			folders = append(folders, save.Folder(profile.ProfilesDir+"/"+id))
+		}
+	}
+	for _, f := range folders {
+		if p := link.PeekFolder(f); p.Tokens || p.PendingSSO {
+			link.Open(link.Options{Store: f, Version: Version, OwnDir: WordsDir}).Unlink()
+		}
+		// Not exportable, so the move would leave them.
+		for _, n := range [...]string{"link.json", "link-queue.json", "link-parked.json"} {
+			f.Remove(n)
+		}
+	}
 }
 
 // loadProfile loads the profile of the learner playing.
