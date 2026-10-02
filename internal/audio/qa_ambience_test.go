@@ -62,14 +62,28 @@ func TestQAAmbienceYields(t *testing.T) {
 	for _, a := range Ambiences {
 		s := Compose(Track{Mood: Delve, Seed: 3, Ambience: a})
 		n := 0
-		RenderAmbience(s, SampleRate, func() { n++ })
-		if n < 1 {
-			t.Errorf("%s: only %d yields in the ambience render", a, n)
+		amb := RenderAmbience(s, SampleRate, func() { n++ })
+		// The peak and gain passes over the loop yield every yieldEvery
+		// samples each, whatever the ambience does before them.
+		if want := max(1, 2*(len(amb)/yieldEvery)); n < want {
+			t.Errorf("%s: only %d yields in the ambience render, want %d", a, n, want)
+		}
+		total := 0
+		RenderLoop(s, SampleRate, func() { total++ })
+		none := 0
+		RenderLoop(Compose(Track{Mood: Delve, Seed: 3}), SampleRate, func() { none++ })
+		if total <= none {
+			t.Errorf("%s: RenderLoop yields %d with ambience, %d without", a, total, none)
 		}
 		// No stretch of work between yields may stall a browser frame:
 		// about 2ms native, with room for a slow test machine. CPU time,
 		// with the collector off, so other processes on a busy machine
 		// can't stretch a gap; the best of three renders for the rest.
+		// The race detector slows the work several times over, so the
+		// yield counts above are all it checks.
+		if raceEnabled {
+			continue
+		}
 		gc := debug.SetGCPercent(-1)
 		best := time.Hour
 		for range 3 {
@@ -83,13 +97,6 @@ func TestQAAmbienceYields(t *testing.T) {
 		debug.SetGCPercent(gc)
 		if best > 5*time.Millisecond {
 			t.Errorf("%s: %v between yields", a, best)
-		}
-		total := 0
-		RenderLoop(s, SampleRate, func() { total++ })
-		none := 0
-		RenderLoop(Compose(Track{Mood: Delve, Seed: 3}), SampleRate, func() { none++ })
-		if total <= none {
-			t.Errorf("%s: RenderLoop yields %d with ambience, %d without", a, total, none)
 		}
 	}
 }
