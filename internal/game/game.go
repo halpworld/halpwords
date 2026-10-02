@@ -5,12 +5,12 @@ package game
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"image/color"
 	"math"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -276,38 +276,43 @@ func (c *Context) ReloadSaves() error {
 }
 
 // PrepareMove is called before progress moves in from another address
-// (move.Incoming.Apply) with the files that come. It ends the play session
-// and closes the link, so nothing writes the folders that are about to be
-// replaced. Then it unlinks every folder whose learner isn't in the
-// incoming list of learners (all of them, if the list doesn't come): the
-// tokens of a link that no learner points to any more would otherwise stay
-// on disk for ever, and the folder come back as a learner when the list
-// is rebuilt. The server is told in the background, best effort.
-func (c *Context) PrepareMove(files map[string][]byte) {
+// (move.Incoming.Apply). It ends the play session and closes the link, so
+// nothing writes the folders that are about to be replaced. Then it
+// unlinks every folder, the root and each learner's, whether or not the
+// incoming list of learners names it: a folder's link may be to another
+// learner than the one the list says (after an earlier import), and the
+// tokens must not be left on disk for a folder that is replaced. Events
+// still queued are sent first, and the server told after, in the
+// background, best effort and bounded (the link's own timeouts). The game
+// links again at its new address.
+func (c *Context) PrepareMove() {
 	c.EndSession()
 	c.Link.Close()
-	keep := map[string]bool{}
-	var list struct{ List []struct{ ID string } }
-	if json.Unmarshal(files["learners.json"], &list) == nil {
-		for _, l := range list.List {
-			keep[l.ID] = true
-		}
-	}
 	names, _ := save.Root.All()
 	folders := []save.Folder{save.Root}
 	seen := map[string]bool{}
 	for _, n := range names {
 		rest, ok := strings.CutPrefix(n, profile.ProfilesDir+"/")
 		id, _, found := strings.Cut(rest, "/")
-		if ok && found && !seen[id] && !keep[id] {
+		if ok && found && !seen[id] {
 			seen[id] = true
 			folders = append(folders, save.Folder(profile.ProfilesDir+"/"+id))
 		}
 	}
+	var wg sync.WaitGroup
 	for _, f := range folders {
 		if p := link.PeekFolder(f); p.Tokens || p.PendingSSO {
-			link.Open(link.Options{Store: f, Version: Version, OwnDir: WordsDir}).Unlink()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				l := link.Open(link.Options{Store: f, Version: Version, OwnDir: WordsDir})
+				l.Close() // sends what is queued, within its timeouts
+				l.Unlink()
+			}()
 		}
+	}
+	wg.Wait()
+	for _, f := range folders {
 		// Not exportable, so the move would leave them.
 		for _, n := range [...]string{"link.json", "link-queue.json", "link-parked.json"} {
 			f.Remove(n)

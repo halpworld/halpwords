@@ -1,8 +1,13 @@
 package game
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/move"
@@ -14,7 +19,7 @@ const liveTokens = `{"DeviceID":"d1","Access":"a","Refresh":"r"}`
 // moveInto brings files in the way the game does: prepare, apply, reload.
 func moveInto(t *testing.T, ctx *Context, files map[string][]byte) {
 	t.Helper()
-	ctx.PrepareMove(files)
+	ctx.PrepareMove()
 	in := &move.Incoming{ID: "0123456789abcdef", Files: files}
 	if err := in.Apply(move.Saves); err != nil {
 		t.Fatal(err)
@@ -104,5 +109,75 @@ func TestMoveWithoutLearnersListLeavesNoLinks(t *testing.T) {
 	}
 	if ctx.Learner() == nil || save.Current() != ctx.Learner().Folder() {
 		t.Errorf("playing %v in %q", ctx.Learner(), save.Current())
+	}
+}
+
+// A folder whose learner is in the incoming list loses its link too: it may
+// be linked to a learner other than the one the list names (after an
+// earlier import), and playing it would send answers to the wrong account.
+func TestMoveUnlinksEveryFolderEvenKeptOnes(t *testing.T) {
+	ctx, a, b := computerWithLinkedLearner(t)
+	kept := save.Folder("profiles/imp1")
+	kept.WritePrivate("link.json", []byte(liveTokens))
+	kept.Write("progress.json", []byte(`{}`))
+	list := `{"List":[{"ID":"imp1","Name":"Aoife"}],"Current":"imp1","Migrated":true}`
+	moveInto(t, ctx, map[string][]byte{
+		"learners.json":               []byte(list),
+		"profiles/imp1/progress.json": []byte(`{}`),
+	})
+	for _, f := range []save.Folder{a, b, kept, save.Root} {
+		for _, n := range []string{"link.json", "link-queue.json", "link-parked.json"} {
+			if _, err := f.Read(n); err == nil {
+				t.Errorf("%s/%s is left", f, n)
+			}
+		}
+	}
+}
+
+// Events a replaced folder had queued are sent before the learner is
+// unlinked.
+func TestMoveSendsQueuedEventsBeforeUnlinking(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		calls = append(calls, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/token":
+			w.Write([]byte(`{"device_id":"d1","token_type":"Bearer","access_token":"a2","expires_in":900,"refresh_token":"r2","refresh_expires_in":99999}`))
+		case "/api/v1/events":
+			if !strings.Contains(string(body), "le chien") {
+				t.Errorf("events: %s", body)
+			}
+			w.Write([]byte(`{"last_seq":1,"stored":1,"duplicates":0,"refused":[]}`))
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+	ctx, a, _ := computerWithLinkedLearner(t)
+	t.Setenv("HALPWORDS_SERVER", srv.URL)
+	a.Write("link-queue.json", []byte(`{"Answers":[{"Seq":1,"At":"2026-09-26T14:05:09+02:00","Lang":"fr","ListID":"lst","ListVersion":1,"Word":"dog = le chien","Mode":"practice","Tier":4}]}`))
+	ctx.PrepareMove()
+	// The unlink is told in the background.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		got := strings.Join(calls, " ")
+		mu.Unlock()
+		// Both folders are unlinked; the events go before their folder's.
+		if strings.Count(got, "/api/v1/unlink") == 2 {
+			if !strings.Contains(got, "/api/v1/events") || strings.Index(got, "/api/v1/events") > strings.LastIndex(got, "/api/v1/unlink") {
+				t.Fatalf("calls: %s", got)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("calls: %s", got)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

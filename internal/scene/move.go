@@ -59,7 +59,7 @@ func startWith(ctx *game.Context, st move.Store, frag string, leave func(string)
 
 // applyMove puts the incoming progress in place and loads it.
 func applyMove(ctx *game.Context, st move.Store, in *move.Incoming) {
-	ctx.PrepareMove(in.Files)
+	ctx.PrepareMove()
 	if err := in.Apply(st); err != nil {
 		ctx.Notify("Couldn't bring your progress: " + err.Error())
 		ctx.ReloadSaves() // the link was closed: start over on what is there
