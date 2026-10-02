@@ -12,6 +12,7 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/pkg/compete"
 )
 
 // pauseItem is an entry in the pause menu.
@@ -134,7 +135,7 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 	case pauseSuspend:
 		if c.writeSave(ctx, true) {
 			c.play(audio.Select)
-			ctx.Notify("Game suspended")
+			ctx.Notify(c.run.suspendNote(runNow()))
 			ctx.Replace(NewTitle(ctx))
 		} else {
 			c.play(audio.Wrong)
@@ -220,6 +221,8 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 		note, ncol = "The race goes on while you pause!", pal.Tan
 	case c.resume != modeExplore:
 		note, ncol = "Win or flee the battle to suspend.", pal.Tan
+	case c.run.mode == compete.Daily:
+		note, ncol = "Finish this Daily today to be ranked.", pal.Tan
 	case c.run.hardcore():
 		note, ncol = "One life! Suspend to keep this run.", pal.Tan
 	case c.lastSave == nil || c.unsaved:

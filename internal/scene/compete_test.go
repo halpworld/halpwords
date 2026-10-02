@@ -245,3 +245,80 @@ func TestOldSavesAreAdventures(t *testing.T) {
 		t.Fatalf("mode %v, %v", got.run.mode, err)
 	}
 }
+
+// A Daily Dungeon counts for the rankings only if it is finished on its
+// own (local) day. Time is the injected clock, around midnight.
+func TestDailyRankedOnlyOnItsDay(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	var sent []compete.Run
+	oldSend, oldNow := sendRun, runNow
+	t.Cleanup(func() { sendRun, runNow = oldSend, oldNow })
+	sendRun = func(_ *game.Context, r compete.Run, _ string) { sent = append(sent, r) }
+	at := func(day, h, m, s int) time.Time { return time.Date(2026, time.September, day, h, m, s, 0, time.Local) }
+	runNow = func() time.Time { return at(24, 9, 0, 0) }
+	setup := dailySetup(ctx, fr)
+	if setup.day != "2026-09-24" {
+		t.Fatalf("daily day %q", setup.day)
+	}
+	for _, c := range []struct {
+		name     string
+		day      string
+		finish   time.Time
+		unranked bool
+	}{
+		{"same day", "2026-09-24", at(24, 9, 5, 0), false},
+		{"last second of the day", "2026-09-24", at(24, 23, 59, 59), false},
+		{"first second of the next day", "2026-09-24", at(25, 0, 0, 0), true},
+		{"days later", "2026-09-24", at(27, 12, 0, 0), true},
+		{"started just before midnight", "2026-09-24", at(25, 0, 1, 0), true},
+		{"no day (old save)", "", at(24, 9, 5, 0), true},
+		{"bad day", "24/09/2026", at(24, 9, 5, 0), true},
+	} {
+		sent = nil
+		s := setup
+		s.day = c.day
+		r := newRun(ctx, fr, rpg.Rogue, s)
+		r.sound = &game.Sound{Muted: true}
+		r.tally.Damage = 50
+		runNow = func() time.Time { return c.finish }
+		g := newGameOver(ctx, r, true)
+		if g.unranked != c.unranked || (len(sent) == 0) != c.unranked {
+			t.Errorf("%s: unranked %v, %d runs sent", c.name, g.unranked, len(sent))
+		}
+		if len(sent) == 1 {
+			if sh, err := compete.ParseShare(sent[0].Share.Code()); err != nil || !sh.Daily {
+				t.Errorf("%s: sent %q, want a Daily share", c.name, sent[0].Share.Code())
+			}
+		}
+	}
+	// A Hardcore run has no day, and is always sent.
+	sent = nil
+	h := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Hardcore, seed: 4242, seeded: true})
+	h.sound = &game.Sound{Muted: true}
+	runNow = func() time.Time { return at(30, 1, 0, 0) }
+	if g := newGameOver(ctx, h, true); g.unranked || len(sent) != 1 {
+		t.Fatalf("Hardcore: unranked %v, %d runs sent", g.unranked, len(sent))
+	}
+}
+
+// Suspending a Daily Dungeon says it must be finished today to be ranked.
+func TestSuspendingADailyTellsTheRule(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	day := time.Date(2026, time.September, 24, 9, 0, 0, 0, time.Local)
+	old := runNow
+	t.Cleanup(func() { runNow = old })
+	runNow = func() time.Time { return day }
+	r := newRun(ctx, fr, rpg.Rogue, dailySetup(ctx, fr))
+	if n := r.suspendNote(day); n != "Suspended. Finish it today to be ranked." {
+		t.Fatalf("on its day: %q", n)
+	}
+	if n := r.suspendNote(day.AddDate(0, 0, 1)); n != "Suspended. This Daily will not be ranked." {
+		t.Fatalf("after its day: %q", n)
+	}
+	h := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Hardcore})
+	if n := h.suspendNote(day); n != "Game suspended" {
+		t.Fatalf("Hardcore: %q", n)
+	}
+}

@@ -125,10 +125,42 @@ type runSetup struct {
 	assign *assignRun
 }
 
+// runNow is the clock a Daily Dungeon's day comes from; tests set it.
+var runNow = time.Now
+
+// dailyDay is the Daily Dungeon's day at t: the local date.
+func dailyDay(t time.Time) string { return t.Format(time.DateOnly) }
+
+// ranked reports whether a run finished at t may be sent for the
+// rankings. A Daily Dungeon counts only if it is finished on its own day
+// (the server turns away a later one); a day that is not a date, as in an
+// old save, never ranks.
+func (r *run) ranked(t time.Time) bool {
+	if r.mode != compete.Daily {
+		return true
+	}
+	if _, err := time.Parse(time.DateOnly, r.day); err != nil {
+		return false
+	}
+	return r.day == dailyDay(t)
+}
+
+// suspendNote is what the player is told on suspending the run at t: a
+// Daily Dungeon must be finished on its own day to be ranked.
+func (r *run) suspendNote(t time.Time) string {
+	switch {
+	case r.mode != compete.Daily:
+		return "Game suspended"
+	case r.ranked(t):
+		return "Suspended. Finish it today to be ranked."
+	}
+	return "Suspended. This Daily will not be ranked."
+}
+
 // dailySetup is today's Daily Dungeon in lang.
 func dailySetup(ctx *game.Context, lang *words.Language) runSetup {
-	now := time.Now()
-	return runSetup{mode: compete.Daily, seed: compete.DailySeed(now, lang.Code, entriesFor(ctx, lang)), seeded: true, day: now.Format(time.DateOnly)}
+	now := runNow()
+	return runSetup{mode: compete.Daily, seed: compete.DailySeed(now, lang.Code, entriesFor(ctx, lang)), seeded: true, day: dailyDay(now)}
 }
 
 // entriesFor returns every word in the lists for lang.

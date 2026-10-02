@@ -17,6 +17,10 @@ import (
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
+// unrankedText is shown when a Daily Dungeon is not sent for the
+// rankings. Its XP and word practice still count.
+const unrankedText = "Not ranked: finished on another day"
+
 // maxName is the longest name the Hall of Fame keeps.
 const maxName = 12
 
@@ -34,6 +38,9 @@ type GameOver struct {
 	code   string // the share code
 	best   int    // the best score before this run
 	gaveUp bool
+	// unranked is set for a Daily Dungeon finished on another day, or
+	// one whose day is not known: it is not sent for the rankings.
+	unranked bool
 
 	place   int    // where the run would go in the Hall of Fame, or 0
 	name    []rune // the name being typed for the Hall of Fame
@@ -43,6 +50,9 @@ type GameOver struct {
 	// stays open, and entering the name renames that entry.
 	provisional bool
 }
+
+// sendRun queues a finished run for the rankings; tests replace it.
+var sendRun = func(ctx *game.Context, r compete.Run, listHash string) { ctx.Link.Run(r, listHash) }
 
 // newGameOver ends run r, which fell or was given up.
 func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
@@ -58,10 +68,11 @@ func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
 		}
 	}
 	g.code = share.Code()
-	if r.mode.Scored() && r.race == nil && r.quest == nil && r.assign == nil && r.deck != nil {
+	g.unranked = !r.ranked(runNow())
+	if r.mode.Scored() && r.race == nil && r.quest == nil && r.assign == nil && r.deck != nil && !g.unranked {
 		// Sent for the rankings when the game is linked; the server
 		// ranks it only if a grown-up put the learner on a board.
-		ctx.Link.Run(compete.Run{Share: share, Tally: r.tally, Secs: int(r.played)}, compete.ListHash(r.deck.Entries()))
+		sendRun(ctx, compete.Run{Share: share, Tally: r.tally, Secs: int(r.played)}, compete.ListHash(r.deck.Entries()))
 	}
 	key := compete.TableKey(r.mode, r.lang.Code)
 	g.best = ctx.Profile.Fame.Best(key)
@@ -241,6 +252,9 @@ func (g *GameOver) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawCentered(dst, "Share code for your friends:", rcx, y+118, 1, pal.Tan)
 	f.DrawCentered(dst, g.code, rcx, y+136, f.FitScale(g.code, rw-20, 2), pal.White)
 	f.DrawCentered(dst, "Check codes in the Hall of Fame.", rcx, y+172, 1, pal.Ash)
+	if g.unranked {
+		f.DrawCentered(dst, unrankedText, rcx, y+158, 1, pal.Orange)
+	}
 
 	help := "Enter title screen · H Hall of Fame"
 	if g.place > 0 && !g.entered {
