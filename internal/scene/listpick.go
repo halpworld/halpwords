@@ -195,6 +195,12 @@ func (p *ListPick) begin(ctx *game.Context) {
 	ctx.Replace(p.start(ctx, p.lang, pool))
 }
 
+// fewWordsNote warns that n words, fewer than fewWords, will be dealt
+// over and over.
+func fewWordsNote(n int) string {
+	return "Only " + plural(n, "word") + ": they'll come round in turn."
+}
+
 // The checklist's layout.
 const (
 	lpX, lpY, lpW = 40, 74, game.ScreenW - 80
@@ -249,7 +255,7 @@ func (p *ListPick) Draw(dst *ebiten.Image, ctx *game.Context) {
 	case p.msg != "":
 		f.DrawShadow(dst, fit(f, p.msg, lpW, 1), lpX+4, y+18, 1, pal.Rose)
 	case n > 0 && n < fewWords:
-		f.DrawShadow(dst, "Only a few words: they will come round often.", lpX+4, y+18, 1, pal.Orange)
+		f.DrawShadow(dst, fewWordsNote(n), lpX+4, y+18, 1, pal.Orange)
 	}
 	keys := "↑/↓ choose   Space tick   A all/none   Enter start   Esc back"
 	if p.locked {

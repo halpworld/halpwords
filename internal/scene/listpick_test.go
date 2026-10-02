@@ -259,7 +259,7 @@ func TestChecklistWarnsOfFewWords(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx.Font = gfx.NewFont(face)
-	for _, s := range []string{"Only a few words: they will come round often.", "Choose your word lists"} {
+	for _, s := range []string{fewWordsNote(4), "Choose your word lists"} {
 		if w := ctx.Font.Width(s, 1); w > lpW-8 {
 			t.Errorf("%q is %dpx", s, w)
 		}
