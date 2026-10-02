@@ -2,6 +2,7 @@ package scene
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -123,7 +124,9 @@ func pickedPool(ctx *game.Context, lang *words.Language) listPool {
 
 // inheritKept carries the learner's choices over from a list that stopped
 // being assigned to the own list it was kept as (link.Client.Kept), so
-// it is not announced as new, and is ticked only if it was ticked.
+// it is not announced as new, and is ticked only if it was ticked. The
+// link then forgets them: the ids are not kept after unlinking for longer
+// than it takes.
 func inheritKept(ctx *game.Context) {
 	kept := ctx.Link.Kept()
 	if len(kept) == 0 || ctx.Profile == nil {
@@ -147,9 +150,10 @@ func inheritKept(ctx *game.Context) {
 			}
 		}
 	}
-	if changed {
-		ctx.Profile.SaveSettings()
+	if changed && ctx.Profile.SaveSettings() != nil {
+		return // tried again next time
 	}
+	ctx.Link.ForgetKept(slices.Collect(maps.Keys(kept))...)
 }
 
 // listRow is a word list as the checklist shows it.

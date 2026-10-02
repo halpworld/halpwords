@@ -674,9 +674,30 @@ func TestKeptListsInheritQuietly(t *testing.T) {
 		t.Errorf("practice deals from %d words", p.deck.Len())
 	}
 
-	// Unlinked and linked again, the kept lists are still known.
+	// Carried over, the server ids are forgotten.
+	if k := ctx.Link.Kept(); len(k) != 0 {
+		t.Errorf("still kept: %v", k)
+	}
+
+	// A list kept by unlinking is carried over too: unlinking keeps the
+	// id until then.
+	shelf.set(map[string]any{"id": "lst_shapes", "version": 1, "title": "Shapes", "language": "fr", "text": sentNumbers,
+		"source": "sent", "sent_at": "2026-10-02T19:00:00Z"})
+	if err := ctx.Link.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx.LoadLists()
+	adventureLists(ctx, fr, runSetup{mode: compete.Adventure}) // seen
 	ctx.Link.Unlink()
-	if ctx.Link.Kept()["lst_colours"] != "colours.txt" {
-		t.Error("unlinking forgot the kept lists")
+	ctx.LoadLists()
+	if k := ctx.Link.Kept(); k["lst_shapes"] != "shapes.txt" {
+		t.Fatalf("unlinking forgot the kept list: %v", k)
+	}
+	lp = adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	if note, _ := lp.note(); note != "" {
+		t.Errorf("a list kept by unlinking is new: %q", note)
+	}
+	if k := ctx.Link.Kept(); len(k) != 0 {
+		t.Errorf("still kept after unlinking: %v", k)
 	}
 }

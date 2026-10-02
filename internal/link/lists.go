@@ -293,6 +293,33 @@ func (c *Client) Kept() map[string]string {
 	return maps.Clone(c.st.Kept)
 }
 
+// ForgetKept forgets the kept lists with ids, once the game has carried
+// the learner's choices over, so no server list id stays behind after
+// unlinking longer than that.
+func (c *Client) ForgetKept(ids ...string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := len(c.st.Kept)
+	for _, id := range ids {
+		delete(c.st.Kept, id)
+	}
+	if len(c.st.Kept) == n {
+		return
+	}
+	if len(c.st.Kept) == 0 {
+		c.st.Kept = nil
+	}
+	if c.unlinkPending {
+		return // the old state stays on disk until the parked events are (retryParked)
+	}
+	if c.saveState() != nil {
+		c.stateUnsaved = true // Close tries again
+	}
+}
+
 // syncQuests downloads the assignments as quests. syncMu is held.
 func (c *Client) syncQuests(ctx context.Context, gen int) error {
 	var body struct {
