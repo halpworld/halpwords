@@ -218,7 +218,7 @@ func TestDailyDungeon(t *testing.T) {
 	ctx := testContext(t)
 	fr, _ := words.Lookup("fr")
 	a, b := dailySetup(ctx, fr), dailySetup(ctx, fr)
-	if a != b || a.mode != compete.Daily || !a.seeded || a.day != time.Now().Format(time.DateOnly) {
+	if !reflect.DeepEqual(a, b) || a.mode != compete.Daily || !a.seeded || a.day != time.Now().Format(time.DateOnly) {
 		t.Fatalf("daily setups %+v %+v", a, b)
 	}
 	la, _ := words.Lookup("la")

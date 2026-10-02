@@ -149,7 +149,7 @@ func (t *Title) Update(ctx *game.Context) error {
 		ctx.Sound.Play(audio.Select)
 		ctx.Replace(map[titleItem]func(*game.Context) game.Scene{
 			titleNew:         NewNewGame,
-			titlePractice:    NewPractice,
+			titlePractice:    NewPracticeLists,
 			titleTogether:    NewLobby,
 			titleGrimoire:    func(ctx *game.Context) game.Scene { return NewGrimoire(ctx, nil) },
 			titleFame:        NewHallOfFame,

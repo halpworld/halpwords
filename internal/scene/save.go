@@ -60,6 +60,12 @@ type saveFile struct {
 	// started for one. Its list is not kept: it comes from the lists the
 	// game has.
 	Assignment *assignRun `json:",omitempty"`
+	// Lists are the word lists ticked for the run (listKey); none is
+	// every list, as in saves from before the checklist (#89).
+	Lists []string `json:",omitempty"`
+	// Starters is set for a Daily or Hardcore run, which plays the
+	// built-in lists only. Such runs saved before #89 played every list.
+	Starters bool `json:",omitempty"`
 }
 
 type savedLine struct {
@@ -90,6 +96,8 @@ func encodeSave(r *run, l *dungeon.Level, at dungeon.Point, facing dungeon.Dir, 
 		Played:     r.played,
 		Quest:      r.quest,
 		Assignment: r.assign,
+		Lists:      r.pool.keys,
+		Starters:   r.pool.starters,
 	}
 	if r.ai != nil {
 		for depth, sc := range r.ai.scripts {
@@ -148,10 +156,11 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 	if s.Quest != nil && len(s.Quest.Maps) == 0 {
 		return nil, errDamaged
 	}
-	if _, ok := runLists(ctx, lang, s.Quest, s.Assignment); !ok {
+	pool := listPool{starters: s.Starters, keys: s.Lists}
+	if _, ok := runLists(ctx, lang, s.Quest, s.Assignment, pool); !ok {
 		return nil, fmt.Errorf("the word list for the %s assignment is gone", s.Assignment.Title)
 	}
-	r := beginRun(ctx, lang, s.Class, s.Seed, s.Quest, s.Assignment)
+	r := beginRun(ctx, lang, s.Class, s.Seed, s.Quest, s.Assignment, pool)
 	if err := r.src.UnmarshalBinary(s.RNG); err != nil {
 		return nil, errDamaged
 	}

@@ -77,17 +77,27 @@ func arrange(t *testing.T, ctx *game.Context, s saveState) {
 func TestEveryRouteIntoClassPickAsksOnlyWithASave(t *testing.T) {
 	fr, _ := words.Lookup("fr")
 	routes := map[string]func(ctx *game.Context, next func() game.Scene) *ClassPick{
-		"quest": func(ctx *game.Context, _ func() game.Scene) *ClassPick {
+		"quest": func(ctx *game.Context, next func() game.Scene) *ClassPick {
 			s, msg := questStart(ctx, &maps.Quest{Language: "fr"})
 			if s == nil {
 				t.Fatalf("quest did not start: %s", msg)
 			}
-			return s.(*ClassPick)
+			// A quest that names no lists asks which to play (#89).
+			lp := s.(*ListPick)
+			press(t, ebiten.KeyEnter)
+			if err := lp.Update(ctx); err != nil {
+				t.Fatal(err)
+			}
+			return next().(*ClassPick)
 		},
 		"adventure": func(ctx *game.Context, next func() game.Scene) *ClassPick {
 			a := NewAdventure(ctx, runSetup{mode: compete.Adventure}).(*Adventure)
 			press(t, ebiten.KeyEnter)
 			if err := a.Update(ctx); err != nil {
+				t.Fatal(err)
+			}
+			lp := next().(*ListPick)
+			if err := lp.Update(ctx); err != nil { // Enter: the same lists as last time
 				t.Fatal(err)
 			}
 			return next().(*ClassPick)

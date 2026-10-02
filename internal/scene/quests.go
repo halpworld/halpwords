@@ -200,6 +200,9 @@ func questStart(ctx *game.Context, q *maps.Quest) (game.Scene, string) {
 	if len(ctx.ListsFor(lang.Code)) == 0 {
 		return nil, "This quest is in " + lang.Name + ", and there are no " + lang.Name + " word lists."
 	}
+	if pickNeeded(ctx, lang, setup) {
+		return adventureLists(ctx, lang, setup), ""
+	}
 	return NewClassPick(lang, setup), ""
 }
 

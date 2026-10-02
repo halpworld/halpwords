@@ -95,6 +95,9 @@ func (p *ClassPick) Update(ctx *game.Context) error {
 	}
 	n := len(rpg.Classes)
 	switch {
+	case input.Back() && p.setup.picked:
+		ctx.Sound.Play(audio.Back)
+		ctx.Replace(adventureLists(ctx, p.lang, p.setup))
 	case input.Back() && p.setup.quest != nil && p.setup.quest.Language != "":
 		ctx.Sound.Play(audio.Back)
 		ctx.Replace(NewQuests(ctx))

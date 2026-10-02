@@ -110,6 +110,10 @@ type run struct {
 	// assign is the assignment quest the adventure was started for, or
 	// nil: its words are the assigned list's only.
 	assign *assignRun
+	// pool is the lists the run deals from when neither assign nor quest
+	// names them: the ones ticked, or the built-in ones (Daily and
+	// Hardcore).
+	pool listPool
 }
 
 // runSetup is what the New Adventure screens choose before the class.
@@ -123,6 +127,9 @@ type runSetup struct {
 	quest  *maps.Quest
 	// assign, when not nil, plays an assignment quest's list only.
 	assign *assignRun
+	// pool is the lists ticked on the checklist, when picked is set.
+	pool   listPool
+	picked bool
 }
 
 // runNow is the clock a Daily Dungeon's day comes from; tests set it.
@@ -168,7 +175,9 @@ func (r *run) dailyNote(t time.Time) string {
 // dailySetup is today's Daily Dungeon in lang.
 func dailySetup(ctx *game.Context, lang *words.Language) runSetup {
 	now := runNow()
-	return runSetup{mode: compete.Daily, seed: compete.DailySeed(now, lang.Code, entriesFor(ctx, lang)), seeded: true, day: dailyDay(now)}
+	// From the built-in lists only, as everyone has them (#89).
+	seed := compete.DailySeed(now, lang.Code, entriesOf(starterLists(lang)))
+	return runSetup{mode: compete.Daily, seed: seed, seeded: true, day: dailyDay(now)}
 }
 
 // entriesFor returns every word in the lists for lang.
@@ -185,11 +194,11 @@ func entriesOf(lists []*words.List) []words.Entry {
 }
 
 // runLists are the lists a run in lang plays: an assignment quest's
-// list, or else the lists of a hand-made quest (questLists). ok is false
-// when the assignment's list is gone.
-func runLists(ctx *game.Context, lang *words.Language, quest *maps.Quest, a *assignRun) (lists []*words.List, ok bool) {
+// list, or else the lists of a hand-made quest, or else the pool
+// (questLists). ok is false when the assignment's list is gone.
+func runLists(ctx *game.Context, lang *words.Language, quest *maps.Quest, a *assignRun, pool listPool) (lists []*words.List, ok bool) {
 	if a == nil {
-		return questLists(ctx, lang, quest), true
+		return questLists(ctx, lang, quest, pool), true
 	}
 	l := assignList(ctx, a.List)
 	if l == nil || l.Language != lang.Code || len(l.Entries) == 0 {
@@ -207,7 +216,11 @@ func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runS
 			seed = v & (1<<compete.SeedBits - 1) // as a seed code holds
 		}
 	}
-	r := beginRun(ctx, lang, class, seed, setup.quest, setup.assign)
+	pool := setup.pool
+	if setup.mode.Scored() {
+		pool = listPool{starters: true}
+	}
+	r := beginRun(ctx, lang, class, seed, setup.quest, setup.assign, pool)
 	r.setMode(ctx, setup.mode)
 	r.day = setup.day
 	if r.assign != nil {
@@ -234,13 +247,27 @@ func (r *run) setMode(ctx *game.Context, m compete.Mode) {
 }
 
 // questLists returns the word lists a run in lang deals from: for a quest
-// whose maps name lists the game has (by ID), those; otherwise every list
-// for lang.
-func questLists(ctx *game.Context, lang *words.Language, q *maps.Quest) []*words.List {
-	all := ctx.ListsFor(lang.Code)
-	if q == nil {
-		return all
+// whose maps name lists the game has (by ID), those; otherwise the pool's.
+func questLists(ctx *game.Context, lang *words.Language, q *maps.Quest, pool listPool) []*words.List {
+	if named := questNamed(ctx, lang, q); len(named) > 0 {
+		return named
 	}
+	return pool.lists(ctx, lang)
+}
+
+// questNamesLists reports whether quest q names word lists in lang that
+// the game has: the run then plays those, with no checklist.
+func questNamesLists(ctx *game.Context, lang *words.Language, q *maps.Quest) bool {
+	return len(questNamed(ctx, lang, q)) > 0
+}
+
+// questNamed returns the lists in lang that quest q's maps name (by ID),
+// or nil.
+func questNamed(ctx *game.Context, lang *words.Language, q *maps.Quest) []*words.List {
+	if q == nil {
+		return nil
+	}
+	all := ctx.ListsFor(lang.Code)
 	var named []*words.List
 	for _, l := range all {
 		for _, m := range q.Maps {
@@ -249,28 +276,25 @@ func questLists(ctx *game.Context, lang *words.Language, q *maps.Quest) []*words
 			}
 		}
 	}
-	if len(named) == 0 {
-		return all
-	}
 	return named
 }
 
 // startRun begins an Adventure in lang as a hero of class through the
 // dungeon made from seed, or through quest when it is not nil.
 func startRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, quest *maps.Quest) *run {
-	return beginRun(ctx, lang, class, seed, quest, nil)
+	return beginRun(ctx, lang, class, seed, quest, nil, listPool{})
 }
 
 // beginRun is startRun that also plays an assignment quest's list only,
-// when a is not nil. An assignment whose list is gone plays the usual
-// lists instead.
-func beginRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, quest *maps.Quest, a *assignRun) *run {
-	lists, ok := runLists(ctx, lang, quest, a)
+// when a is not nil, or else the pool's lists. An assignment whose list
+// is gone plays the pool instead.
+func beginRun(ctx *game.Context, lang *words.Language, class rpg.Class, seed uint64, quest *maps.Quest, a *assignRun, pool listPool) *run {
+	lists, ok := runLists(ctx, lang, quest, a, pool)
 	if !ok {
-		lists, a = questLists(ctx, lang, quest), nil
+		lists, a = questLists(ctx, lang, quest, pool), nil
 	}
 	r := startRunWith(ctx, lang, class, seed, lists)
-	r.quest, r.assign = quest, a
+	r.quest, r.assign, r.pool = quest, a, pool
 	r.prof, r.link, r.ai = ctx.Profile, ctx.Link, newRunAI(ctx)
 	if rd := ctx.Link.Riddles(lists); len(rd) > 0 {
 		// The riddles a grown-up added to an assigned list (W4.4).

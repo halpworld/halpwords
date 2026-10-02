@@ -30,9 +30,12 @@ type Practice struct {
 	langs []*words.Language // languages that have at least one list
 	li    int
 	// assign is the assignment quest being practised, and list its words;
-	// otherwise every list of the language is practised.
+	// otherwise the lists ticked on the checklist are practised.
 	assign *link.Quest
 	list   *words.List
+	// pool is the lists ticked for the first language; other languages
+	// (←/→) play the lists ticked for them last.
+	pool listPool
 
 	deck     *words.Deck
 	settings profile.LangSettings
@@ -52,7 +55,7 @@ type Practice struct {
 	best    int
 }
 
-// NewPractice creates the practice screen.
+// NewPractice creates the practice screen, with the lists ticked last.
 func NewPractice(ctx *game.Context) game.Scene {
 	p := &Practice{bg: backdrop(7, 1.6), rng: proc.NewRand(ctx.Tick + 1)}
 	for _, l := range words.Languages {
@@ -60,7 +63,24 @@ func NewPractice(ctx *game.Context) game.Scene {
 			p.langs = append(p.langs, l)
 		}
 	}
+	p.pool = pickedPool(ctx, p.langs[0])
 	p.setLanguage(ctx, 0)
+	return p
+}
+
+// newPracticeIn creates the practice screen for the lists of pool in
+// lang, as ticked on the checklist.
+func newPracticeIn(ctx *game.Context, lang *words.Language, pool listPool) game.Scene {
+	p := &Practice{bg: backdrop(7, 1.6), rng: proc.NewRand(ctx.Tick + 1), pool: pool}
+	for _, l := range words.Languages {
+		if l == lang {
+			p.li = len(p.langs)
+		}
+		if len(ctx.ListsFor(l.Code)) > 0 || l == lang {
+			p.langs = append(p.langs, l)
+		}
+	}
+	p.setLanguage(ctx, p.li)
 	return p
 }
 
@@ -76,8 +96,12 @@ func NewAssignPractice(ctx *game.Context, q link.Quest, l *words.List) game.Scen
 func (p *Practice) lang() *words.Language { return p.langs[p.li] }
 
 func (p *Practice) setLanguage(ctx *game.Context, i int) {
+	old := p.li
 	p.li = (i + len(p.langs)) % len(p.langs)
-	entries := entriesFor(ctx, p.lang())
+	if p.li != old && p.list == nil {
+		p.pool = pickedPool(ctx, p.lang())
+	}
+	entries := entriesOf(p.pool.lists(ctx, p.lang()))
 	if p.list != nil {
 		entries = p.list.Entries
 	}

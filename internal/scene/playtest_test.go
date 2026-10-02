@@ -40,9 +40,15 @@ func TestPlaytestStartsTheQuest(t *testing.T) {
 	}
 	p := NewPlaytest(srv.Client(), u)(ctx).(*Playtest)
 	next := p.fetched(ctx, true)
-	pick, ok := next.(*ClassPick)
-	if !ok {
+	// The quest names no lists, so it asks which to play, as in the game
+	// (#89); Enter plays them.
+	lists, ok := next.(*ListPick)
+	if !ok || lists.lang.Code != "fr" {
 		t.Fatalf("started %T (%q)", next, p.msg)
+	}
+	pick, ok := lists.start(ctx, lists.lang, listPool{}).(*ClassPick)
+	if !ok {
+		t.Fatal("the checklist does not lead to the hero")
 	}
 	if pick.lang.Code != "fr" || pick.setup.quest == nil || pick.setup.quest.Title == "" {
 		t.Errorf("picking a class in %s for %v", pick.lang.Code, pick.setup.quest)

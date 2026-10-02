@@ -28,8 +28,12 @@ type Adventure struct {
 func NewAdventure(ctx *game.Context, setup runSetup) game.Scene {
 	a := &Adventure{bg: backdrop(3, 1.4), setup: setup}
 	for _, l := range words.Languages {
+		lists := ctx.ListsFor(l.Code)
+		if setup.mode.Scored() && len(lists) > 0 {
+			lists = starterLists(l) // Daily and Hardcore play these
+		}
 		n := 0
-		for _, list := range ctx.ListsFor(l.Code) {
+		for _, list := range lists {
 			n += len(list.Entries)
 		}
 		if n > 0 {
@@ -58,11 +62,15 @@ func (a *Adventure) Update(ctx *game.Context) error {
 		a.sel = (a.sel + 1) % len(a.langs)
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		ctx.Sound.Play(audio.Select)
-		setup := a.setup
+		setup, lang := a.setup, a.langs[a.sel]
 		if setup.mode == compete.Daily {
-			setup = dailySetup(ctx, a.langs[a.sel])
+			setup = dailySetup(ctx, lang)
 		}
-		ctx.Replace(NewClassPick(a.langs[a.sel], setup))
+		if pickNeeded(ctx, lang, setup) {
+			ctx.Replace(adventureLists(ctx, lang, setup))
+			return nil
+		}
+		ctx.Replace(NewClassPick(lang, setup))
 	}
 	return nil
 }
@@ -75,6 +83,9 @@ func (a *Adventure) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawCentered(dst, "Choose your language", cx, 40, 3, pal.Yellow)
 	f.DrawCentered(dst, "Monsters, doors and chests will ask you for words in it.", cx, 96, 1, pal.Tan)
 	f.DrawCentered(dst, setupText(a.setup), cx, 112, 1, pal.Ice)
+	if a.setup.mode.Scored() {
+		f.DrawCentered(dst, scoredListsNote, cx, game.ScreenH-38, 1, pal.Tan)
+	}
 
 	if len(a.langs) == 0 {
 		f.DrawCentered(dst, "No word lists found. Add some to the words folder.", cx, 170, 1, pal.Rose)
@@ -99,6 +110,9 @@ func (a *Adventure) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 	f.DrawShadow(dst, "↑/↓ choose   Enter next   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
 }
+
+// scoredListsNote tells why Daily and Hardcore runs have no checklist.
+const scoredListsNote = "Daily and Hardcore use the built-in word lists, so scores compare fairly."
 
 // setupText describes how a new run will be played, such as "Hardcore ·
 // seed 7K3QZP".
