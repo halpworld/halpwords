@@ -15,15 +15,22 @@
   const PREFIX = "halpwords/"; // the game's keys in local storage
   const MAX_PART = 900000; // payload characters per fragment
 
-  // exportable reports whether a save file moves. The AI keys (ai.json)
-  // stay behind, as a URL can end up in the browser's history.
+  // Files that stay behind, matched on the last part of the name (a
+  // learner's files are in profiles/<id>/). The AI keys and the link's
+  // tokens and queued events must not go in a URL, which can end up in the
+  // browser's history. Keep this in step with Exportable in
+  // internal/move/move.go (a test compares them).
+  const STAY = ["ai.json", "link.json", "link-queue.json", "link-parked.json", "crash.txt"];
+
+  // exportable reports whether a save file moves.
   function exportable(name) {
     if (!name || name.length > 255 || name.startsWith("/") || name.endsWith("/") ||
         name.includes("//") || /[\u0000-\u001f\u007f-\u009f\\]/.test(name)) {
       return false;
     }
     if (name.split("/").some((p) => p === "." || p === "..")) return false;
-    return !(name === "ai.json" || name === "crash.txt" || name.endsWith(".bad") || name.startsWith("move/"));
+    const base = name.slice(name.lastIndexOf("/") + 1);
+    return !(STAY.includes(base) || name.endsWith(".bad") || name.startsWith("move/"));
   }
 
   // collect returns the game's files in storage (local storage, or

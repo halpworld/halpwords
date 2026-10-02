@@ -60,6 +60,24 @@ const fs = require("fs");
 })().catch((e) => { console.error(e); process.exit(1); });
 `
 
+// parityNames are file names the page and the game must give the same
+// answer for: every file that stays behind, at the root and in a
+// learner's folder, and ones that move or are odd.
+func parityNames() []string {
+	names := []string{
+		"adventure.json", "learners.json", "profiles/k3v9q2/learners.json", "words/x.txt",
+		"profiles/k3v9q2/words/x.txt", "ai/bank-fr.json", "ai-spend.json", "profiles/k3v9q2/adventure.json",
+		"fame.json.bad", "move/done", "move/part-x-1-1", "profiles/k3v9q2/move/done", "moves/done", "move",
+		"notai.json", "ai.json.txt", "xai.json", "words/crash.txt.old", "link.jsonx", "a/link.json/b",
+		"", "/abs", "a/", "a//b", "a\\b", "a\nb", "a/./b", "../x", "a/../b", "\u007f", "a\u0085b",
+		strings.Repeat("x", 255), strings.Repeat("x", 256),
+	}
+	for _, f := range []string{"ai.json", "link.json", "link-queue.json", "link-parked.json", "crash.txt", "memory.json.bad"} {
+		names = append(names, f, "profiles/k3v9q2/"+f, "words/"+f, "a/b/c/"+f, f+".bad", "profiles/k3v9q2/"+f+".bad")
+	}
+	return names
+}
+
 // The page's JavaScript and the game's Go agree: what the page sends, the
 // game reads back, whole or in parts.
 func TestMovedPageInNode(t *testing.T) {
@@ -87,7 +105,7 @@ func TestMovedPageInNode(t *testing.T) {
 	for n := range saves() {
 		names = append(names, n)
 	}
-	names = append(names, "", "/abs", "a//b", "a\\b", "a\nb", "a/./b")
+	names = append(names, parityNames()...)
 	in, _ := json.Marshal(map[string]any{"storage": storage, "names": names, "size": 300_000})
 	inFile := filepath.Join(dir, "in.json")
 	os.WriteFile(inFile, in, 0o644)
@@ -136,7 +154,7 @@ func TestMovedPageInNode(t *testing.T) {
 		}
 		u := out.Targets[k-1]
 		if strings.Contains(u, "sk-secret") {
-			t.Fatal("the AI keys are in the address")
+			t.Fatal("the AI keys or the link's tokens are in the address")
 		}
 		if len(u) > 1<<20 {
 			t.Fatalf("an address of %d characters", len(u))
