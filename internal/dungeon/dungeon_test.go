@@ -333,7 +333,17 @@ func TestNewMonsterStatsAreIntegerMaths(t *testing.T) {
 			}
 		}
 	}
-	if m := NewMonster(KindNamed("Blue Slime"), 10, Point{}, 1); m.HP != 47 {
-		t.Errorf("Blue Slime on floor 10 has %d HP, want 47 everywhere", m.HP)
+	// Literal values, so the formula above cannot drift unnoticed.
+	for _, c := range []struct {
+		kind           string
+		depth, hp, atk int
+	}{
+		{"Blue Slime", 10, 47, 17},
+		{"Gazer Queen", 8, 123, 20},
+		{"Green Slime", 27, 49, 20},
+	} {
+		if m := NewMonster(KindNamed(c.kind), c.depth, Point{}, 1); m.HP != c.hp || m.ATK != c.atk {
+			t.Errorf("%s on floor %d: HP %d ATK %d, want %d and %d", c.kind, c.depth, m.HP, m.ATK, c.hp, c.atk)
+		}
 	}
 }
