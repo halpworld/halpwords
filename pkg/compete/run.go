@@ -101,7 +101,7 @@ func MaxDamage(floor int) int {
 	total := 0
 	for d := 1; d <= floor; d++ {
 		monsters := 3 + d + 1 + MaxChests
-		total += monsters * int(float64(maxHP)*(1+0.15*float64(d-1))+1)
+		total += monsters * (maxHP*(100+15*(d-1))/100 + 1)
 	}
 	return 2 * total
 }

@@ -12,8 +12,9 @@ import (
 func Size(depth int) int { return min(24+depth*2, 40) }
 
 // Generate builds a floor from rooms joined by corridors. The same seed and
-// depth always give the same floor.
+// depth always give the same floor. A depth below 1 is floor 1.
 func Generate(seed uint64, depth int) *Level {
+	depth = max(depth, 1)
 	rng := rand.New(rand.NewPCG(seed, uint64(depth)*0x9e3779b97f4a7c15+1))
 	n := Size(depth)
 	f := &Level{
@@ -312,7 +313,7 @@ var chestItems = []rpg.Item{rpg.Ether, rpg.HintScroll, rpg.HintScroll, rpg.Hourg
 
 // GearChance is how likely a chest on floor depth is to hold a piece of
 // gear: 20% on the first floor, growing to 40%.
-func GearChance(depth int) float64 { return min(0.4, 0.2+0.03*float64(depth-1)) }
+func GearChance(depth int) float64 { return min(0.4, 0.2+float64(0.03*float64(depth-1))) }
 
 func (f *Level) placeMonsters(rng *rand.Rand) {
 	want := 3 + f.Depth

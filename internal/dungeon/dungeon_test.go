@@ -308,3 +308,32 @@ func TestHarden(t *testing.T) {
 		}
 	}
 }
+
+// A floor below 1 is treated as floor 1 rather than panicking (#79).
+func TestGenerateClampsDepth(t *testing.T) {
+	for _, depth := range []int{0, -1, -50} {
+		f := Generate(7, depth)
+		want := Generate(7, 1)
+		if f.Depth != 1 || levelHash(t, f) != levelHash(t, want) {
+			t.Errorf("depth %d: got floor %d, want the same as floor 1", depth, f.Depth)
+		}
+	}
+}
+
+// Monster stats are integer maths, so they are the same on every platform.
+func TestNewMonsterStatsAreIntegerMaths(t *testing.T) {
+	for i := range Kinds {
+		k := &Kinds[i]
+		for depth := 1; depth <= 30; depth++ {
+			m := NewMonster(k, depth, Point{}, 1)
+			wantHP := k.HP * (100 + 15*(depth-1)) / 100
+			wantATK := k.ATK * (100 + 22*(depth-1)) / 100
+			if m.HP != wantHP || m.MaxHP != wantHP || m.ATK != wantATK {
+				t.Errorf("%s depth %d: HP %d ATK %d, want %d and %d", k.Name, depth, m.HP, m.ATK, wantHP, wantATK)
+			}
+		}
+	}
+	if m := NewMonster(KindNamed("Blue Slime"), 10, Point{}, 1); m.HP != 47 {
+		t.Errorf("Blue Slime on floor 10 has %d HP, want 47 everywhere", m.HP)
+	}
+}

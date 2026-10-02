@@ -2,6 +2,7 @@ package scene
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -243,5 +244,23 @@ func TestOldSavesAreAdventures(t *testing.T) {
 	got, err := decodeSave(ctx, data)
 	if err != nil || got.run.mode != compete.Adventure || got.run.hardcore() {
 		t.Fatalf("mode %v, %v", got.run.mode, err)
+	}
+}
+
+// A HALPWORDS_SEED wider than a seed code must be masked, or the code shown
+// in the pause menu would give a different dungeon and a ranked run would
+// carry a seed that cannot be replayed (#59).
+func TestEnvSeedIsMaskedToSeedBits(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	const wide = uint64(1)<<40 | 0x2a2a2a
+	t.Setenv("HALPWORDS_SEED", strconv.FormatUint(wide, 10))
+	r := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Adventure})
+	if r.seed != 0x2a2a2a {
+		t.Fatalf("seed %#x, want it masked to %#x", r.seed, 0x2a2a2a)
+	}
+	back, err := compete.SeedFromCode(r.seedCode())
+	if err != nil || back != r.seed {
+		t.Fatalf("seed code %q gives %#x (%v), want %#x", r.seedCode(), back, err, r.seed)
 	}
 }

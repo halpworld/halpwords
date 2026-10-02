@@ -160,7 +160,7 @@ func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runS
 		seed = compete.RandomSeed(proc.NewRand(uint64(time.Now().UnixNano())))
 		// HALPWORDS_SEED replays a dungeon, for testing and bug reports.
 		if v, err := strconv.ParseUint(os.Getenv("HALPWORDS_SEED"), 10, 64); err == nil {
-			seed = v
+			seed = v & (1<<compete.SeedBits - 1) // as a seed code holds
 		}
 	}
 	r := beginRun(ctx, lang, class, seed, setup.quest, setup.assign)
