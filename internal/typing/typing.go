@@ -33,6 +33,9 @@ type Field struct {
 	Lang          *words.Language
 	Greek         bool // Greek input mode: Latin keys type Greek letters
 	UsedBackspace bool
+	// Limit is the most characters the field takes, or 0 for MaxLen. The
+	// word list editor's lines hold more than one answer.
+	Limit int
 
 	runes []rune
 }
@@ -92,11 +95,18 @@ func (f *Field) Type(r rune) bool {
 		}
 		return false
 	}
-	if len(f.runes) >= MaxLen {
+	if len(f.runes) >= f.limit() {
 		return false
 	}
 	f.runes = append(f.runes, r)
 	return true
+}
+
+func (f *Field) limit() int {
+	if f.Limit > 0 {
+		return f.Limit
+	}
+	return MaxLen
 }
 
 // Backspace deletes the last character.
