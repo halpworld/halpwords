@@ -1595,3 +1595,56 @@ func TestPeekFolderFailsClosed(t *testing.T) {
 		t.Errorf("good file: %+v", p)
 	}
 }
+
+// A totals event that was sent is never changed, even if the send failed
+// (the server may have stored it): later answers go into a new event.
+func TestTotalsNotChangedAfterFailedSend(t *testing.T) {
+	f, c, st, _ := linked(t)
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	f.failNext("/api/v1/events", 503, 503, 503)
+	if err := c.Sync(context.Background()); err == nil {
+		t.Fatal("the upload didn't fail")
+	}
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	c.mu.Lock()
+	if len(c.q.Totals) != 2 || c.q.Totals[0].Answers != 1 || c.q.Totals[1].Answers != 1 || c.q.Totals[0].Seq == c.q.Totals[1].Seq {
+		t.Errorf("an answer was added to totals already sent: %+v", c.q.Totals)
+	}
+	c.mu.Unlock()
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	// The mark survives a restart.
+	c2 := Open(Options{Store: st, Server: f.srv.URL, Now: c.now})
+	c2.Answer("fr", own, "practice", words.Answer{Tier: words.Correct})
+	c2.mu.Lock()
+	if n := len(c2.q.Totals); n != 2 || !c2.q.Totals[0].Sent || c2.q.Totals[0].Answers != 1 || c2.q.Totals[1].Answers != 2 {
+		t.Errorf("after a restart: %+v", c2.q.Totals)
+	}
+	c2.mu.Unlock()
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got := 0
+	for _, e := range f.eventsOf("totals") {
+		got += int(e.Raw["answers"].(float64))
+	}
+	if got != 3 {
+		t.Errorf("the server has %d answers in totals, want 3", got)
+	}
+}
+
+// The Sent mark is written even when nothing else changed after the batch
+// was taken (a game that quits while the send is still on its way).
+func TestSentMarkIsSaved(t *testing.T) {
+	_, c, st, _ := linked(t)
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	c.Save()
+	c.mu.Lock()
+	c.takeBatch(MaxBatch)
+	c.mu.Unlock()
+	c.Save()
+	if !strings.Contains(string(st.files[queueFile]), `"Sent":true`) {
+		t.Errorf("queue file: %s", st.files[queueFile])
+	}
+}
