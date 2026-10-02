@@ -65,6 +65,11 @@ func (c *Client) loadLists() {
 		keep = append(keep, li)
 		c.addList(l, li)
 	}
+	if len(keep) != len(c.st.Lists) {
+		// A list is gone: the server must send the whole set again, not
+		// answer 304 for ever.
+		c.st.ListsETag = ""
+	}
 	c.st.Lists = keep
 	// Keep only the audio packs of the lists kept, at their versions.
 	packs := map[string]*audiopack.Pack{}
@@ -116,6 +121,9 @@ func fileFor(id string) string {
 func (c *Client) syncLists(ctx context.Context, gen int) error {
 	c.mu.Lock()
 	etag := c.st.ListsETag
+	if c.st.ListsGame != c.userAgent() {
+		etag = "" // made by another version of the game
+	}
 	c.mu.Unlock()
 	hdr := http.Header{}
 	if etag != "" {
@@ -181,7 +189,10 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 	for _, g := range lists {
 		c.st.Lists = append(c.st.Lists, g.li)
 	}
-	c.st.ListsETag = h.Get("ETag")
+	// Kept with the game version that made it, so a game that can read a
+	// list an older one skipped asks again; a list lost locally clears it
+	// (loadLists).
+	c.st.ListsETag, c.st.ListsGame = h.Get("ETag"), c.userAgent()
 	c.loadLists()
 	c.saveState()
 	c.changes++

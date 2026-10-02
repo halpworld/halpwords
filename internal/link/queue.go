@@ -58,6 +58,11 @@ type qSession struct {
 // language, waiting to be sent. Later answers are added to it until it is
 // sent.
 type qTotals struct {
+	// Sent is set once the event went into a batch, whatever came of it:
+	// the server may have stored it, and it keeps the first copy of a
+	// sequence number it sees. A sent event never changes; later answers
+	// go into a new one.
+	Sent    bool `json:",omitempty"`
 	Seq     int64
 	Day     string
 	Lang    string
@@ -216,12 +221,12 @@ func b2i(b bool) int {
 	return 0
 }
 
-// addTotals adds to the day's totals in lang that haven't been sent, or
-// starts new ones. c.mu is held.
+// addTotals adds to the day's totals in lang that have never been sent
+// (not even in a batch that failed), or starts new ones. c.mu is held.
 func (c *Client) addTotals(day, lang string, answers, right int, secs float64) {
 	for i := len(c.q.Totals) - 1; i >= 0; i-- {
 		t := &c.q.Totals[i]
-		if t.Day != day || t.Lang != lang || c.q.sending[t.Seq] {
+		if t.Day != day || t.Lang != lang || t.Sent || c.q.sending[t.Seq] {
 			continue
 		}
 		if t.Answers+answers <= maxTotalAnswers && t.Secs+secs <= maxTotalSecs {
@@ -410,6 +415,10 @@ func (c *Client) takeBatch(n int) (wireBatch, []int64) {
 				Secs: s.Secs, Floor: s.Floor, ListID: s.ListID})
 			is++
 		default:
+			if !qt[it].Sent {
+				qt[it].Sent = true
+				c.dirty = true // the mark must reach the queue file
+			}
 			t := qt[it]
 			b.Totals = append(b.Totals, wireTotals{Seq: t.Seq, Day: t.Day, Lang: t.Lang, Answers: t.Answers,
 				Right: min(t.Right, t.Answers), Secs: int(math.Round(math.Min(t.Secs, maxTotalSecs)))})

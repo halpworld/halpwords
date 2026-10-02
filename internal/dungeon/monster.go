@@ -87,7 +87,7 @@ func MimicChance(depth int) float64 {
 	if depth < 2 {
 		return 0
 	}
-	return min(0.35, 0.15+0.05*float64(depth-2))
+	return min(0.35, 0.15+float64(0.05*float64(depth-2)))
 }
 
 // RandomKind picks a monster that can appear at depth.
@@ -127,10 +127,12 @@ type Monster struct {
 
 // NewMonster creates a monster of kind k, with stats scaled for depth. Its
 // attack grows faster than its HP, so deeper floors hurt more without
-// making fights longer.
+// making fights longer. It is integer maths: float maths rounds differently
+// where Go fuses a multiply and an add (arm64), and a Daily or seed run must
+// give the same monsters on every platform.
 func NewMonster(k *Kind, depth int, at Point, seed uint64) *Monster {
-	hp := int(float64(k.HP) * (1 + 0.15*float64(depth-1)))
-	atk := int(float64(k.ATK) * (1 + 0.22*float64(depth-1)))
+	hp := k.HP * (100 + 15*(depth-1)) / 100
+	atk := k.ATK * (100 + 22*(depth-1)) / 100
 	return &Monster{Kind: k, At: at, HP: hp, MaxHP: hp, ATK: atk, Seed: seed, Traits: k.Traits}
 }
 

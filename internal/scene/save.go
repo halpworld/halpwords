@@ -167,6 +167,10 @@ func decodeSave(ctx *game.Context, data []byte) (*loaded, error) {
 		r.log = append(r.log, logLine{line.Text, line.Col})
 	}
 	r.shrine = s.Shrine
+	if r.shrine.Perfect == nil {
+		// A save from before shrines kept this: the words known now.
+		r.shrine.Perfect = r.perfectIDs()
+	}
 	r.onDisk = true
 	for depth, sc := range s.Scripts {
 		if sc != nil {

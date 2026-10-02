@@ -139,8 +139,51 @@ func (c *Client) once(ctx context.Context, method, path, token string, hdr http.
 
 // onceWith is once with an HTTP client and a time limit.
 func (c *Client) onceWith(ctx context.Context, hc *http.Client, limit time.Duration, method, path, token string, hdr http.Header, payload []byte, out any) (int, http.Header, error) {
+	return c.request(ctx, hc, limit, 0, method, path, token, hdr, payload, out)
+}
+
+// errStalled is the cause of a request that went idle too long.
+var errStalled = errors.New("link: no data arrived")
+
+// idleReader resets a timer whenever data arrives.
+type idleReader struct {
+	r    io.Reader
+	t    *time.Timer
+	idle time.Duration
+}
+
+func (r idleReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.t.Reset(r.idle)
+	}
+	return n, err
+}
+
+// request is onceWith with an idle limit: when idle is not 0, the request
+// also ends if nothing arrives for that long (the start of the answer
+// counts), and limit is then the most it may take in all. A big download
+// on a slow link goes on as long as it makes progress.
+func (c *Client) request(ctx context.Context, hc *http.Client, limit, idle time.Duration, method, path, token string, hdr http.Header, payload []byte, out any) (int, http.Header, error) {
 	rctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
+	var stall *time.Timer
+	if idle > 0 {
+		var cancelCause context.CancelCauseFunc
+		rctx, cancelCause = context.WithCancelCause(rctx)
+		defer cancelCause(nil)
+		stall = time.AfterFunc(idle, func() { cancelCause(errStalled) })
+		defer stall.Stop()
+	}
+	status, h, err := c.requestIn(rctx, hc, stall, idle, method, path, token, hdr, payload, out)
+	if err != nil && context.Cause(rctx) == errStalled {
+		// Like any other timeout.
+		err = fmt.Errorf("link: %s %s: %w (%w)", method, path, errStalled, context.DeadlineExceeded)
+	}
+	return status, h, err
+}
+
+func (c *Client) requestIn(rctx context.Context, hc *http.Client, stall *time.Timer, idle time.Duration, method, path, token string, hdr http.Header, payload []byte, out any) (int, http.Header, error) {
 	var body io.Reader
 	if payload != nil {
 		body = bytes.NewReader(payload)
@@ -178,7 +221,11 @@ func (c *Client) onceWith(ctx context.Context, hc *http.Client, limit time.Durat
 	if isRaw {
 		limitBytes = audiopack.MaxBytes + 1
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, limitBytes))
+	var src io.Reader = resp.Body
+	if stall != nil {
+		src = idleReader{resp.Body, stall, idle}
+	}
+	data, err := io.ReadAll(io.LimitReader(src, limitBytes))
 	if err != nil {
 		return resp.StatusCode, resp.Header, err
 	}

@@ -74,6 +74,11 @@ var (
 	// requestTimeout limits each request; syncTimeout a whole sync.
 	requestTimeout = 20 * time.Second
 	syncTimeout    = 2 * time.Minute
+	// packIdle is how long an audio pack download may go without a byte
+	// (or its start without an answer) and packMax how long it may take
+	// in all: packs are big, and a slow link is still a link.
+	packIdle = 45 * time.Second
+	packMax  = 10 * time.Minute
 	// closeTimeout is how long quitting waits to send the last events.
 	closeTimeout = 3 * time.Second
 	// refreshEarly is how long before the access token runs out it is
@@ -246,8 +251,11 @@ type state struct {
 	// NextSeq is the sequence number of the next event. It only grows,
 	// even across unlinking, so no number is ever used twice.
 	NextSeq   int64
-	Me        *Me        `json:",omitempty"`
-	ListsETag string     `json:",omitempty"`
+	Me        *Me    `json:",omitempty"`
+	ListsETag string `json:",omitempty"`
+	// ListsGame is the game version (its User-Agent) that made ListsETag:
+	// another version may read lists an older one skipped.
+	ListsGame string     `json:",omitempty"`
 	Lists     []ListInfo `json:",omitempty"`
 	Quests    []Quest    `json:",omitempty"`
 	// SSO is a sign-in with a school account on its way.
@@ -365,6 +373,12 @@ type Client struct {
 	// aiOff is set when the server said Halpwords AI is off for this
 	// account, until the next sync reads the learner again.
 	aiOff bool
+
+	// audioRunning: audio packs are downloading in the background
+	// (audio.go); packFails are the lists whose pack failed.
+	audioRunning bool
+	audioCancel  context.CancelFunc
+	packFails    map[string]packFail
 }
 
 // listRef is the list an answer names.
@@ -791,7 +805,7 @@ func MoveState(from, to Store) error {
 		json.Unmarshal(data, &old)
 	}
 	in.NextSeq = max(in.NextSeq, old.NextSeq)
-	in.ListsETag, in.Lists, in.Quests = "", nil, nil
+	in.ListsETag, in.ListsGame, in.Lists, in.Quests = "", "", nil, nil
 	out, err := json.MarshalIndent(in, "", "  ")
 	if err != nil {
 		return err

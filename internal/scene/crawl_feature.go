@@ -93,6 +93,8 @@ func (c *Crawl) pray(ctx *game.Context) {
 	ctx.Notify("Game saved")
 	c.showBanner("SAVED", "The shrine will remember you")
 	r.say("You pray at the shrine. If you fall, you will wake here.", pal.Cyan)
+	// The message is in the log now: the game is still as saved.
+	c.lastSave, _ = encodeSave(r, c.level, c.pos, c.facing, true)
 }
 
 // wakeText says where a fallen hero will wake up.

@@ -110,14 +110,6 @@ func TestGoldenGeneratedFloors(t *testing.T) {
 			"0b9ffa202e08c0cb948bec5c172b3119cace34ef4f6d7c644e7dd7396a7d20f6",
 		},
 	}
-	if !fusedMultiplyAdd {
-		// NewMonster's HP and attack scaling, float64(k.HP) * (1 +
-		// 0.15*float64(depth-1)), is fused into one multiply-add on arm64
-		// and rounds differently elsewhere, so a monster's stats can be one
-		// apart at depth 10. These are the hashes on amd64 and wasm.
-		want[1][9] = "3f298f3bea586fb45e27470521af71276f58fc6d47d196110a3a75cdd4956fcf"
-		want[0x5eed_1234][9] = "030a93d5c88abd32e1ee4eaa301cea8f0676029c1fa5102aabf01d98003155dc"
-	}
 	for _, seed := range slices.Sorted(maps.Keys(want)) {
 		for depth := 1; depth <= 12; depth++ {
 			checkGolden(t, fmt.Sprintf("seed %#x depth %d", seed, depth), Generate(seed, depth), want[seed][depth-1])
