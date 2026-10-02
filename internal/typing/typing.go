@@ -10,8 +10,10 @@ import (
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
-// MaxLen is the longest answer the field accepts, in characters.
-const MaxLen = 40
+// MaxLen is the longest answer the field accepts, in characters. It is
+// the limit words.TooLong checks, so the game deals nothing longer. It fits
+// the narrowest typing panel at the smallest text.
+const MaxLen = words.MaxAnswerRunes
 
 // BetaCodeChart lists the Greek mode keys in alphabet order, for on-screen help.
 var BetaCodeChart = words.BetaCodeChart()

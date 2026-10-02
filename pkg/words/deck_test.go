@@ -150,3 +150,56 @@ func TestDeckState(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func longEntry(prompt string) Entry {
+	return Entry{Prompt: prompt, Answers: []string{strings.Repeat("a", MaxAnswerRunes+1)}}
+}
+
+func TestTooLong(t *testing.T) {
+	if TooLong(Entry{Answers: []string{strings.Repeat("é", MaxAnswerRunes)}}) {
+		t.Error("an answer of exactly the limit is too long")
+	}
+	if !TooLong(longEntry("x")) {
+		t.Error("an answer over the limit is not too long")
+	}
+	// e + combining acute is one letter in the field.
+	if TooLong(Entry{Answers: []string{strings.Repeat("é", MaxAnswerRunes)}}) {
+		t.Error("combining marks are counted as letters")
+	}
+	if TooLong(Entry{}) {
+		t.Error("an entry with no answers is too long")
+	}
+	l := &List{Entries: []Entry{{Prompt: "a", Answers: []string{"x"}}, longEntry("b")}}
+	if got := l.TooLong(); len(got) != 1 || got[0].Prompt != "b" {
+		t.Errorf("List.TooLong = %v", got)
+	}
+}
+
+func TestDeckNeverDealsAnswersTooLongToType(t *testing.T) {
+	es := append(testEntries(5), longEntry("long1"), longEntry("long2"))
+	d := NewDeck(es, rand.New(rand.NewPCG(1, 2)))
+	d.SetMemory(NewMemory())
+	for n := 0; n < 300; n++ {
+		e, i := d.Next()
+		if TooLong(e) {
+			t.Fatalf("dealt %q (id %d)", e.Prompt, i)
+		}
+		d.Answer(i, Answer{Tier: Miss})
+		if e, _, ok := d.NextWhere(func(Entry) bool { return true }); !ok || TooLong(e) {
+			t.Fatalf("NextWhere dealt %q ok=%v", e.Prompt, ok)
+		}
+	}
+	// Ids still index the whole list, so saves and maps stay valid.
+	if d.Len() != len(es) || d.Entries()[5].Prompt != "long1" {
+		t.Error("the deck's entries changed")
+	}
+}
+
+func TestDeckWithOnlyLongAnswersStillDeals(t *testing.T) {
+	d := NewDeck([]Entry{longEntry("a"), longEntry("b")}, rand.New(rand.NewPCG(1, 2)))
+	for n := 0; n < 10; n++ {
+		if _, i := d.Next(); i < 0 {
+			t.Fatal("dealt nothing")
+		}
+	}
+}

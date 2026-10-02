@@ -7,9 +7,11 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/rpg"
+	"github.com/halpworld/halpwords/internal/typing"
 	"github.com/halpworld/halpwords/pkg/words"
 )
 
@@ -124,5 +126,19 @@ func TestRaceEndReconnecting(t *testing.T) {
 	racing.Racers[0].Status = link.RacerFinished
 	if e.hint(st) != "Enter back to the room" || e.act(st, t0, false, false, true) != raceEndLobby {
 		t.Error("a settled race should go back to the room")
+	}
+}
+
+// The longest answer the field takes still fits the narrowest typing panel
+// (the practice screen's) at the smallest text, in the widest letters.
+func TestLongestAnswerFitsTypingPanel(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	const panel = game.ScreenW - 80 - 40
+	for _, r := range []string{"W", "m", "Ω", "ǭ", "ᾄ"} {
+		s := strings.Repeat(r, typing.MaxLen)
+		if got := ctx.Font.Width(s, 1); got > panel {
+			t.Errorf("%d × %q is %dpx wide, the panel is %dpx", typing.MaxLen, r, got, panel)
+		}
 	}
 }

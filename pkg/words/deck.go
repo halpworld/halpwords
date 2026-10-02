@@ -16,6 +16,10 @@ type Deck struct {
 	recent  []int
 	review  []int // entries answered wrongly, oldest first
 	mem     *Memory
+	// skip marks entries whose answers are too long to type; they are never
+	// dealt. It is nil when no entry is, or when every entry is (so the
+	// deck can still deal something).
+	skip []bool
 }
 
 // recentLen is how many words must pass before one can be dealt again.
@@ -23,7 +27,18 @@ const recentLen = 6
 
 // NewDeck returns a deck over entries, which must not be empty.
 func NewDeck(entries []Entry, rng *rand.Rand) *Deck {
-	return &Deck{entries: entries, rng: rng}
+	d := &Deck{entries: entries, rng: rng}
+	skip := make([]bool, len(entries))
+	n := 0
+	for i, e := range entries {
+		if skip[i] = TooLong(e); skip[i] {
+			n++
+		}
+	}
+	if n > 0 && n < len(entries) {
+		d.skip = skip
+	}
+	return d
 }
 
 // SetMemory makes the deck deal by what the player knows, and record
@@ -36,8 +51,8 @@ func (d *Deck) Memory() *Memory { return d.mem }
 // Len returns the number of words in the deck.
 func (d *Deck) Len() int { return len(d.entries) }
 
-// Entries returns every word in the deck, in list order. Entry i is the one
-// Next identifies as i. The slice must not be changed.
+// Entries returns every word in the deck, in list order, including any too
+// long to type, which are never dealt. Entry i is the one Next identifies as i. The slice must not be changed.
 func (d *Deck) Entries() []Entry { return d.entries }
 
 // Review returns how many words are waiting to be practised again.
@@ -68,7 +83,9 @@ func (d *Deck) NextWhere(ok func(Entry) bool) (Entry, int, bool) {
 // NextNear deals a word that ok accepts, preferring words whose Difficulty
 // is near target. A target below 0 has no preference.
 func (d *Deck) NextNear(target float64, ok func(Entry) bool) (Entry, int, bool) {
-	fits := func(i int) bool { return ok == nil || ok(d.entries[i]) }
+	fits := func(i int) bool {
+		return (d.skip == nil || !d.skip[i]) && (ok == nil || ok(d.entries[i]))
+	}
 	var can []int
 	for i := range d.entries {
 		if fits(i) {

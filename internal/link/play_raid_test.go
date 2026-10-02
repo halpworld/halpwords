@@ -61,7 +61,7 @@ func TestPlayRaid(t *testing.T) {
 	}
 
 	// A long answer is cut to what a raid takes.
-	if !p.Answer(2, strings.Repeat("é", 50), false) {
+	if !p.Answer(2, strings.Repeat("é", raid.MaxAnswer+10), false) {
 		t.Fatal("the long answer didn't go")
 	}
 	if m := s.expect("answer"); len([]rune(m["answer"].(string))) != raid.MaxAnswer {

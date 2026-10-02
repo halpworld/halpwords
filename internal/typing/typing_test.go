@@ -120,3 +120,9 @@ func TestMaxLen(t *testing.T) {
 		t.Fatalf("len = %d", f.Len())
 	}
 }
+
+func TestMaxLenIsTheDealLimit(t *testing.T) {
+	if MaxLen != words.MaxAnswerRunes {
+		t.Fatalf("MaxLen %d, words.MaxAnswerRunes %d", MaxLen, words.MaxAnswerRunes)
+	}
+}
