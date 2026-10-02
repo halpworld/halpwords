@@ -209,6 +209,11 @@ type ListInfo struct {
 	// to this list", names the list: Adventure and Practice then play the
 	// locked lists only.
 	Locked bool `json:",omitempty"`
+	// Sum is the SHA-256 of the list's text as the server sent it. A
+	// file in AssignedDir that no longer matches is left out, so words
+	// typed into it by hand are never taken for the server's (they could
+	// reach the AI, which only ever sees server and starter lists).
+	Sum string `json:",omitempty"`
 }
 
 // ListRiddle is a riddle for one of a list's words, by its English.

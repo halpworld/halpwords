@@ -220,3 +220,38 @@ func TestServerListsFixture(t *testing.T) {
 		t.Errorf("assigned and sent list %+v", li)
 	}
 }
+
+// A list file in Assigned changed by hand is not the server's any more:
+// it is left out (so its words never pass for the server's, for the AI
+// too) and the next sync fetches the real one again.
+func TestAssignedListChangedOnDisk(t *testing.T) {
+	_, c, _, _ := linked(t)
+	l := c.Lists()[0]
+	li, _ := c.Info(l)
+	if li.Sum == "" {
+		t.Fatal("no sum kept with the list")
+	}
+	if err := c.o.Store.Write(l.File, []byte("title: Mine\nlanguage: fr\n\nmy secret = secret\n")); err != nil {
+		t.Fatal(err)
+	}
+	again := Open(c.o)
+	if n := len(again.Lists()); n != 0 {
+		t.Fatalf("%d lists after the file was changed", n)
+	}
+	if err := again.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got := again.Lists()
+	if len(got) != 1 || got[0].Title == "Mine" {
+		t.Fatalf("after syncing: %+v", got)
+	}
+
+	// A link kept by a game from before sums trusts the file it has.
+	again.mu.Lock()
+	again.st.Lists[0].Sum = ""
+	again.saveState()
+	again.mu.Unlock()
+	if old := Open(c.o); len(old.Lists()) != 1 {
+		t.Error("a list kept before sums was dropped")
+	}
+}

@@ -87,6 +87,12 @@ func (c *Client) loadLists() {
 		if err != nil {
 			continue
 		}
+		switch sum := textSum(data); {
+		case li.Sum == "":
+			li.Sum = sum // kept by a game from before sums
+		case li.Sum != sum:
+			continue // changed on disk: not the server's list any more
+		}
 		l, err := words.Parse(bytes.NewReader(data), AssignedDir+"/"+li.File)
 		if err != nil {
 			continue
@@ -126,6 +132,12 @@ func (c *Client) addList(l *words.List, li ListInfo) {
 			m[k] = listRef{ID: li.ID, Version: li.Version}
 		}
 	}
+}
+
+// textSum is the hex SHA-256 of a list's text (ListInfo.Sum).
+func textSum(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
 }
 
 // fileFor is the file an assigned list is kept in: its ID if that makes
@@ -189,6 +201,7 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 		if li.Title == "" {
 			li.Title = l.Title
 		}
+		li.Sum = textSum([]byte(w.Text))
 		lists = append(lists, got{l, li, w.Text})
 	}
 	c.mu.Lock()
