@@ -59,4 +59,7 @@ func TestListsKeptWithTheSettings(t *testing.T) {
 	if _, ok := q.Settings.Lists.Picked("fr"); ok {
 		t.Error("an empty pick counts")
 	}
+	if _, ok := q.Settings.Lists.Selected["fr"]; ok {
+		t.Error("an empty pick is kept in the settings")
+	}
 }

@@ -78,8 +78,13 @@ func (l Lists) Picked(code string) ([]string, bool) {
 	return keys, ok && len(keys) > 0
 }
 
-// Pick keeps keys as the lists ticked in language code.
+// Pick keeps keys as the lists ticked in language code. No keys is no
+// pick: every list is ticked.
 func (l *Lists) Pick(code string, keys []string) {
+	if len(keys) == 0 {
+		delete(l.Selected, code)
+		return
+	}
 	if l.Selected == nil {
 		l.Selected = map[string][]string{}
 	}
