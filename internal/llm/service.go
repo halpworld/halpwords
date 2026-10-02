@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/pkg/safety"
+
+	"github.com/halpworld/halpwords/pkg/words"
 )
 
 // Store keeps the service's files. The game passes its save folder.
@@ -98,6 +100,9 @@ type Service struct {
 	slots   chan struct{} // one for each request in flight
 	banks   map[string]*Bank
 	hw      HalpwordsAI // Halpwords AI, when the game can reach it
+	// share are the words that may be sent to an AI, by words.Key
+	// (ShareOnly); nil sends none.
+	share map[string]words.Entry
 
 	// For tests.
 	hc   *http.Client

@@ -552,9 +552,11 @@ cent, often much less.
   straight from the browser.
 - The key is saved only on this computer, in `ai.json` in the user folder,
   readable only by you (in a web browser, in the page's local storage). It
-  is never put in saves. The AI is only sent words from your lists,
-  floor details and Word Forge topics, nothing about the player. What was spent is in
-  `ai-spend.json`.
+  is never put in saves. What was spent is in `ai-spend.json`.
+- AI features only ever see the built-in lists and lists a teacher or
+  parent sent or assigned, never your own: a floor of your own words gets
+  the game's own content. Besides those words, the AI is only sent floor
+  details and Word Forge topics, nothing about the player.
 
 ### Linking to a grown-up's account (optional)
 
@@ -705,7 +707,8 @@ and press <kbd>N</kbd>. Type a title, pick the language with <kbd>←</kbd> /
 why. Press <kbd>Ctrl</kbd>+<kbd>S</kbd> (<kbd>Cmd</kbd>+<kbd>S</kbd> on a Mac)
 to save. <kbd>Tab</kbd> adds an accent to the letter before it. Children can
 use it too. A list you type stays on your computer: the game never sends it
-anywhere.
+anywhere, not even to an AI (a linked grown-up's account only gets how many
+answers were right, not the words).
 
 You can also write the list in any text editor and drag the file onto the
 game. Here are 8 words to copy into a file called `homework.txt`:

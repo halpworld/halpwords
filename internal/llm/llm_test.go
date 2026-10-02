@@ -366,6 +366,7 @@ func TestFillWordsAndTips(t *testing.T) {
 		{Prompt: "cat", Answers: []string{"le chat"}},
 		{Prompt: "bread", Answers: []string{"le pain"}},
 	}
+	s.ShareOnly(entries)
 	f.replies = []string{"Here you go:\n```json\n" + `{"items":[
 		{"n":1,"cloze":"Je promène ___ au parc.","cloze_en":"I walk the dog in the park.","riddle":"I wag my tail at the postman."},
 		{"n":2,"cloze":"Le chat dort sur ___.","cloze_en":"The cat sleeps.","riddle":"I am a cat."},
@@ -411,6 +412,7 @@ func TestDirector(t *testing.T) {
 	f.balance = `{"is_available":true,"balance_infos":[]}`
 	s.SetProvider(DeepSeek)
 	s.SetKey(DeepSeek, "good-key")
+	s.ShareOnly([]words.Entry{{Prompt: "bread", Answers: []string{"le pain"}}})
 	f.replies = []string{`{"name":"The Drowned Pantry","theme":2,"intro":"Water drips on old loaves.",
 		"lore":["The cook hid le pain here.","http://bad","Beware the soup."],
 		"monsters":{"Green Slime":"Soggy Baguette","Dragon":"Nope","Cave Bat":"Fork 🍴 Bat"},"boss":"The Crust King"}`}
@@ -442,6 +444,7 @@ func TestDirectorQuest(t *testing.T) {
 	reply := `{"name":"The Pet Shop Vaults","theme":0,"intro":"Something barks below.","lore":[],"monsters":{},"boss":""}`
 	bread := words.Entry{Prompt: "bread", Answers: []string{"le pain"}, Tag: "food"}
 	dog := words.Entry{Prompt: "dog", Answers: []string{"le chien"}, Tag: "pets"}
+	s.ShareOnly([]words.Entry{bread, dog})
 	floor := Floor{Lang: french(), Depth: 2, Themes: []string{"Crypt"}, Words: []words.Entry{bread}, Monsters: []string{"Cave Bat"}}
 	prompt := func() string {
 		t.Helper()

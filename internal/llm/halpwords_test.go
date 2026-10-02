@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/halpworld/halpwords/pkg/gameai"
@@ -96,6 +97,7 @@ func TestHalpwordsContent(t *testing.T) {
 		{Prompt: "dog", Answers: []string{"le chien"}},
 		{Prompt: "cat", Answers: []string{"le chat"}},
 	}
+	s.ShareOnly(entries)
 	sc, err := s.Direct(ctx, Floor{Lang: french(), Depth: 1, Themes: []string{"Crypt"}, Words: entries,
 		Monsters: []string{"Cave Bat"}, Quest: "Pets", QuestID: "a1", QuestWords: entries[:1]})
 	if err != nil || sc.Name != "The Drowned Pantry" || sc.Names["Cave Bat"] != "Crumb Bat" {
@@ -135,5 +137,58 @@ func TestHalpwordsContent(t *testing.T) {
 	h.err = nil
 	if _, err := s.FillTaunts(ctx, french(), entries); !errors.Is(err, ErrBusy) {
 		t.Fatalf("asked again straight after the allowance ran out: %v", err)
+	}
+}
+
+// Only the words the game shares go to Halpwords AI, as to a provider: a
+// child's own words never do, and a request of own words only is not
+// made (#89).
+func TestHalpwordsOwnWordsStayHome(t *testing.T) {
+	s := Load(nil)
+	h := &fakeHalpwords{available: true, replies: map[string]string{
+		gameai.Director: `{"name":"The Drowned Pantry","theme":0,"intro":"Water drips.","lore":[],"monsters":{},"boss":""}`,
+		gameai.Cloze:    `{"items":[]}`,
+		gameai.Riddles:  `{"items":[]}`,
+		gameai.Taunts:   `{"taunts":[{"text":"Ton pain est à moi !","english":"Your bread is mine!"}]}`,
+		gameai.Insight:  `{"tips":[]}`,
+	}}
+	s.UseHalpwords(h)
+	ctx := context.Background()
+	dog := words.Entry{Prompt: "dog", Answers: []string{"le chien"}}
+	own := []words.Entry{
+		{Prompt: "zebrafish", Answers: []string{"le poisson-zèbre"}},
+		{Prompt: "dog", Answers: []string{"le chien", "le toutou"}, Tag: "my pets"},
+	}
+	// Until the game says what may go, nothing does.
+	if n, err := s.FillTaunts(ctx, french(), []words.Entry{dog}); n != 0 || err != nil || len(h.asked) != 0 {
+		t.Fatalf("asked before sharing: %d, %v, %v", n, err, h.asked)
+	}
+	s.ShareOnly([]words.Entry{dog})
+	mixed := append([]words.Entry{dog}, own...)
+	s.Direct(ctx, Floor{Lang: french(), Depth: 1, Words: mixed, QuestWords: own})
+	s.FillWords(ctx, french(), mixed)
+	s.FillTaunts(ctx, french(), mixed)
+	s.FillTips(ctx, french(), mixed)
+	if len(h.asked) != 5 {
+		t.Fatalf("asked %v", h.asked)
+	}
+	sent, _ := json.Marshal(h.reqs)
+	for _, w := range []string{"zebrafish", "toutou", "my pets"} {
+		if strings.Contains(string(sent), w) {
+			t.Errorf("Halpwords AI was sent %q: %s", w, sent)
+		}
+	}
+	// Own words only: no request, no error.
+	h.asked = nil
+	if sc, err := s.Direct(ctx, Floor{Lang: french(), Depth: 1, Words: own[:1]}); sc != nil || err != nil {
+		t.Errorf("Direct: %v, %v", sc, err)
+	}
+	for _, fill := range []func(context.Context, *words.Language, []words.Entry) (int, error){s.FillWords, s.FillTaunts, s.FillTips} {
+		if n, err := fill(ctx, french(), own[:1]); n != 0 || err != nil {
+			t.Errorf("fill: %d, %v", n, err)
+		}
+	}
+	if len(h.asked) != 0 {
+		t.Errorf("asked %v", h.asked)
 	}
 }

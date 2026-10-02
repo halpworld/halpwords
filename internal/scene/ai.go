@@ -38,6 +38,10 @@ type runAI struct {
 	tips     []int
 	misses   map[int]int // times each word was missed on this run
 	fails    int         // requests that failed in a row
+	// share is the words of the run that may go to the AI, by words.Key:
+	// those of its built-in and sent lists, never its own lists' (see
+	// shareFrom). llm.Service checks again for every request.
+	share map[string]bool
 
 	gen *puzzle.Generated // generated puzzles, when they can be used
 }
@@ -60,6 +64,44 @@ func newRunAI(ctx *game.Context) *runAI {
 		misses:    map[int]int{},
 		wordsFor:  -1,
 	}
+}
+
+// shareFrom notes which of the run's words may go to the AI: the words
+// of its lists a teacher or parent sent or assigned, and of its built-in
+// lists as the game ships them. A child's own list's words never go, nor
+// what they added to a copy of a built-in list, even a word that is also
+// in a built-in list the run doesn't play (#89).
+func (a *runAI) shareFrom(lists []*words.List) {
+	a.share = map[string]bool{}
+	for _, l := range lists {
+		var ok map[string]bool // nil: every word of l
+		if !link.IsAssigned(l) {
+			ok = map[string]bool{}
+			for _, s := range starterLists(&words.Language{Code: l.Language}) {
+				if s.File == l.File {
+					for _, e := range s.Entries {
+						ok[words.Key(e)] = true
+					}
+				}
+			}
+		}
+		for _, e := range l.Entries {
+			if k := words.Key(e); ok == nil || ok[k] {
+				a.share[k] = true
+			}
+		}
+	}
+}
+
+// shared returns the entries that may go to the AI, in order.
+func (a *runAI) shared(entries []words.Entry) []words.Entry {
+	var out []words.Entry
+	for _, e := range entries {
+		if a.share[words.Key(e)] {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // on reports whether the AI can be asked for things now.
@@ -136,7 +178,10 @@ func (a *runAI) direct(r *run, depth int) {
 	}
 	a.tries[depth]++
 	l := r.floor(depth)
-	f := llm.Floor{Lang: r.lang, Depth: depth, Words: floorWords(r, 12)}
+	f := llm.Floor{Lang: r.lang, Depth: depth, Words: a.shared(floorWords(r, 12))}
+	if len(f.Words) == 0 {
+		return // own words only: the floor keeps its own names
+	}
 	for _, t := range proc.Themes {
 		f.Themes = append(f.Themes, t.Name)
 	}
@@ -151,6 +196,7 @@ func (a *runAI) direct(r *run, depth int) {
 		f.Boss = b.Kind.Name
 	}
 	f.Quest, f.QuestID, f.QuestWords = r.directorAssignment()
+	f.QuestWords = a.shared(f.QuestWords)
 	svc := a.svc
 	a.directing[depth] = llm.Start(func() (*llm.Script, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -295,11 +341,17 @@ func (a *runAI) poll(c *Crawl) {
 	switch {
 	case a.wordsFor != r.depth && !r.hardcore():
 		a.wordsFor = r.depth
-		ws := floorWords(r, 16)
+		ws := a.shared(floorWords(r, 16))
+		if len(ws) == 0 {
+			return
+		}
 		start(func(ctx context.Context) (int, error) { return svc.FillWords(ctx, lang, ws) })
 	case !a.taunted && a.bank(r).TauntCount() < 16:
 		a.taunted = true
-		ws := floorWords(r, 20)
+		ws := a.shared(floorWords(r, 20))
+		if len(ws) == 0 {
+			return
+		}
 		start(func(ctx context.Context) (int, error) { return svc.FillTaunts(ctx, lang, ws) })
 	case len(a.tips) > 0:
 		var ws []words.Entry
@@ -307,6 +359,9 @@ func (a *runAI) poll(c *Crawl) {
 			ws = append(ws, r.deck.Entries()[id])
 		}
 		a.tips = nil
+		if ws = a.shared(ws); len(ws) == 0 {
+			return
+		}
 		start(func(ctx context.Context) (int, error) { return svc.FillTips(ctx, lang, ws) })
 	}
 }

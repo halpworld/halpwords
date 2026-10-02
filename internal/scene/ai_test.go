@@ -26,6 +26,7 @@ import (
 type aiFake struct {
 	mu    sync.Mutex
 	asked map[string]int // requests by kind
+	sent  []string       // every request body, as sent
 }
 
 var (
@@ -39,10 +40,14 @@ func (f *aiFake) serve(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"data":[{"id":"gpt-6-luna"}]}`)
 		return
 	}
+	raw, _ := io.ReadAll(r.Body)
+	f.mu.Lock()
+	f.sent = append(f.sent, string(raw))
+	f.mu.Unlock()
 	var body struct {
 		Messages []struct{ Content string }
 	}
-	json.NewDecoder(r.Body).Decode(&body)
+	json.Unmarshal(raw, &body)
 	prompt := body.Messages[len(body.Messages)-1].Content
 	var reply any
 	kind := ""
@@ -114,6 +119,7 @@ func aiContext(t *testing.T) (*game.Context, *aiFake) {
 		t.Fatalf("AI not ready: %s", ai.Problem())
 	}
 	ctx.AI = ai
+	ctx.ShareWithAI()
 	return ctx, f
 }
 

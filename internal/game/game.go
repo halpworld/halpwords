@@ -252,7 +252,25 @@ func (c *Context) LoadLists() error {
 	c.Lists = append(c.Lists, user...)
 	c.Lists = append(c.Lists, c.Link.Lists()...) // assigned lists
 	c.ListErrors = errs
+	c.ShareWithAI()
 	return nil
+}
+
+// ShareWithAI tells the AI which words it may be sent: the built-in
+// lists' and the lists a teacher or parent sent or assigned, never the
+// player's own (typed, imported or forged), nor what they added to a
+// copy of a built-in list (#89). It is called whenever the lists or the
+// AI change.
+func (c *Context) ShareWithAI() {
+	if c.AI == nil {
+		return
+	}
+	starters, _ := StarterLists() // embedded, as the game ships them
+	var share []words.Entry
+	for _, l := range append(starters, c.Link.Lists()...) {
+		share = append(share, l.Entries...)
+	}
+	c.AI.ShareOnly(share)
 }
 
 // ReloadSaves starts the game over on the files in the user's folder, as
@@ -272,6 +290,7 @@ func (c *Context) ReloadSaves() error {
 	c.lockSettings()
 	c.ApplyOptions()
 	c.AI = c.loadAI()
+	c.ShareWithAI()
 	return nil
 }
 
@@ -373,6 +392,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 	ctx.linkSeen = ctx.Link.Changes()
 	ctx.ApplyOptions()
 	ctx.AI = ctx.loadAI()
+	ctx.ShareWithAI()
 	if p := ctx.AI.Provider(); p != nil {
 		ctx.AI.Check(p.ID) // free: it lists the models the key can use
 	}

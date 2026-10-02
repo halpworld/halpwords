@@ -14,7 +14,7 @@ import (
 func (s *Service) FillWords(ctx context.Context, lang *words.Language, entries []words.Entry) (int, error) {
 	bank := s.Bank(lang.Code)
 	var todo []words.Entry
-	for _, e := range entries {
+	for _, e := range s.shareable(entries) {
 		if len(e.Answers) > 0 && bank.needsWords(e) {
 			todo = append(todo, e)
 			if len(todo) == gameai.WordBatch {
@@ -85,6 +85,9 @@ func CheckTaunt(text, english string, lang *words.Language) (Taunt, bool) {
 // FillTaunts asks for monster battle cries in lang, using words from
 // entries where it can, and keeps the ones that pass the checks.
 func (s *Service) FillTaunts(ctx context.Context, lang *words.Language, entries []words.Entry) (int, error) {
+	if entries = s.shareable(entries); len(entries) == 0 {
+		return 0, nil // the game's own taunts will do
+	}
 	var out gameai.TauntsReply
 	if h := s.halpwordsAI(); h != nil {
 		if err := s.askHalpwords(ctx, h, gameai.Taunts, wordsRequest(lang, entries[:min(len(entries), gameai.TauntWords)]), &out); err != nil {
@@ -112,7 +115,7 @@ func (s *Service) FillTaunts(ctx context.Context, lang *words.Language, entries 
 func (s *Service) FillTips(ctx context.Context, lang *words.Language, entries []words.Entry) (int, error) {
 	bank := s.Bank(lang.Code)
 	var todo []words.Entry
-	for _, e := range entries {
+	for _, e := range s.shareable(entries) {
 		if _, ok := bank.Tip(e); !ok && len(e.Answers) > 0 {
 			todo = append(todo, e)
 			if len(todo) == gameai.TipBatch {

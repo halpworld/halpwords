@@ -16,7 +16,16 @@ type Floor = gameai.Floor
 type Script = gameai.Script
 
 // Direct asks the Dungeon Director for a floor script.
+//
+// Only words that may be shared go (ShareOnly). A floor with words, none
+// of which may go, gets no script, and no request is made: the floor
+// keeps its own names.
 func (s *Service) Direct(ctx context.Context, f Floor) (*Script, error) {
+	had := len(f.Words) + len(f.QuestWords)
+	f.Words, f.QuestWords = s.shareable(f.Words), s.shareable(f.QuestWords)
+	if had > 0 && len(f.Words)+len(f.QuestWords) == 0 {
+		return nil, nil
+	}
 	var out gameai.ScriptReply
 	if h := s.halpwordsAI(); h != nil {
 		if err := s.askHalpwords(ctx, h, gameai.Director, directorRequest(f), &out); err != nil {
