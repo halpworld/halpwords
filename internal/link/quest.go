@@ -34,6 +34,11 @@ type QuestSettings struct {
 	// SetBy is the role of the grown-up who set the assignment:
 	// "teacher" or "guardian".
 	SetBy string `json:"set_by,omitempty"`
+	// LockLists is "Lock to this list" (#89): while the assignment is
+	// open, the learner's Adventure and Practice play its list only. The
+	// server marks the lists it locks (ListInfo.Locked), which is what
+	// the game goes by; older servers leave it out.
+	LockLists bool `json:"lock_lists,omitempty"`
 }
 
 // Starts is when the quest's answers start counting; zero if the server

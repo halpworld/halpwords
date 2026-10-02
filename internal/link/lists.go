@@ -27,6 +27,11 @@ type wireList struct {
 	Text     string `json:"text"`
 	// Riddles came with W4.8; older servers leave them out.
 	Riddles []ListRiddle `json:"riddles,omitempty"`
+	// Source, SentAt and Locked came with sent lists (#89); older
+	// servers leave them out, and their lists are assignment lists.
+	Source string `json:"source,omitempty"`
+	SentAt string `json:"sent_at,omitempty"`
+	Locked bool   `json:"locked,omitempty"`
 }
 
 // Lists returns the assigned lists, read-only: the game plays them like
@@ -39,6 +44,29 @@ func (c *Client) Lists() []*words.List {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.lists)
+}
+
+// Where a list on the server's shelf comes from (ListInfo.Source).
+const (
+	SourceAssignment = "" // an assignment's list, or a server that doesn't say
+	SourceSent       = "sent"
+)
+
+// Info returns what the server said about l, one of the lists Lists
+// returns (by its File), and whether it is one.
+func (c *Client) Info(l *words.List) (ListInfo, bool) {
+	if c == nil || !IsAssigned(l) {
+		return ListInfo{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, li := range c.st.Lists {
+		if AssignedDir+"/"+li.File == l.File {
+			li.Riddles = nil // not the caller's to change
+			return li, true
+		}
+	}
+	return ListInfo{}, false
 }
 
 // IsAssigned reports whether a list (by its File) is an assigned list.
@@ -146,7 +174,11 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 	}
 	var lists []got
 	for _, w := range body.Lists {
-		li := ListInfo{ID: w.ID, Version: w.Version, Title: w.Title, Language: w.Language, File: fileFor(w.ID), Riddles: w.Riddles}
+		li := ListInfo{ID: w.ID, Version: w.Version, Title: w.Title, Language: w.Language, File: fileFor(w.ID), Riddles: w.Riddles,
+			Locked: w.Locked}
+		if w.Source == SourceSent {
+			li.Source, li.SentAt = SourceSent, parseTime(w.SentAt)
+		}
 		l, err := words.Parse(strings.NewReader(w.Text), AssignedDir+"/"+li.File)
 		if err != nil || len(l.Entries) == 0 || !knownLang(l.Language) {
 			continue // a list this game can't read is left out

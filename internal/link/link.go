@@ -199,6 +199,16 @@ type ListInfo struct {
 	// Audio is the version of the list whose audio pack is kept next to
 	// it (audio.go), or 0.
 	Audio int `json:",omitempty"`
+	// Source is SourceSent for a list a grown-up sent to the game, or
+	// SourceAssignment (also when a list is both, and from older
+	// servers).
+	Source string `json:",omitempty"`
+	// SentAt is when a sent list was sent; zero for other lists.
+	SentAt time.Time `json:",omitzero"`
+	// Locked is set while an open assignment for the learner, with "Lock
+	// to this list", names the list: Adventure and Practice then play the
+	// locked lists only.
+	Locked bool `json:",omitempty"`
 }
 
 // ListRiddle is a riddle for one of a list's words, by its English.
