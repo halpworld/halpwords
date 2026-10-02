@@ -119,6 +119,7 @@ func (c *Client) link(ctx context.Context, s SignIn, seq int) error {
 // signedIn keeps the tokens of a new sign-in made the way way. c.mu is
 // held.
 func (c *Client) signedIn(t tokens, way string) {
+	c.releasePending()
 	c.gen++
 	c.st = state{NextSeq: c.st.NextSeq, LinkedAt: c.now(), Way: way}
 	c.q = queue{}
@@ -610,6 +611,7 @@ func (c *Client) lost(gen int) {
 // unlink does Unlink. c.mu is held. With keepFiles, the queue file and the
 // state file are left as they are on disk (parkForUnlink says when).
 func (c *Client) unlink(keepFiles bool) {
+	c.releasePending()
 	if c.o.Store != nil {
 		for _, li := range c.st.Lists {
 			c.moveOut(li)
@@ -623,6 +625,11 @@ func (c *Client) unlink(keepFiles bool) {
 	c.q = queue{}
 	c.dirty = false
 	c.unlinkPending = keepFiles
+	if keepFiles {
+		// The state on disk is kept as it is: tokens that couldn't be
+		// written are not written over it (Close).
+		c.stateUnsaved = false
+	}
 	if c.o.Store != nil && !keepFiles {
 		c.o.Store.Remove(queueFile)
 	}

@@ -1,6 +1,8 @@
 package link
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -157,5 +159,67 @@ func TestParkRetriedOnSave(t *testing.T) {
 		if n := sentAfterRestart(t, f, st, clk); n != 1 {
 			t.Errorf("try %v: %d answers stored, want 1", try, n)
 		}
+	}
+}
+
+// A link lost with full storage keeps the old queue file on disk. Another
+// learner linking must not leave it there: a tab that closed before the
+// next save would send the first learner's events as the second.
+func TestKeptQueueGoesWhenAnotherLinks(t *testing.T) {
+	f, c, st, _ := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	ls := &limitStore{memStore: st, limit: storeUsed(st)}
+	c.mu.Lock()
+	c.o.Store = ls
+	c.mu.Unlock()
+	loseLink(t, f, c)
+	if !st.has(queueFile) {
+		t.Fatal("test setup: the queue file wasn't kept")
+	}
+	f.mu.Lock()
+	f.code = "QRST-VWXY"
+	f.mu.Unlock()
+	if err := c.LinkNow(context.Background(), "QRSTVWXY"); err != nil {
+		t.Fatal(err)
+	}
+	// No save, no Close: the tab closes here.
+	if st.has(queueFile) {
+		t.Error("the first learner's queue file is still there after another linked")
+	}
+	c.mu.Lock()
+	kept := len(c.parked)
+	c.mu.Unlock()
+	if kept != 1 {
+		t.Errorf("%d parked entries in memory, want 1", kept)
+	}
+}
+
+// Quitting with unwritten tokens must not write the unlinked state over
+// the one kept for the events that couldn't be parked.
+func TestCloseKeepsLinkStateWhilePending(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	ls := &limitStore{memStore: st, limit: storeUsed(st)}
+	c.mu.Lock()
+	c.o.Store = ls
+	c.stateUnsaved = true // new tokens that were never written
+	c.mu.Unlock()
+	loseLink(t, f, c)
+	c.Close()
+	var saved state
+	if err := json.Unmarshal(st.files[stateFile], &saved); err != nil || !saved.linked() {
+		t.Fatalf("link.json after Close: %+v, %v: the link was forgotten", saved, err)
+	}
+	if !st.has(queueFile) {
+		t.Fatal("the queue file went")
+	}
+	if n := sentAfterRestart(t, f, st, clk); n != 1 {
+		t.Fatalf("%d answers stored after a restart, want 1", n)
 	}
 }

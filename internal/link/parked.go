@@ -83,10 +83,15 @@ func (c *Client) parkForUnlink() (keepFiles bool) {
 	if err != nil && c.o.Store != nil && q.len() > 0 {
 		c.o.Store.Remove(queueFile)
 		if err = c.writeParked(); err != nil {
-			// Put back what was removed (there is room for it).
-			if data, merr := json.Marshal(q); merr == nil {
-				c.o.Store.Write(queueFile, data)
+			// Put back what was removed (there is room for it). If
+			// that fails too, the events are only in the parked events
+			// in memory; the retries write those, and the state file
+			// stays as it is (pending).
+			data, merr := json.Marshal(q)
+			if merr == nil {
+				merr = c.o.Store.Write(queueFile, data)
 			}
+			_ = merr
 		}
 	}
 	return err != nil
@@ -105,14 +110,34 @@ func (c *Client) retryParked() (wrote bool, err error) {
 	}
 	if c.unlinkPending {
 		c.unlinkPending = false
+		// The queue file goes before the state is written unlinked: a
+		// game that stops in between must not start unlinked with the
+		// old queue.
+		c.o.Store.Remove(queueFile)
 		if !c.st.linked() {
 			c.saveState()
 		}
-		// The queue file goes, or is replaced by the queue now.
+		// The queue file is written again if there is a queue now.
 		c.dirty = true
 		return true, nil
 	}
 	return false, nil
+}
+
+// releasePending is called before another link starts (or the game is
+// unlinked): the old queue file must not stay on disk, or a game that
+// stops before its next save would send the first learner's events as the
+// next. The parked events are written if they can be; if not, they stay
+// in memory, and removing the file needs no room. c.mu is held.
+func (c *Client) releasePending() {
+	if !c.unlinkPending || c.o.Store == nil {
+		return
+	}
+	if _, err := c.retryParked(); err == nil && !c.unlinkPending {
+		return
+	}
+	c.o.Store.Remove(queueFile)
+	c.unlinkPending = false
 }
 
 // unpark adds the events kept for the learner to the queue, and reports
