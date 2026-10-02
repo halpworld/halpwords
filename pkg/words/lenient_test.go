@@ -1,6 +1,7 @@
 package words
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -104,5 +105,27 @@ func TestParseLenientEmpty(t *testing.T) {
 	l, probs := ParseLenient(strings.NewReader(""), "e.txt")
 	if l == nil || len(l.Entries) != 0 || len(probs) != 0 {
 		t.Errorf("got %+v %v", l, probs)
+	}
+}
+
+// The 8-word example in the README's "Your own word lists" has no problems.
+func TestREADMEExample(t *testing.T) {
+	data, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Skip(err)
+	}
+	s := string(data)
+	_, s, ok := strings.Cut(s, "## Your own word lists")
+	if !ok {
+		t.Fatal("no such section")
+	}
+	_, s, _ = strings.Cut(s, "```text\n")
+	s, _, _ = strings.Cut(s, "```")
+	l, probs := ParseLenient(strings.NewReader(s), "homework.txt")
+	if len(probs) != 0 || len(l.Entries) != 8 || l.Language != "fr" {
+		t.Errorf("%d words, language %q, problems %v", len(l.Entries), l.Language, probs)
+	}
+	if _, err := Parse(strings.NewReader(s), "homework.txt"); err != nil {
+		t.Error(err)
 	}
 }
