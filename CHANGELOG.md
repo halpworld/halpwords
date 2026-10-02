@@ -184,10 +184,61 @@ version as its release notes.
   entry, and `ListHash` is unchanged.
 
 - **Daily and seed runs now give the same monsters on every machine.**
-  Monster HP no longer rounds differently on Apple Silicon, so a few
-  monsters have 1 more HP than before. `HALPWORDS_SEED` is now masked to a
-  30-bit seed like other seeds.
+  Monster HP and ATK are now whole-number maths, so they no longer round
+  differently on Apple Silicon, and a few monsters have 1 more or 1 less
+  HP or ATK than before (accepted, so one set of golden hashes serves every
+  platform). `HALPWORDS_SEED` is now masked to a 30-bit seed like other
+  seeds, and a floor below 1 is treated as floor 1. (#78, #79, #59)
 
+- **A Daily counts only if it is finished on its own day.** A Daily run
+  that ends after midnight, or whose day is unknown, is no longer
+  ranked. The game says so when you suspend and at game over, and the
+  unranked line fits the panel. (#58)
+
+- **The "We've moved" page keeps secrets out of the address.** The page
+  no longer puts the link files (refresh tokens and learner IDs), the
+  queued and parked answers, `ai.json` (AI keys), `crash.txt` or the
+  reports folder (what a child wrote in a report, and crash text) into
+  the `#import=` part of the new address. The page and the game now
+  agree on what moves, and a test compares them. Tokens already in the
+  history of an old address cannot be taken back; sign out on a shared
+  computer. (#66)
+- **Importing moved saves is complete.** The saves land at the save
+  root, not in the current learner's folder; the game starts over on
+  them; and every folder is unlinked after its queued answers are sent,
+  so no link file is left to be used again (the game links again at its
+  new address). A learner who is not in the import loses their link files
+  too. (#66)
+- **Answers not yet sent survive a full local storage.** If the browser
+  has no room, the game removes the queue file to make room for the
+  parked answers instead of losing them, keeps the queue and sign-in
+  state on disk if that fails too, and tries again on the next save.
+  Another sign-in can no longer send a kept queue as another learner. (#66)
+
+- **Sync keeps going when one part fails.** Lists, assignments, word
+  memory, runs, ranks and audio each run even if an earlier one failed;
+  the first error is shown. An unlink or a refused token still stops the
+  rest. (#56)
+- **A totals event is never changed after it was sent.** It is marked and
+  saved before the request, so answers added after a failed or slow
+  upload make a new event, and a killed game can't change one the server
+  may hold. (#55)
+- **Assigned lists are fetched again after one was dropped or skipped**,
+  and the list tag is used only by the game version that made it. (#41)
+- **Audio packs download in the background** with their own limits, don't
+  make AI calls or a Play Together room wait, and stop when the learner
+  is unlinked. A list whose pack keeps failing is tried less often. (#35)
+- **Waking at a shrine undoes words that were first Perfect after it.**
+  The hero and the word memory go back together. (#57)
+- **Played time counts only exploring, battles and puzzles**, and the
+  rankings check no longer fails an honest, quick run. Part 1 of #53; the
+  rest of #53 is for the next round.
+- **School sign-in is safer and easier to cancel.** The sign-in code is
+  bound to this game with a PKCE verifier (an older server ignores it),
+  tokens that arrive after Esc are revoked, Esc cancels a request in
+  flight, and a rate limit says how long to wait. The remote-unlink note
+  no longer says "on the website", and "1 second" is singular. (#67,
+  #69, #70)
 - **A sign-out on a shared computer no longer opens another child's
   progress.** After a sign-out or removal at school, the game plays as a
   new guest (no lock, no sign-in, a name it gave), or as one who played

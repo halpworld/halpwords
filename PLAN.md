@@ -201,6 +201,16 @@ bread = le pain
   | Live typo highlighting | on · off | *off* (the Rune of Clarity gives it for one battle) |
   | Timer speed | relaxed · normal · fast | *normal* |
 
+*Now (bug-fix round 3, #51, done):* an answer is at most
+`words.MaxAnswerRunes` (60, NFC runes) letters, the width of the typing
+field at the narrowest panel and smallest text, and a Boss Raid's answer
+cap. Decision: Deck, practice, puzzles and monsters **skip** an entry
+longer than that when dealing (`words.TooLong`, `List.TooLong`); `Parse`
+still accepts it, and a list whose answers are all too long still deals.
+Entry ids, `ListHash` and the deal for normal lists are unchanged. The
+raid cap went from 40 to 60, a change to the play API contract: **deploy
+the server before the game.**
+
 ### 4a. Language-specific details
 - **French:** é è ê ë à â ç î ï ô ù û ü œ.
   - With articles *optional*, `chien` and `le chien` are both accepted.
@@ -393,6 +403,15 @@ damage      = ATK × accuracy × speed × combo × (CRIT 1.5 if Perfect and spee
   that is when you learn it.
 - **Feedback:** floating damage numbers, "PERFECT / CRITICAL / GRAZE" pop-ups,
   hit flash, screen shake, and a different SFX for each tier.
+
+*Now (bug-fix round 3, #78, done):* monster HP and ATK scaling, the
+chances that gate generation, the word target, combo, gold find and the
+plausible-damage ceiling use integer maths, so the same seed gives the same
+dungeon on every platform whether or not the compiler fuses a multiply and
+an add. Decision (owner): a shift of 1 HP or ATK on a few monsters is
+accepted, and there is one set of golden hashes (no fused/unfused split).
+A depth below 1 is floor 1, and `HALPWORDS_SEED` is masked to
+`compete.SeedBits` (#59, #79).
 
 ### Monster traits (variety without art)
 | Trait | Effect |
@@ -621,6 +640,11 @@ mastery (SRS data) is **always** kept, so every run makes you better.
   - A local **Hall of Fame** lists the top 10 per language and per mode.
 - An online leaderboard is a possible later addition (it needs a small server,
   which is out of scope for now).
+
+*Now (bug-fix round 3, #58, done):* decision (owner): a Daily counts only
+if it is **finished on its own day**. A Daily that ends on another day, or
+whose day is unknown, is never ranked, and the game says so when you
+suspend and at game over.
 
 *Now (M5, done):* `internal/compete` (now `pkg/compete`) (no Ebitengine dependency) holds the
 score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
@@ -1057,6 +1081,20 @@ the parts (`move.Receive`), asks before replacing progress already there
 (`scene.moveAsk`), imports once and clears the fragment. The cut-over steps
 for people, and the proposed release workflow, are in
 [docs/RELEASING.md](docs/RELEASING.md) and `docs/cutover/release.yml`.
+
+*Now (bug-fix round 3, #66, done):* decisions for the move. **What moves**
+is what `move.Exportable` says, and `web/moved/moved.js` matches it by the
+last part of the name (a parity test compares a table of names): the hero,
+word memory, own lists, Hall of Fame and settings. Link files, the answer
+queue and parked answers, `ai.json`, `crash.txt` and the `reports/` folder
+stay behind, so no token, AI key, crash text or child's report is in the
+URL. (Tokens already in old URLs' history cannot be recalled.) **Import**
+writes at the save root and replaces the whole device's saves after asking
+(unchanged design); the game then starts over on them, and **every folder
+is unlinked** after its queued events are sent (bounded by the link's own
+timeouts), whether or not the import names it, and links again at its new
+address. Parked events survive full storage, and a kept queue can't be sent
+under another learner.
 
 ---
 
