@@ -54,6 +54,11 @@ func TestListsKeptWithTheSettings(t *testing.T) {
 	if !q.Settings.Lists.WasSeen("lst_1") || len(q.Settings.Lists.Seen) != 1 {
 		t.Errorf("seen %v", q.Settings.Lists.Seen)
 	}
+	// The lists a learner had are known, not new.
+	q.Settings.Lists.Know("la", []string{"file:la.txt", "lst_1"})
+	if !q.Settings.Lists.Knows("la") || q.Settings.Lists.Knows("fr") || !q.Settings.Lists.WasSeen("file:la.txt") || len(q.Settings.Lists.Seen) != 2 {
+		t.Errorf("known %v, seen %v", q.Settings.Lists.Known, q.Settings.Lists.Seen)
+	}
 	// An empty pick is no pick: every list is ticked.
 	q.Settings.Lists.Pick("fr", nil)
 	if _, ok := q.Settings.Lists.Picked("fr"); ok {

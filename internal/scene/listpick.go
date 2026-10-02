@@ -3,6 +3,7 @@ package scene
 import (
 	"fmt"
 	"image/color"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -260,13 +261,17 @@ func (p *ListPick) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawShadow(dst, fit(f, keys, game.ScreenW-16, 1), 8, game.ScreenH-20, 1, pal.Ash)
 }
 
-// note is the line under the heading: news of a list sent to the game,
-// or the lock.
+// note is the line under the heading: the lists new to the learner, or
+// the lock.
 func (p *ListPick) note() (string, color.RGBA) {
+	var titles []string
 	for _, r := range p.rows {
 		if r.isNew {
-			return "New: " + r.list.Title, pal.Lime
+			titles = append(titles, r.list.Title)
 		}
+	}
+	if len(titles) > 0 {
+		return "New: " + strings.Join(titles, ", "), pal.Lime
 	}
 	if p.locked {
 		return "An assignment locks these lists. Your teacher chose them.", pal.Sky

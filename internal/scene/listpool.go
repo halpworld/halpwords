@@ -8,6 +8,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/link"
+	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -132,16 +133,33 @@ type listRow struct {
 }
 
 // listRows lays out the word lists in lang for the checklist, newest
-// first, ticked as pickedPool would play them. A sent list the learner
-// has not been told about is ticked once and marked new; it is then
-// remembered as seen, in the learner's settings.
+// first, ticked as pickedPool would play them. A list the learner has not
+// been told about (their own, imported, sent or assigned) is ticked once,
+// marked new and put first; it is then remembered as seen, in the
+// learner's settings. The first time, the lists the learner already has
+// are remembered as seen without being announced; lists sent to the game
+// are still announced.
 func listRows(ctx *game.Context, lang *words.Language) []*listRow {
 	all := ctx.ListsFor(lang.Code)
 	locked := lockedLists(ctx, lang)
 	pool := pickedPool(ctx, lang)
 	starts := questStarts(ctx)
-	rows := make([]*listRow, 0, len(all))
 	changed, keys := false, slices.Clone(pool.keys)
+	var seen *profile.Lists
+	if ctx.Profile != nil {
+		seen = &ctx.Profile.Settings.Lists
+		if !seen.Knows(lang.Code) {
+			var had []string
+			for _, l := range all {
+				if li, ok := ctx.Link.Info(l); !ok || li.Source != link.SourceSent {
+					had = append(had, listKey(l))
+				}
+			}
+			seen.Know(lang.Code, had)
+			changed = true
+		}
+	}
+	rows := make([]*listRow, 0, len(all))
 	for _, l := range all {
 		r := &listRow{list: l, key: listKey(l)}
 		r.ticked = pool.keys == nil || slices.Contains(pool.keys, r.key)
@@ -153,17 +171,17 @@ func listRows(ctx *game.Context, lang *words.Language) []*listRow {
 			if !r.sent {
 				r.when = starts[li.ID]
 			}
-			if r.sent && ctx.Profile != nil && !ctx.Profile.Settings.Lists.WasSeen(li.ID) {
-				r.isNew = true
-				ctx.Profile.Settings.Lists.See(li.ID)
-				changed = true
-				if len(locked) == 0 && !r.ticked {
-					r.ticked = true
-					keys = append(keys, r.key)
-				}
-			}
 		} else if !save.InMemory() {
 			r.when = save.ModTime(game.WordsDir + "/" + l.File) // zero for a starter
+		}
+		if seen != nil && !seen.WasSeen(r.key) {
+			r.isNew = true
+			seen.See(r.key)
+			changed = true
+			if len(locked) == 0 && !r.ticked {
+				r.ticked = true
+				keys = append(keys, r.key)
+			}
 		}
 		if len(locked) > 0 {
 			r.ticked = r.locked
@@ -176,13 +194,20 @@ func listRows(ctx *game.Context, lang *words.Language) []*listRow {
 		}
 		ctx.Profile.SaveSettings()
 	}
-	// Newest first. Lists with no time keep the game's order backwards:
-	// lists from the server, then the player's own, then the starters.
+	// New lists first, then newest first. Lists with no time (every list
+	// on the web) keep the game's order backwards: lists from the server,
+	// then the player's own, then the starters.
 	order := map[*listRow]int{}
 	for i, r := range rows {
 		order[r] = i
 	}
 	slices.SortStableFunc(rows, func(a, b *listRow) int {
+		if a.isNew != b.isNew {
+			if a.isNew {
+				return -1
+			}
+			return 1
+		}
 		if c := b.when.Compare(a.when); c != 0 {
 			return c
 		}

@@ -261,8 +261,9 @@ the server before the game.**
   same lists, Space ticks a list, A ticks all or none. Start needs a word,
   and under 5 words a warning shows. Each learner's pick is kept in
   settings.json (`Lists.Selected`, `Lists.Seen`), and no pick means every
-  list. A list sent to the game is ticked once and announced with
-  "New: …". Lists an assignment locks are the only ones Adventure and
+  list. Any list new to the learner (their own, imported, sent or
+  assigned) is ticked once, listed first and announced with "New: …".
+  The lists they had the first time are known, not new. Lists an assignment locks are the only ones Adventure and
   Practice play. Assignment runs, Race and Raid are unchanged. Daily and
   Hardcore play the built-in lists only, for both the words and the Daily
   seed. The server keeps `list_hash` as an opaque board key and never

@@ -393,7 +393,7 @@ func TestSentListIsTickedOnce(t *testing.T) {
 	if lp.rows[0].key != "lst_numbers" || lp.rows[1].key != "lst_colours" {
 		t.Errorf("not newest first: %s, %s", lp.rows[0].key, lp.rows[1].key)
 	}
-	if note, _ := lp.note(); note != "New: Numbers" && note != "New: Colours" {
+	if note, _ := lp.note(); note != "New: Numbers, Colours" {
 		t.Errorf("note %q", note)
 	}
 	keys, _ := lp.ticked()
@@ -492,5 +492,87 @@ func TestChecklistKeepsRunsDeterministic(t *testing.T) {
 		if a.Prompt != b.Prompt {
 			t.Fatalf("dealt %q and %q", a.Prompt, b.Prompt)
 		}
+	}
+}
+
+// "Type 8 words tonight, then play" (#89): a list the learner makes after
+// they ticked some is ticked once and announced, first on the checklist;
+// the lists they had before are not new.
+func TestOwnListMadeAfterAPick(t *testing.T) {
+	ctx := testContext(t)
+	ctx.Input = &input.State{}
+	fr, _ := words.Lookup("fr")
+	ctx.Lists = append(ctx.Lists, ownList(t, "three.txt", threeWords))
+
+	// The first checklist: nothing is new, and the learner picks Three.
+	lp := adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	if note, _ := lp.note(); note != "" {
+		t.Fatalf("the lists the learner had are new: %q", note)
+	}
+	next := ctx.TestScenes(lp)
+	update(t, ctx, lp, ebiten.KeyA)
+	lp.sel = slices.IndexFunc(lp.rows, func(r *listRow) bool { return r.key == "file:three.txt" })
+	update(t, ctx, lp, ebiten.KeySpace)
+	update(t, ctx, lp, ebiten.KeyEnter)
+	next()
+
+	// Tonight they type 8 words, and a teacher's list comes too.
+	ctx.Lists = append(ctx.Lists, ownList(t, "tonight.txt", eight),
+		ownList(t, "week40.txt", "title: Week 40\nlanguage: fr\n\ncat = le chat\n"))
+	lp = adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	if note, _ := lp.note(); note != "New: Week 40, Tonight" {
+		t.Errorf("note %q", note)
+	}
+	if !lp.rows[0].isNew || !lp.rows[1].isNew || lp.rows[0].key != "file:week40.txt" {
+		t.Errorf("new lists not first: %s, %s", lp.rows[0].key, lp.rows[1].key)
+	}
+	keys, n := lp.ticked()
+	if len(keys) != 3 || n != 12 {
+		t.Fatalf("ticked %v (%d words)", keys, n)
+	}
+	// Enter plays them at once; the pick keeps them.
+	next = ctx.TestScenes(lp)
+	update(t, ctx, lp, ebiten.KeyEnter)
+	if pick := next().(*ClassPick); newRun(ctx, fr, rpg.Rogue, pick.setup).deck.Len() != 12 {
+		t.Error("the new lists were not played")
+	}
+	// Next time they are not new, and an unticked one stays unticked.
+	lp = adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	if note, _ := lp.note(); note != "" {
+		t.Errorf("still new: %q", note)
+	}
+	lp.sel = slices.IndexFunc(lp.rows, func(r *listRow) bool { return r.key == "file:week40.txt" })
+	next = ctx.TestScenes(lp)
+	update(t, ctx, lp, ebiten.KeySpace)
+	update(t, ctx, lp, ebiten.KeyEnter)
+	next()
+	lp = adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	if keys, _ := lp.ticked(); slices.Contains(keys, "file:week40.txt") || len(keys) != 2 {
+		t.Errorf("ticked %v", keys)
+	}
+	// Practice plays the pick without the checklist: the new list is in
+	// it once the checklist was shown.
+	if p := NewPractice(ctx).(*Practice); p.deck.Len() != 11 {
+		t.Errorf("practice deals from %d words", p.deck.Len())
+	}
+}
+
+// A learner with a pick from before lists were remembered as seen has
+// their lists known, not announced, the first time.
+func TestSeenIsSeededForOldPicks(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	ctx.Lists = append(ctx.Lists, ownList(t, "three.txt", threeWords), ownList(t, "tonight.txt", eight))
+	ctx.Profile.Settings.Lists.Pick("fr", []string{"file:three.txt"})
+	lp := adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	if note, _ := lp.note(); note != "" {
+		t.Errorf("note %q", note)
+	}
+	if keys, _ := lp.ticked(); !slices.Equal(keys, []string{"file:three.txt"}) {
+		t.Errorf("ticked %v", keys)
+	}
+	l := ctx.Profile.Settings.Lists
+	if !l.Knows("fr") || !l.WasSeen("file:tonight.txt") || l.Knows("la") {
+		t.Errorf("seen %v, known %v", l.Seen, l.Known)
 	}
 }

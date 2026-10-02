@@ -61,14 +61,20 @@ type Settings struct {
 }
 
 // Lists are the word lists ticked on the checklist before a run, by
-// language code, and the sent lists already announced as new.
+// language code, and the lists the learner already knows of, so a list
+// that is new to them is ticked once and announced.
 type Lists struct {
 	// Selected are the keys of the lists ticked last, by language code.
 	// A language with none saved has every list ticked.
 	Selected map[string][]string `json:",omitempty"`
-	// Seen are the server ids of the sent lists the learner has been
-	// told about ("New: <title>").
+	// Seen are the keys of every list the learner knows of: their own,
+	// imported, sent and assigned lists alike. A list not in Seen is
+	// announced ("New: <title>") and ticked once.
 	Seen []string `json:",omitempty"`
+	// Known are the languages whose lists were put in Seen the first
+	// time the checklist was shown, so the lists a learner already had
+	// are not announced as new.
+	Known []string `json:",omitempty"`
 }
 
 // Picked returns the keys of the lists ticked last in language code, and
@@ -91,13 +97,28 @@ func (l *Lists) Pick(code string, keys []string) {
 	l.Selected[code] = slices.Clone(keys)
 }
 
-// WasSeen reports whether the sent list with server id was announced.
-func (l Lists) WasSeen(id string) bool { return slices.Contains(l.Seen, id) }
+// WasSeen reports whether the list with key was announced, or was there
+// before.
+func (l Lists) WasSeen(key string) bool { return slices.Contains(l.Seen, key) }
 
-// See marks the sent list with server id as announced.
-func (l *Lists) See(id string) {
-	if !l.WasSeen(id) {
-		l.Seen = append(l.Seen, id)
+// See marks the list with key as announced.
+func (l *Lists) See(key string) {
+	if !l.WasSeen(key) {
+		l.Seen = append(l.Seen, key)
+	}
+}
+
+// Knows reports whether the lists in language code were put in Seen.
+func (l Lists) Knows(code string) bool { return slices.Contains(l.Known, code) }
+
+// Know puts keys, the lists the learner already has in language code, in
+// Seen without announcing them.
+func (l *Lists) Know(code string, keys []string) {
+	for _, k := range keys {
+		l.See(k)
+	}
+	if !l.Knows(code) {
+		l.Known = append(l.Known, code)
 	}
 }
 
