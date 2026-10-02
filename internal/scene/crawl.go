@@ -258,11 +258,20 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 	return 0, false
 }
 
+// countPlayed adds a tick to the run's played time, if the hero is in the
+// dungeon: exploring, in a battle or at a puzzle, not in a menu or paused.
+func (c *Crawl) countPlayed() {
+	switch c.mode {
+	case modeExplore, modeBattle, modePuzzle:
+		c.run.played += 1 / float64(ebiten.TPS())
+	}
+}
+
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
 	c.afterClose(ctx, time.Now())
 	c.run.ai.poll(c)
-	c.run.played += 1 / float64(ebiten.TPS())
+	c.countPlayed()
 	if c.run.race != nil {
 		// A race sends only its progress, to the room.
 		if c.updateRace(ctx) {

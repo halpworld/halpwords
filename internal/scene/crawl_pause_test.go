@@ -66,3 +66,48 @@ func TestUnsavedProgress(t *testing.T) {
 		t.Fatal("turning around did not count as progress")
 	}
 }
+
+// Time in the pause menu and other menus is not played time, and the
+// pause menu's "unsaved" check does not count it, so quitting right after
+// a save does not warn.
+func TestPausedTimeIsNotPlayedTime(t *testing.T) {
+	useTempDir(t)
+	ctx := testContext(t)
+	c := testCrawl(t, ctx)
+	c.pray(ctx)
+	before := c.run.played
+	c.pause(ctx)
+	for i := 0; i < 120; i++ {
+		if err := c.Update(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c.run.played != before {
+		t.Fatalf("paused for 120 ticks: played %v -> %v", before, c.run.played)
+	}
+	for _, m := range []mode{modeMap, modeQuit, modeShop, modeItems, modeCampfire, modeShrine, modeDead} {
+		c.mode = m
+		c.countPlayed()
+		if c.run.played != before {
+			t.Fatalf("mode %d counted as played time", m)
+		}
+	}
+	for _, m := range []mode{modeExplore, modeBattle, modePuzzle} {
+		c.run.played = before
+		c.mode = m
+		c.countPlayed()
+		if c.run.played <= before {
+			t.Fatalf("mode %d did not count as played time", m)
+		}
+	}
+	// Played time alone is not an unsaved change.
+	c.mode = modeExplore
+	c.run.played += 30
+	if c.hasUnsaved() {
+		t.Fatal("played time made a saved game unsaved")
+	}
+	c.run.hero.Gold++
+	if !c.hasUnsaved() {
+		t.Fatal("a change was missed")
+	}
+}

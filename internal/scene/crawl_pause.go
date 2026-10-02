@@ -2,6 +2,7 @@ package scene
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"slices"
 
@@ -175,7 +176,20 @@ func (c *Crawl) hasUnsaved() bool {
 		return true
 	}
 	data, err := encodeSave(c.run, c.level, c.pos, c.facing, true)
-	return err != nil || !bytes.Equal(data, c.lastSave)
+	return err != nil || !sameSave(data, c.lastSave)
+}
+
+// sameSave reports whether two saves are the same game, not counting how
+// long it was played.
+func sameSave(a, b []byte) bool {
+	var sa, sb saveFile
+	if json.Unmarshal(a, &sa) != nil || json.Unmarshal(b, &sb) != nil {
+		return bytes.Equal(a, b)
+	}
+	sa.Played, sb.Played = 0, 0
+	ja, erra := json.Marshal(sa)
+	jb, errb := json.Marshal(sb)
+	return erra == nil && errb == nil && bytes.Equal(ja, jb)
 }
 
 // drawPause draws the pause menu over the view.
