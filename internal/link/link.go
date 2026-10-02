@@ -246,8 +246,11 @@ type state struct {
 	// NextSeq is the sequence number of the next event. It only grows,
 	// even across unlinking, so no number is ever used twice.
 	NextSeq   int64
-	Me        *Me        `json:",omitempty"`
-	ListsETag string     `json:",omitempty"`
+	Me        *Me    `json:",omitempty"`
+	ListsETag string `json:",omitempty"`
+	// ListsGame is the game version (its User-Agent) that made ListsETag:
+	// another version may read lists an older one skipped.
+	ListsGame string     `json:",omitempty"`
 	Lists     []ListInfo `json:",omitempty"`
 	Quests    []Quest    `json:",omitempty"`
 	// SSO is a sign-in with a school account on its way.
@@ -791,7 +794,7 @@ func MoveState(from, to Store) error {
 		json.Unmarshal(data, &old)
 	}
 	in.NextSeq = max(in.NextSeq, old.NextSeq)
-	in.ListsETag, in.Lists, in.Quests = "", nil, nil
+	in.ListsETag, in.ListsGame, in.Lists, in.Quests = "", "", nil, nil
 	out, err := json.MarshalIndent(in, "", "  ")
 	if err != nil {
 		return err

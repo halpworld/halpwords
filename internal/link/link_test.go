@@ -1648,3 +1648,66 @@ func TestSentMarkIsSaved(t *testing.T) {
 		t.Errorf("queue file: %s", st.files[queueFile])
 	}
 }
+
+// An assigned list whose file is gone comes back at the next sync, even
+// though the server's lists haven't changed.
+func TestMissingListFileIsFetchedAgain(t *testing.T) {
+	f, _, st, clk := linked(t)
+	for _, damage := range []func(){
+		func() { delete(st.files, "assigned/lst_animals.txt") },
+		func() { st.files["assigned/lst_animals.txt"] = []byte("nonsense") },
+	} {
+		damage()
+		c2 := reopen(f, st, clk)
+		if len(c2.Lists()) != 0 {
+			t.Fatalf("a damaged list is kept: %v", c2.Lists())
+		}
+		if err := c2.Sync(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if len(c2.Lists()) != 1 || !strings.Contains(string(st.files["assigned/lst_animals.txt"]), "le chien") {
+			t.Fatalf("the list didn't come back: %v", c2.Lists())
+		}
+	}
+}
+
+// The ETag is kept only when every list was kept: a list the game
+// skipped is asked for again at the next sync.
+func TestSkippedListIsNotCoveredByETag(t *testing.T) {
+	f, c, _, _ := linked(t)
+	f.setLists(wireList{ID: "lst_animals", Version: 3, Title: "Animals", Language: "fr", Text: animals},
+		wireList{ID: "lst_bad", Version: 1, Title: "Bad", Language: "fr", Text: "nonsense"})
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.st.ListsETag != "" {
+		t.Errorf("an ETag is kept with a skipped list: %q", c.st.ListsETag)
+	}
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f.notMod != 0 {
+		t.Errorf("%d 304s: the skipped list isn't asked for again", f.notMod)
+	}
+}
+
+// A game of another version may read what an older one skipped: the ETag
+// of the old one isn't used.
+func TestListsETagIsForOneGameVersion(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Close()
+	c2 := Open(Options{Store: st, Server: f.srv.URL, OwnDir: "words", Now: clk.now, Version: "v9.9.9"})
+	c2.sleep = func(time.Duration) {}
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f.notMod != 0 {
+		t.Errorf("an ETag from another game version was sent (%d 304s)", f.notMod)
+	}
+	if err := c2.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f.notMod != 1 {
+		t.Errorf("the ETag isn't used by the game that made it (%d 304s)", f.notMod)
+	}
+}

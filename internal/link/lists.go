@@ -65,6 +65,11 @@ func (c *Client) loadLists() {
 		keep = append(keep, li)
 		c.addList(l, li)
 	}
+	if len(keep) != len(c.st.Lists) {
+		// A list is gone: the server must send the whole set again, not
+		// answer 304 for ever.
+		c.st.ListsETag = ""
+	}
 	c.st.Lists = keep
 	// Keep only the audio packs of the lists kept, at their versions.
 	packs := map[string]*audiopack.Pack{}
@@ -116,6 +121,9 @@ func fileFor(id string) string {
 func (c *Client) syncLists(ctx context.Context, gen int) error {
 	c.mu.Lock()
 	etag := c.st.ListsETag
+	if c.st.ListsGame != c.userAgent() {
+		etag = "" // made by another version of the game
+	}
 	c.mu.Unlock()
 	hdr := http.Header{}
 	if etag != "" {
@@ -137,10 +145,12 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 		text string
 	}
 	var lists []got
+	skipped := false
 	for _, w := range body.Lists {
 		li := ListInfo{ID: w.ID, Version: w.Version, Title: w.Title, Language: w.Language, File: fileFor(w.ID), Riddles: w.Riddles}
 		l, err := words.Parse(strings.NewReader(w.Text), AssignedDir+"/"+li.File)
 		if err != nil || len(l.Entries) == 0 || !knownLang(l.Language) {
+			skipped = true
 			continue // a list this game can't read is left out
 		}
 		li.Licensed = strings.EqualFold(strings.TrimSpace(l.Licence), "licensed")
@@ -181,7 +191,12 @@ func (c *Client) syncLists(ctx context.Context, gen int) error {
 	for _, g := range lists {
 		c.st.Lists = append(c.st.Lists, g.li)
 	}
-	c.st.ListsETag = h.Get("ETag")
+	// With a list left out, no ETag is kept: the server would answer 304
+	// for ever, even once a game that can read the list is running.
+	c.st.ListsETag, c.st.ListsGame = "", ""
+	if !skipped {
+		c.st.ListsETag, c.st.ListsGame = h.Get("ETag"), c.userAgent()
+	}
 	c.loadLists()
 	c.saveState()
 	c.changes++
