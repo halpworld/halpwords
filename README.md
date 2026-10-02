@@ -725,7 +725,7 @@ friend = l'ami | l'amie
 goat = la chèvre
 ```
 
-The rules:
+Only `english = answer` lines are needed; the rest is optional. The rules:
 
 - One word per line: `english = answer`. Put other answers that are also
   right after `|`.

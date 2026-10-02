@@ -123,9 +123,9 @@ func (w *WordLists) reload(ctx *game.Context) {
 // brokenMessage warns that n files in the words folder can't be used.
 func brokenMessage(n int) string {
 	if n == 1 {
-		return "! 1 file in your words folder has lines the game can't read: press W to see them, E to fix."
+		return "! 1 file has lines I can't read: W shows, E fixes"
 	}
-	return fmt.Sprintf("! %d files in your words folder have lines the game can't read: W shows them, E fixes.", n)
+	return fmt.Sprintf("! %d files have lines I can't read: W shows, E fixes", n)
 }
 
 // brokenFiles describes the files in the words folder that the game could
@@ -677,6 +677,11 @@ func (w *WordLists) Draw(dst *ebiten.Image, ctx *game.Context) {
 	w.drawList(dst, ctx)
 	w.drawInfo(dst, ctx)
 
+	if w.mode == wlPreview {
+		// The window has its own words; keep these from showing through.
+		w.drawDialogs(dst, ctx)
+		return
+	}
 	f.DrawShadow(dst, fit(f, w.msg, game.ScreenW-24, 1), 12, 306, 1, w.msgCol)
 	help1, help2 := "↑/↓ choose  N new list  E edit  Space mark  X delete  F Word Forge", "I import (or drop files)  A mark all  S save all  Esc back"
 	if onWeb() {
@@ -685,6 +690,10 @@ func (w *WordLists) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawShadow(dst, help1, 12, 324, 1, pal.Ash)
 	f.DrawShadow(dst, help2, 12, 340, 1, pal.Ash)
 
+	w.drawDialogs(dst, ctx)
+}
+
+func (w *WordLists) drawDialogs(dst *ebiten.Image, ctx *game.Context) {
 	switch w.mode {
 	case wlPath:
 		w.drawPath(dst, ctx)
@@ -826,7 +835,7 @@ func (w *WordLists) drawInfo(dst *ebiten.Image, ctx *game.Context) {
 	}
 	switch {
 	case r.broken != nil:
-		line("! The game skips this file", pal.Rose)
+		line("! Skipped by the game", pal.Rose)
 	case r.assigned:
 		line("Read-only: it updates when the game syncs", pal.Ash)
 	case r.dirty:
@@ -840,15 +849,20 @@ func (w *WordLists) drawInfo(dst *ebiten.Image, ctx *game.Context) {
 	gfx.FillRect(dst, tx, y, tw, 1, pal.Indigo)
 	y += 6
 	if r.broken != nil {
-		line(plural(len(r.broken), "line")+" the game can't read:", pal.Rose)
+		line(plural(len(r.broken), "bad line"), pal.Rose)
 		for i, p := range r.broken {
 			if y > wlListY+wlListH-44 {
 				line(fmt.Sprintf("… and %d more", len(r.broken)-i), pal.Ash)
 				break
 			}
-			line(p.String(), pal.Steel)
+			if p.Line > 0 {
+				line(fmt.Sprintf("line %d", p.Line), pal.Steel)
+			} else {
+				line("the whole file", pal.Steel)
+			}
 		}
-		line("W see them   E fix it", pal.Tan)
+		line("W see why", pal.Tan)
+		line("E fix it", pal.Tan)
 		return
 	}
 	for i, e := range l.Entries {

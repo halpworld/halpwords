@@ -339,9 +339,11 @@ func TestEditorScreensFit(t *testing.T) {
 		}
 	}
 	for _, s := range []string{
-		"↑/↓ line   Enter next line   Tab accent   Ctrl+S save   Esc finish",
-		"↑/↓ line  Enter next line  Tab accent  F2 Greek  Ctrl+S save  Esc finish",
-		"Lists you type stay on this computer.",
+		"↑/↓ line  Enter next line  Tab accent  F3 next problem",
+		"↑/↓ line  Enter next line  Tab accent  F2 Greek  F3 next problem",
+		"Ctrl/Cmd+S save  Esc done.  Lists you type stay on this device.",
+		"! 1 file has lines I can't read: W shows, E fixes",
+		brokenMessage(12),
 	} {
 		if got := f.Width(s, 1); got > game.ScreenW-24 {
 			t.Errorf("%q is %dpx", s, got)

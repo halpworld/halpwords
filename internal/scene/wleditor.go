@@ -3,6 +3,7 @@ package scene
 import (
 	"fmt"
 	"image/color"
+	"runtime"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -254,6 +255,13 @@ func (w *WordLists) updateEdit(ctx *game.Context) {
 			ctx.Sound.Play(audio.Accent)
 		}
 		return
+	case input.Pressed(ebiten.KeyF3):
+		if e.NextBad() {
+			ctx.Sound.Play(audio.Blip)
+		} else {
+			ctx.Sound.Play(audio.Wrong)
+		}
+		return
 	case input.Pressed(ebiten.KeyF2):
 		if e.language().Script == words.ScriptGreek {
 			e.greekSwap = !e.greekSwap
@@ -295,6 +303,12 @@ func (w *WordLists) trySaveEdit(ctx *game.Context, leaveOut bool) {
 		w.edAsk = edAskSkip
 		return
 	}
+	others := len(w.shelf.remove)
+	for _, r := range w.shelf.rows {
+		if r.dirty && r != w.edRow {
+			others++
+		}
+	}
 	if r := w.edRow; r != nil {
 		r.list, r.broken, r.own, r.dirty = l, nil, true, true
 		w.sel = rowIndex(w.shelf, r)
@@ -305,7 +319,11 @@ func (w *WordLists) trySaveEdit(ctx *game.Context, leaveOut bool) {
 		w.edAsk, w.edNote = edAskNone, w.msg
 		return
 	}
-	w.say(fmt.Sprintf("Saved %q with %s.", l.Title, plural(len(l.Entries), "word")), pal.Lime)
+	note := ""
+	if others > 0 {
+		note = " Other unsaved list changes were saved too."
+	}
+	w.say(fmt.Sprintf("Saved %q with %s.%s", l.Title, plural(len(l.Entries), "word"), note), pal.Lime)
 	w.closeEdit()
 }
 
@@ -333,7 +351,7 @@ var edHint = []struct {
 	col color.RGBA
 }{
 	{"One word on each line:", pal.Ice},
-	{"english = answer", pal.Yellow},
+	{"dog = chien", pal.Yellow},
 	{"", pal.Ice},
 	{"Other right answers go", pal.Ice},
 	{"after a |", pal.Ice},
@@ -342,8 +360,8 @@ var edHint = []struct {
 	{"# a note, not a word", pal.Tan},
 	{"## a group of words", pal.Tan},
 	{"", pal.Ice},
-	{"Tab adds an accent to", pal.Steel},
-	{"the letter before it", pal.Steel},
+	{"Tab adds an accent to", pal.Ice},
+	{"the letter before it", pal.Ice},
 }
 
 func (w *WordLists) drawEdit(dst *ebiten.Image, ctx *game.Context) {
@@ -390,7 +408,7 @@ func (w *WordLists) drawEdit(dst *ebiten.Image, ctx *game.Context) {
 	if e.focus == edBody {
 		first = max(0, min(e.cur-edRows/2, len(e.lines)-edRows))
 	}
-	const gutter = 28
+	const gutter = 32
 	for i := first; i < min(len(e.lines), first+edRows); i++ {
 		ry := edBodyY + (i-first)*edRowH
 		cur := e.focus == edBody && i == e.cur
@@ -401,7 +419,7 @@ func (w *WordLists) drawEdit(dst *ebiten.Image, ctx *game.Context) {
 		text := e.lines[i].Text()
 		col := pal.Steel
 		if e.Problem(i+1) != "" {
-			f.Draw(dst, "!", tx+gutter-10, ry, 1, pal.Rose)
+			f.Draw(dst, "!", tx+gutter-8, ry, 1, pal.Rose)
 			col = pal.Rose
 		} else if cur {
 			col = pal.White
@@ -450,13 +468,16 @@ func (w *WordLists) drawEdit(dst *ebiten.Image, ctx *game.Context) {
 	default:
 		msg = "Give your list a name, then press Enter."
 	}
+	if mc == pal.Rose {
+		gfx.FillRect(dst, 8, 303, game.ScreenW-16, 18, pal.Black)
+	}
 	f.DrawShadow(dst, fit(f, msg, game.ScreenW-24, 1), 12, 306, 1, mc)
-	help := "↑/↓ line   Enter next line   Tab accent   Ctrl+S save   Esc finish"
+	help := "↑/↓ line  Enter next line  Tab accent  F3 next problem"
 	if e.language().Script == words.ScriptGreek {
-		help = "↑/↓ line  Enter next line  Tab accent  F2 Greek  Ctrl+S save  Esc finish"
+		help = "↑/↓ line  Enter next line  Tab accent  F2 Greek  F3 next problem"
 	}
 	f.DrawShadow(dst, help, 12, 324, 1, pal.Ash)
-	f.DrawShadow(dst, "Lists you type stay on this computer.", 12, 340, 1, pal.Ash)
+	f.DrawShadow(dst, saveKey()+" save  Esc done.  Lists you type stay on this device.", 12, 340, 1, pal.Ash)
 
 	switch w.edAsk {
 	case edAskLeave:
@@ -469,6 +490,17 @@ func (w *WordLists) drawEdit(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, plural(len(probs), "line")+" are not words, so they are left out.", x, y, 1, pal.Ice)
 		f.DrawShadow(dst, "Y save anyway   Esc go back and fix them", x, y+28, 1, pal.Ash)
 	}
+}
+
+// saveKey names the save shortcut for this system.
+func saveKey() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "Cmd+S"
+	case "js":
+		return "Ctrl/Cmd+S"
+	}
+	return "Ctrl+S"
 }
 
 // tailFit keeps the end of s in view, with an ellipsis at the front, so

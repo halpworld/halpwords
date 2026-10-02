@@ -346,5 +346,34 @@ func (e *listEditor) summary() string {
 	default:
 		s += fmt.Sprintf(", %d lines to fix", len(probs))
 	}
+	if first := e.firstBad(); first > 0 {
+		s += fmt.Sprintf(" (first: line %d)", first)
+	}
 	return s
+}
+
+// firstBad returns the number of the first line that is not a word, or 0.
+func (e *listEditor) firstBad() int {
+	_, probs := e.Checked()
+	for _, p := range probs {
+		if p.Line > 0 {
+			return p.Line
+		}
+	}
+	return 0
+}
+
+// NextBad moves to the next line after the current one that is not a word,
+// going round to the first, and reports whether there was one.
+func (e *listEditor) NextBad() bool {
+	e.check()
+	n := len(e.lines)
+	for i := 1; i <= n; i++ {
+		j := (e.cur + i) % n
+		if e.byLn[j+1] != "" {
+			e.focus, e.cur = edBody, j
+			return true
+		}
+	}
+	return false
 }

@@ -40,8 +40,12 @@ func TestListEditorChecksAsYouType(t *testing.T) {
 	if e.Problem(2) == "" || e.Problem(1) != "" || e.Problem(3) != "" {
 		t.Errorf("per-line problems wrong: %q %q %q", e.Problem(1), e.Problem(2), e.Problem(3))
 	}
-	if !strings.Contains(e.summary(), "2 words, 1 line to fix") {
+	if !strings.Contains(e.summary(), "2 words, 1 line to fix (first: line 2)") {
 		t.Errorf("summary = %q", e.summary())
+	}
+	e.cur = 2
+	if !e.NextBad() || e.cur != 1 {
+		t.Errorf("NextBad went to %d", e.cur)
 	}
 	// Fixing the line clears the problem.
 	e.cur = 1
