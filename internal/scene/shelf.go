@@ -1,6 +1,7 @@
 package scene
 
 import (
+	"bytes"
 	"slices"
 	"strconv"
 	"strings"
@@ -116,6 +117,19 @@ func (s *shelf) targets(lang string) []int {
 		}
 	}
 	return out
+}
+
+// same returns the row of an own list that is l already, word for word
+// under the same title, or -1: importing a file a second time does not
+// make a second list (#89).
+func (s *shelf) same(l *words.List) int {
+	want := l.Format()
+	for i, r := range s.rows {
+		if r.own && r.broken == nil && !r.assigned && r.list.Language == l.Language && bytes.Equal(r.list.Format(), want) {
+			return i
+		}
+	}
+	return -1
 }
 
 // create adds l as a new list and returns its row number.

@@ -636,7 +636,10 @@ func (w *WordLists) updateImport(ctx *game.Context) {
 	case input.Confirm():
 		imp := w.imp
 		imp.Language = words.Languages[w.langIdx].Code
-		if w.opt == 0 {
+		if i := w.shelf.same(imp); w.opt == 0 && i >= 0 {
+			w.sel = i
+			w.say(fmt.Sprintf("%q is already here, word for word.", imp.Title), pal.Steel)
+		} else if w.opt == 0 {
 			w.sel = w.shelf.create(imp)
 			w.say(fmt.Sprintf("New list %q with %s. Press S to save.", imp.Title, plural(len(imp.Entries), "word")), pal.Yellow)
 		} else {
