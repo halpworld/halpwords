@@ -2,6 +2,7 @@ package scene
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -243,5 +244,182 @@ func TestOldSavesAreAdventures(t *testing.T) {
 	got, err := decodeSave(ctx, data)
 	if err != nil || got.run.mode != compete.Adventure || got.run.hardcore() {
 		t.Fatalf("mode %v, %v", got.run.mode, err)
+	}
+}
+
+// A Daily Dungeon counts for the rankings only if it is finished on its
+// own (local) day. Time is the injected clock, around midnight.
+func TestDailyRankedOnlyOnItsDay(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	var sent []compete.Run
+	oldSend, oldNow := sendRun, runNow
+	t.Cleanup(func() { sendRun, runNow = oldSend, oldNow })
+	sendRun = func(_ *game.Context, r compete.Run, _ string) { sent = append(sent, r) }
+	at := func(day, h, m, s int) time.Time { return time.Date(2026, time.September, day, h, m, s, 0, time.Local) }
+	runNow = func() time.Time { return at(24, 9, 0, 0) }
+	setup := dailySetup(ctx, fr)
+	if setup.day != "2026-09-24" {
+		t.Fatalf("daily day %q", setup.day)
+	}
+	for _, c := range []struct {
+		name     string
+		day      string
+		finish   time.Time
+		unranked bool
+	}{
+		{"same day", "2026-09-24", at(24, 9, 5, 0), false},
+		{"last second of the day", "2026-09-24", at(24, 23, 59, 59), false},
+		{"first second of the next day", "2026-09-24", at(25, 0, 0, 0), true},
+		{"days later", "2026-09-24", at(27, 12, 0, 0), true},
+		{"started just before midnight", "2026-09-24", at(25, 0, 1, 0), true},
+		{"no day (old save)", "", at(24, 9, 5, 0), true},
+		{"bad day", "24/09/2026", at(24, 9, 5, 0), true},
+	} {
+		sent = nil
+		s := setup
+		s.day = c.day
+		r := newRun(ctx, fr, rpg.Rogue, s)
+		r.sound = &game.Sound{Muted: true}
+		r.tally.Damage = 50
+		runNow = func() time.Time { return c.finish }
+		g := newGameOver(ctx, r, true)
+		if g.unranked != c.unranked || (len(sent) == 0) != c.unranked {
+			t.Errorf("%s: unranked %v, %d runs sent", c.name, g.unranked, len(sent))
+		}
+		if len(sent) == 1 {
+			if sh, err := compete.ParseShare(sent[0].Share.Code()); err != nil || !sh.Daily {
+				t.Errorf("%s: sent %q, want a Daily share", c.name, sent[0].Share.Code())
+			}
+		}
+	}
+	// A Hardcore run has no day, and is always sent.
+	sent = nil
+	h := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Hardcore, seed: 4242, seeded: true})
+	h.sound = &game.Sound{Muted: true}
+	runNow = func() time.Time { return at(30, 1, 0, 0) }
+	if g := newGameOver(ctx, h, true); g.unranked || len(sent) != 1 {
+		t.Fatalf("Hardcore: unranked %v, %d runs sent", g.unranked, len(sent))
+	}
+}
+
+// Suspending a Daily Dungeon says it must be finished today to be ranked.
+func TestSuspendingADailyTellsTheRule(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	day := time.Date(2026, time.September, 24, 9, 0, 0, 0, time.Local)
+	old := runNow
+	t.Cleanup(func() { runNow = old })
+	runNow = func() time.Time { return day }
+	r := newRun(ctx, fr, rpg.Rogue, dailySetup(ctx, fr))
+	if n := r.suspendNote(day); n != "Suspended. Finish it today to be ranked." {
+		t.Fatalf("on its day: %q", n)
+	}
+	if n := r.suspendNote(day.AddDate(0, 0, 1)); n != "Suspended. This Daily will not be ranked online." {
+		t.Fatalf("after its day: %q", n)
+	}
+	h := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Hardcore})
+	if n := h.suspendNote(day); n != "Game suspended" {
+		t.Fatalf("Hardcore: %q", n)
+	}
+}
+
+// An honest run's played time, counted in ticks of walking alone (the
+// fastest it can be: no pause, no fights, a straight way to every stairs),
+// still passes the rankings' plausibility check. Menus and pauses add
+// nothing, so this is the least a run reaching a floor can send.
+func TestFastestHonestRunPassesCheck(t *testing.T) {
+	steps := func(l *dungeon.Level) int {
+		dist := map[dungeon.Point]int{l.Start: 0}
+		queue := []dungeon.Point{l.Start}
+		for len(queue) > 0 {
+			p := queue[0]
+			queue = queue[1:]
+			if p == l.Exit {
+				return dist[p]
+			}
+			for d := dungeon.North; d <= dungeon.West; d++ {
+				q := p.Step(d)
+				if _, seen := dist[q]; !seen && (q == l.Exit || l.At(q).Walkable() || l.At(q) == dungeon.Door || l.At(q) == dungeon.Sealed) {
+					dist[q] = dist[p] + 1
+					queue = append(queue, q)
+				}
+			}
+		}
+		t.Fatalf("the stairs can't be reached: start %v exit %v tile %v, %d cells seen", l.Start, l.Exit, l.At(l.Exit), len(dist))
+		return 0
+	}
+	least := 1 << 30
+	for seed := uint64(1); seed <= 300; seed++ {
+		ticks := 0
+		for depth := 1; depth <= 12; depth++ {
+			n := steps(dungeon.Generate(seed*31+uint64(depth)*7919, depth))
+			least = min(least, n)
+			ticks += n * stepTicks
+			floor := depth + 1
+			run := compete.Run{
+				Share: compete.Share{Lang: "fr", Seed: seed, Floor: floor, Score: compete.Tally{}.Score(floor)},
+				Secs:  int(float64(ticks) / 60),
+			}
+			if err := run.Check(); err != nil {
+				t.Fatalf("seed %d reaching floor %d in %d ticks (%d s): %v", seed, floor, ticks, run.Secs, err)
+			}
+		}
+	}
+	t.Logf("shortest walk to any stairs: %d cells", least)
+}
+
+// The pause note and the game-over line follow the clock: after midnight
+// the Daily is unranked, and an empty day says no date was missed.
+func TestDailyNotesAfterMidnight(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	fr, _ := words.Lookup("fr")
+	oldSend, oldNow := sendRun, runNow
+	t.Cleanup(func() { sendRun, runNow = oldSend, oldNow })
+	sendRun = func(*game.Context, compete.Run, string) {}
+	before := time.Date(2026, time.September, 24, 23, 59, 59, 0, time.Local)
+	runNow = func() time.Time { return before }
+	r := newRun(ctx, fr, rpg.Rogue, dailySetup(ctx, fr))
+	r.sound = &game.Sound{Muted: true}
+	if n := r.dailyNote(before); n != "Finish this Daily today to be ranked." {
+		t.Fatalf("before midnight: %q", n)
+	}
+	after := before.Add(time.Second)
+	if n := r.dailyNote(after); n != "This Daily will not be ranked online." {
+		t.Fatalf("after midnight: %q", n)
+	}
+	runNow = func() time.Time { return after }
+	g := newGameOver(ctx, r, true)
+	if g.unrankedNote != "Not ranked online: it is a new day" {
+		t.Fatalf("late note %q", g.unrankedNote)
+	}
+	r.day = ""
+	g = newGameOver(ctx, r, true)
+	if g.unrankedNote != "Not ranked online" {
+		t.Fatalf("empty day note %q", g.unrankedNote)
+	}
+	for s, max := range map[string]int{unrankedLate: 314 - 20, r.dailyNote(after): 360 - 20, r.suspendNote(after): 640 - 40} {
+		if w := ctx.Font.Width(s, 1); w > max {
+			t.Errorf("%q is %dpx wide, room for %d", s, w, max)
+		}
+	}
+}
+
+// A HALPWORDS_SEED wider than a seed code must be masked, or the code shown
+// in the pause menu would give a different dungeon and a ranked run would
+// carry a seed that cannot be replayed (#59).
+func TestEnvSeedIsMaskedToSeedBits(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	const wide = uint64(1)<<40 | 0x2a2a2a
+	t.Setenv("HALPWORDS_SEED", strconv.FormatUint(wide, 10))
+	r := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Adventure})
+	if r.seed != 0x2a2a2a {
+		t.Fatalf("seed %#x, want it masked to %#x", r.seed, 0x2a2a2a)
+	}
+	back, err := compete.SeedFromCode(r.seedCode())
+	if err != nil || back != r.seed {
+		t.Fatalf("seed code %q gives %#x (%v), want %#x", r.seedCode(), back, err, r.seed)
 	}
 }

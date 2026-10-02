@@ -2,6 +2,7 @@ package scene
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"slices"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/pal"
+	"github.com/halpworld/halpwords/pkg/compete"
 )
 
 // pauseItem is an entry in the pause menu.
@@ -134,7 +136,7 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 	case pauseSuspend:
 		if c.writeSave(ctx, true) {
 			c.play(audio.Select)
-			ctx.Notify("Game suspended")
+			ctx.Notify(c.run.suspendNote(runNow()))
 			ctx.Replace(NewTitle(ctx))
 		} else {
 			c.play(audio.Wrong)
@@ -174,7 +176,20 @@ func (c *Crawl) hasUnsaved() bool {
 		return true
 	}
 	data, err := encodeSave(c.run, c.level, c.pos, c.facing, true)
-	return err != nil || !bytes.Equal(data, c.lastSave)
+	return err != nil || !sameSave(data, c.lastSave)
+}
+
+// sameSave reports whether two saves are the same game, not counting how
+// long it was played.
+func sameSave(a, b []byte) bool {
+	var sa, sb saveFile
+	if json.Unmarshal(a, &sa) != nil || json.Unmarshal(b, &sb) != nil {
+		return bytes.Equal(a, b)
+	}
+	sa.Played, sb.Played = 0, 0
+	ja, erra := json.Marshal(sa)
+	jb, errb := json.Marshal(sb)
+	return erra == nil && errb == nil && bytes.Equal(ja, jb)
 }
 
 // drawPause draws the pause menu over the view.
@@ -220,6 +235,8 @@ func (c *Crawl) drawPause(view *ebiten.Image, ctx *game.Context) {
 		note, ncol = "The race goes on while you pause!", pal.Tan
 	case c.resume != modeExplore:
 		note, ncol = "Win or flee the battle to suspend.", pal.Tan
+	case c.run.mode == compete.Daily:
+		note, ncol = c.run.dailyNote(runNow()), pal.Tan
 	case c.run.hardcore():
 		note, ncol = "One life! Suspend to keep this run.", pal.Tan
 	case c.lastSave == nil || c.unsaved:

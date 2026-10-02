@@ -173,6 +173,11 @@ version as its release notes.
 
 ### Fixed
 
+- **Daily and seed runs now give the same monsters on every machine.**
+  Monster HP no longer rounds differently on Apple Silicon, so a few
+  monsters have 1 more HP than before. `HALPWORDS_SEED` is now masked to a
+  30-bit seed like other seeds.
+
 - **A sign-out on a shared computer no longer opens another child's
   progress.** After a sign-out or removal at school, the game plays as a
   new guest (no lock, no sign-in, a name it gave), or as one who played

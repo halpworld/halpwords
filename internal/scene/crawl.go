@@ -258,11 +258,20 @@ func dirTo(a, b dungeon.Point) (dungeon.Dir, bool) {
 	return 0, false
 }
 
+// countPlayed adds a tick to the run's played time, if the hero is in the
+// dungeon: exploring, in a battle or at a puzzle, not in a menu or paused.
+func (c *Crawl) countPlayed() {
+	switch c.mode {
+	case modeExplore, modeBattle, modePuzzle:
+		c.run.played += 1 / float64(ebiten.TPS())
+	}
+}
+
 // Update implements game.Scene.
 func (c *Crawl) Update(ctx *game.Context) error {
 	c.afterClose(ctx, time.Now())
 	c.run.ai.poll(c)
-	c.run.played += 1 / float64(ebiten.TPS())
+	c.countPlayed()
 	if c.run.race != nil {
 		// A race sends only its progress, to the room.
 		if c.updateRace(ctx) {
@@ -698,11 +707,18 @@ func (c *Crawl) woken(ctx *game.Context) *Crawl {
 	r.regen++
 	r.depth = r.shrine.Depth
 	r.hero = r.shrine.Hero.Clone()
+	if r.shrine.Perfect != nil {
+		// The XP for first perfects since the shrine went with the hero.
+		r.perfect = map[int]bool{}
+		for _, id := range r.shrine.Perfect {
+			r.perfect[id] = true
+		}
+	}
 	lost := int(float64(r.hero.Gold)*goldLost + 0.5)
 	r.hero.Gold -= lost
 	r.hero.HP, r.hero.MP = r.hero.MaxHP(), r.hero.MaxMP()
 	r.hero.Streak = 0
-	r.shrine = checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone()}
+	r.shrine = checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone(), Perfect: r.perfectIDs()}
 	next := newCrawl(r)
 	msg := fmt.Sprintf("You wake at the shrine on floor %d.", r.depth)
 	if r.depth == 1 && !dungeon.ShrineFloor(1) {

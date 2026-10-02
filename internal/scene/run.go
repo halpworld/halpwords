@@ -38,6 +38,10 @@ type checkpoint struct {
 	Floor  *dungeon.State `json:",omitempty"`
 	At     dungeon.Point
 	Facing dungeon.Dir
+	// Perfect are the words spelled perfectly by then, so falling takes
+	// back the first-perfect XP with the rest of the hero. It is null
+	// (nil) in saves from before this was kept.
+	Perfect []int
 }
 
 // logLine is one message in the crawl's message log.
@@ -121,10 +125,50 @@ type runSetup struct {
 	assign *assignRun
 }
 
+// runNow is the clock a Daily Dungeon's day comes from; tests set it.
+var runNow = time.Now
+
+// dailyDay is the Daily Dungeon's day at t: the local date.
+func dailyDay(t time.Time) string { return t.Format(time.DateOnly) }
+
+// ranked reports whether a run finished at t may be sent for the
+// rankings. A Daily Dungeon counts only if it is finished on its own day
+// (the server turns away a later one); a day that is not a date, as in an
+// old save, never ranks.
+func (r *run) ranked(t time.Time) bool {
+	if r.mode != compete.Daily {
+		return true
+	}
+	if _, err := time.Parse(time.DateOnly, r.day); err != nil {
+		return false
+	}
+	return r.day == dailyDay(t)
+}
+
+// suspendNote is what the player is told on suspending the run at t: a
+// Daily Dungeon must be finished on its own day to be ranked.
+func (r *run) suspendNote(t time.Time) string {
+	switch {
+	case r.mode != compete.Daily:
+		return "Game suspended"
+	case r.ranked(t):
+		return "Suspended. Finish it today to be ranked."
+	}
+	return "Suspended. This Daily will not be ranked online."
+}
+
+// dailyNote is the pause menu's note for a Daily Dungeon at t.
+func (r *run) dailyNote(t time.Time) string {
+	if r.ranked(t) {
+		return "Finish this Daily today to be ranked."
+	}
+	return "This Daily will not be ranked online."
+}
+
 // dailySetup is today's Daily Dungeon in lang.
 func dailySetup(ctx *game.Context, lang *words.Language) runSetup {
-	now := time.Now()
-	return runSetup{mode: compete.Daily, seed: compete.DailySeed(now, lang.Code, entriesFor(ctx, lang)), seeded: true, day: now.Format(time.DateOnly)}
+	now := runNow()
+	return runSetup{mode: compete.Daily, seed: compete.DailySeed(now, lang.Code, entriesFor(ctx, lang)), seeded: true, day: dailyDay(now)}
 }
 
 // entriesFor returns every word in the lists for lang.
@@ -160,7 +204,7 @@ func newRun(ctx *game.Context, lang *words.Language, class rpg.Class, setup runS
 		seed = compete.RandomSeed(proc.NewRand(uint64(time.Now().UnixNano())))
 		// HALPWORDS_SEED replays a dungeon, for testing and bug reports.
 		if v, err := strconv.ParseUint(os.Getenv("HALPWORDS_SEED"), 10, 64); err == nil {
-			seed = v
+			seed = v & (1<<compete.SeedBits - 1) // as a seed code holds
 		}
 	}
 	r := beginRun(ctx, lang, class, seed, setup.quest, setup.assign)
@@ -262,7 +306,7 @@ func startRunWith(ctx *game.Context, lang *words.Language, class rpg.Class, seed
 	}
 	r.mode = compete.Adventure
 	r.settings = profile.Preset(lang)
-	r.shrine = checkpoint{Depth: 1, Hero: r.hero.Clone()}
+	r.shrine = checkpoint{Depth: 1, Hero: r.hero.Clone(), Perfect: r.perfectIDs()}
 	return r
 }
 
@@ -352,7 +396,17 @@ func (r *run) enter(cp checkpoint) (*dungeon.Level, dungeon.Point, dungeon.Dir, 
 // here is a checkpoint of the adventure as it is now.
 func (r *run) here(l *dungeon.Level, at dungeon.Point, facing dungeon.Dir) checkpoint {
 	s := l.State()
-	return checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone(), Floor: &s, At: at, Facing: facing}
+	return checkpoint{Depth: r.depth, Regen: r.regen, Hero: r.hero.Clone(), Floor: &s, At: at, Facing: facing, Perfect: r.perfectIDs()}
+}
+
+// perfectIDs lists the words spelled perfectly, in order and never nil.
+func (r *run) perfectIDs() []int {
+	ids := make([]int, 0, len(r.perfect))
+	for id := range r.perfect {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 const maxLog = 50
