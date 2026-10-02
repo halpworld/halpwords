@@ -3,12 +3,14 @@ package scene
 import (
 	"context"
 	"encoding/json"
+	"github.com/halpworld/halpwords/internal/save"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -334,7 +336,35 @@ func TestPracticeChecklist(t *testing.T) {
 // lists (GET /api/v1/lists bodies, with the #89 fields).
 func shelfContext(t *testing.T, lists ...map[string]any) *game.Context {
 	t.Helper()
+	ctx, _ := shelfLinked(t, false, lists...)
+	return ctx
+}
+
+// serverShelf is the lists a test server sends; set changes them.
+type serverShelf struct {
+	mu    sync.Mutex
+	lists []map[string]any
+}
+
+func (s *serverShelf) set(lists ...map[string]any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lists = lists
+}
+
+func (s *serverShelf) get() []map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lists
+}
+
+// shelfLinked is shelfContext with the server's lists to change. With
+// own, the link keeps its files in the game's folder, as the game does,
+// and a list that stops being sent is kept in the words folder.
+func shelfLinked(t *testing.T, own bool, lists ...map[string]any) (*game.Context, *serverShelf) {
+	t.Helper()
 	useTempDir(t)
+	shelf := &serverShelf{lists: lists}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/json")
@@ -343,7 +373,7 @@ func shelfContext(t *testing.T, lists ...map[string]any) *game.Context {
 			json.NewEncoder(w).Encode(map[string]any{"device_id": "dev_1", "token_type": "Bearer",
 				"access_token": "hwd_1", "expires_in": 86400, "refresh_token": "hwr_1", "refresh_expires_in": 86400})
 		case "/api/v1/lists":
-			json.NewEncoder(w).Encode(map[string]any{"lists": lists})
+			json.NewEncoder(w).Encode(map[string]any{"lists": shelf.get()})
 		case "/api/v1/me":
 			json.NewEncoder(w).Encode(map[string]any{"learner": map[string]any{"id": "lrn_1", "display_name": "Aoife"},
 				"settings": map[string]any{}, "accommodations": map[string]any{}, "seen_by": []string{"guardian"},
@@ -360,15 +390,21 @@ func shelfContext(t *testing.T, lists ...map[string]any) *game.Context {
 	}))
 	t.Cleanup(srv.Close)
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	opts := link.Options{Store: memFiles{}, Server: srv.URL}
+	if own {
+		opts.Store, opts.OwnDir = save.Current(), game.WordsDir
+	}
+	ctx.Link = link.Open(opts)
 	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
 		t.Fatal(err)
 	}
 	if err := ctx.Link.Sync(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	ctx.Lists = append(ctx.Lists, ctx.Link.Lists()...)
-	return ctx
+	if err := ctx.LoadLists(); err != nil {
+		t.Fatal(err)
+	}
+	return ctx, shelf
 }
 
 const (
@@ -574,5 +610,73 @@ func TestSeenIsSeededForOldPicks(t *testing.T) {
 	l := ctx.Profile.Settings.Lists
 	if !l.Knows("fr") || !l.WasSeen("file:tonight.txt") || l.Knows("la") {
 		t.Errorf("seen %v, known %v", l.Seen, l.Known)
+	}
+}
+
+// When lists stop being sent and are kept as the learner's own, they
+// carry the learner's choices over quietly: not new, and ticked only if
+// they were ticked (#89).
+func TestKeptListsInheritQuietly(t *testing.T) {
+	colours := map[string]any{"id": "lst_colours", "version": 1, "title": "Colours", "language": "fr", "text": sentColours,
+		"source": "sent", "sent_at": "2026-10-01T18:00:00Z"}
+	numbers := map[string]any{"id": "lst_numbers", "version": 1, "title": "Numbers", "language": "fr", "text": sentNumbers,
+		"source": "sent", "sent_at": "2026-10-02T18:00:00Z"}
+	ctx, shelf := shelfLinked(t, true, colours, numbers)
+	ctx.Input = &input.State{}
+	fr, _ := words.Lookup("fr")
+	starter := listKey(starterLists(fr)[0])
+
+	// Colours and a starter ticked, Numbers not.
+	lp := adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	next := ctx.TestScenes(lp)
+	update(t, ctx, lp, ebiten.KeyA)
+	if keys, _ := lp.ticked(); len(keys) > 0 {
+		update(t, ctx, lp, ebiten.KeyA)
+	}
+	for i, r := range lp.rows {
+		if r.key == "lst_colours" || r.key == starter {
+			lp.sel = i
+			update(t, ctx, lp, ebiten.KeySpace)
+		}
+	}
+	update(t, ctx, lp, ebiten.KeyEnter)
+	next()
+
+	// The teacher takes both back; the game keeps them.
+	shelf.set()
+	if err := ctx.Link.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.LoadLists(); err != nil {
+		t.Fatal(err)
+	}
+	kept := ctx.Link.Kept()
+	if kept["lst_colours"] != "colours.txt" || kept["lst_numbers"] != "numbers.txt" {
+		t.Fatalf("kept %v", kept)
+	}
+	lp = adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
+	if note, _ := lp.note(); note != "" {
+		t.Errorf("a kept list is new: %q", note)
+	}
+	keys, _ := lp.ticked()
+	slices.Sort(keys)
+	want := []string{"file:colours.txt", starter}
+	slices.Sort(want)
+	if !slices.Equal(keys, want) {
+		t.Errorf("ticked %v, want %v", keys, want)
+	}
+	for _, r := range lp.rows {
+		if r.key == "file:numbers.txt" && (r.ticked || r.isNew) {
+			t.Errorf("numbers: %+v", r)
+		}
+	}
+	if p := NewPractice(ctx).(*Practice); p.deck.Len() != len(starterLists(fr)[0].Entries)+2 { // the starter and Colours
+		t.Errorf("practice deals from %d words", p.deck.Len())
+	}
+
+	// Unlinked and linked again, the kept lists are still known.
+	ctx.Link.Unlink()
+	if ctx.Link.Kept()["lst_colours"] != "colours.txt" {
+		t.Error("unlinking forgot the kept lists")
 	}
 }

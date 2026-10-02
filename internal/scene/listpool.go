@@ -113,11 +113,43 @@ func pickedPool(ctx *game.Context, lang *words.Language) listPool {
 	if ctx.Profile == nil {
 		return listPool{}
 	}
+	inheritKept(ctx)
 	keys, ok := ctx.Profile.Settings.Lists.Picked(lang.Code)
 	if !ok {
 		return listPool{}
 	}
 	return listPool{keys: keys}
+}
+
+// inheritKept carries the learner's choices over from a list that stopped
+// being assigned to the own list it was kept as (link.Client.Kept), so
+// it is not announced as new, and is ticked only if it was ticked.
+func inheritKept(ctx *game.Context) {
+	kept := ctx.Link.Kept()
+	if len(kept) == 0 || ctx.Profile == nil {
+		return
+	}
+	l, changed := &ctx.Profile.Settings.Lists, false
+	for id, file := range kept {
+		key := "file:" + file
+		if !l.WasSeen(key) {
+			l.See(key)
+			changed = true
+		}
+		for code, keys := range l.Selected {
+			if i := slices.Index(keys, id); i >= 0 {
+				keys = slices.Delete(slices.Clone(keys), i, i+1)
+				if !slices.Contains(keys, key) {
+					keys = append(keys, key)
+				}
+				l.Pick(code, keys)
+				changed = true
+			}
+		}
+	}
+	if changed {
+		ctx.Profile.SaveSettings()
+	}
 }
 
 // listRow is a word list as the checklist shows it.

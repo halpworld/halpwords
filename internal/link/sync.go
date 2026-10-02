@@ -121,7 +121,7 @@ func (c *Client) link(ctx context.Context, s SignIn, seq int) error {
 func (c *Client) signedIn(t tokens, way string) {
 	c.releasePending()
 	c.gen++
-	c.st = state{NextSeq: c.st.NextSeq, LinkedAt: c.now(), Way: way}
+	c.st = state{NextSeq: c.st.NextSeq, Kept: c.st.Kept, LinkedAt: c.now(), Way: way}
 	c.q = queue{}
 	c.dirty = true
 	// Used even if it can't be saved: the code is spent, and the game
@@ -621,7 +621,7 @@ func (c *Client) unlink(keepFiles bool) {
 	if c.audioCancel != nil {
 		c.audioCancel() // the pack downloads of the old link
 	}
-	c.st = state{NextSeq: c.st.NextSeq}
+	c.st = state{NextSeq: c.st.NextSeq, Kept: c.st.Kept}
 	c.q = queue{}
 	c.dirty = false
 	c.unlinkPending = keepFiles

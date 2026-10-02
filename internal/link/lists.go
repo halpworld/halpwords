@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/fs"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -258,11 +259,38 @@ func (c *Client) moveOut(li ListInfo) {
 			break
 		}
 		if err == nil && bytes.Equal(old, data) {
-			return // already kept
+			c.keptAs(li.ID, name) // already kept
+			return
 		}
 		name = base + "-" + strconv.Itoa(n) + ".txt"
 	}
-	c.o.Store.Write(c.o.OwnDir+"/"+name, data)
+	if c.o.Store.Write(c.o.OwnDir+"/"+name, data) == nil {
+		c.keptAs(li.ID, name)
+	}
+}
+
+// keptAs records that the list with server id is kept as the own list in
+// file name. c.mu is held.
+func (c *Client) keptAs(id, name string) {
+	if id == "" {
+		return
+	}
+	if c.st.Kept == nil {
+		c.st.Kept = map[string]string{}
+	}
+	c.st.Kept[id] = name
+}
+
+// Kept returns the lists that stopped being assigned and were kept as the
+// player's own: the file name in OwnDir, by the list's server id. The
+// game carries a learner's choices over to the kept list.
+func (c *Client) Kept() map[string]string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return maps.Clone(c.st.Kept)
 }
 
 // syncQuests downloads the assignments as quests. syncMu is held.

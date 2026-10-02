@@ -274,6 +274,10 @@ type state struct {
 	// and Boards the rankings the learner is on (ranks.go).
 	Runs   []qRun  `json:",omitempty"`
 	Boards []Board `json:",omitempty"`
+	// Kept are the lists that stopped being assigned and were kept as the
+	// player's own: the own file name, by the list's server id (moveOut).
+	// Like NextSeq, it outlives the link.
+	Kept map[string]string `json:",omitempty"`
 }
 
 func (s *state) linked() bool { return s.Refresh != "" }
