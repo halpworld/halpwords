@@ -253,6 +253,21 @@ the server before the game.**
   imperative (the dictionary form). Every word has a riddle (180 in all).
   The lists were drafted for 1.0 and **still need checking by a speaker of
   each language**.
+- **Choosing lists:** after the language picker, Adventure, Practice and
+  quests that name no lists show a checklist of the language's lists.
+
+  *Now (#89, game-select, done):* the checklist shows lists newest first,
+  ticked as last time, with word counts and the total. Enter replays the
+  same lists, Space ticks a list, A ticks all or none. Start needs a word,
+  and under 5 words a warning shows. Each learner's pick is kept in
+  settings.json (`Lists.Selected`, `Lists.Seen`), and no pick means every
+  list. A list sent to the game is ticked once and announced with
+  "New: …". Lists an assignment locks are the only ones Adventure and
+  Practice play. Assignment runs, Race and Raid are unchanged. Daily and
+  Hardcore play the built-in lists only, for both the words and the Daily
+  seed. The server keeps `list_hash` as an opaque board key and never
+  recomputes the seed. A run's save keeps its lists. On the web, lists
+  have no file times, so own lists fall back to the game's order.
 
 ### Spaced repetition
 - A Leitner box system (5 boxes) per word per profile. Misses send a word back
@@ -667,7 +682,7 @@ score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
   Crockford's base 32 (no I, L, O or U; typed O, I and L read as 0, 1 and
   1). The pause menu shows it. `HALPWORDS_SEED` still overrides it.
 - **Daily Dungeon:** the seed is an FNV hash of the date, the language and
-  the sorted word keys of every list in that language.
+  the sorted word keys of the built-in lists in that language (#89).
 - **Share codes:** `HW-FR-0924-F12-18450-K7QX` for a Daily Dungeon (month
   and day) or `HW-FR-7K3QZP-F12-18450-K7QX` for a seed, with a 4-character
   checksum. The Hall of Fame checks a friend's code (<kbd>C</kbd>) and
