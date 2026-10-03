@@ -187,7 +187,7 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 	// last of all: they are the biggest downloads.
 	var first error
 	for _, stage := range []func(context.Context, int) error{
-		c.syncLists, c.syncQuests, c.syncMemory, c.uploadRuns, c.syncRanks, c.syncAudio,
+		c.syncLists, c.syncQuests, c.syncMaps, c.syncMemory, c.uploadRuns, c.syncRanks, c.syncAudio,
 	} {
 		err := stage(ctx, gen)
 		if err == nil {

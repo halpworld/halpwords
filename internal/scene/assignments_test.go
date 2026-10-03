@@ -53,7 +53,7 @@ func assignContext(t *testing.T) *game.Context {
 			json.NewEncoder(w).Encode(map[string]any{"lang": r.URL.Query().Get("lang"), "answers": 0, "memory": words.NewMemory()})
 		case "/api/v1/assignments":
 			w.Write(quests)
-		case "/api/v1/runs", "/api/v1/ranks": // no rankings on this server
+		case "/api/v1/runs", "/api/v1/ranks", "/api/v1/maps": // no rankings or given quests on this server
 			w.WriteHeader(http.StatusNotFound)
 		default:
 			w.WriteHeader(http.StatusServiceUnavailable)

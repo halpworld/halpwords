@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/pkg/compete"
@@ -30,6 +32,9 @@ type questFile struct {
 	q       *maps.Quest
 	file    string // the file in questsDir, or "" for a built-in quest
 	builtIn bool
+	// assigned is set for a quest a grown-up gave the learner on the
+	// website, which comes with the link (file is "").
+	assigned *link.AssignedQuest
 }
 
 // droppedFile is a map or quest file dropped on the window.
@@ -74,6 +79,18 @@ func builtInQuests() []questFile {
 	return out
 }
 
+// assignedQuests returns the quests grown-ups gave the learner on the
+// website, when the game is linked.
+func assignedQuests(ctx *game.Context) []questFile {
+	var out []questFile
+	for _, a := range ctx.Link.AssignedQuests() {
+		if q, err := a.Quest(); err == nil {
+			out = append(out, questFile{q: q, assigned: &a})
+		}
+	}
+	return out
+}
+
 // savedQuests returns the quests the player has added, skipping any that
 // no longer load.
 func savedQuests() []questFile {
@@ -96,7 +113,8 @@ func questFileName(title string) string {
 	return strings.TrimSuffix(words.FileName(title), ".txt") + "." + maps.QuestFormat
 }
 
-// Quests picks a hand-made quest to play: one built into the game, or one
+// Quests picks a hand-made quest to play: one a grown-up gave the
+// learner on the website (first), one built into the game, or one
 // dropped on the window as a .hwquest or .hwmap file.
 type Quests struct {
 	bg     *ebiten.Image
@@ -109,7 +127,7 @@ type Quests struct {
 // NewQuests creates the quest picker, adding any dropped files.
 func NewQuests(ctx *game.Context, dropped ...droppedFile) game.Scene {
 	s := &Quests{bg: backdrop(3, 1.4)}
-	s.list = append(builtInQuests(), savedQuests()...)
+	s.list = append(append(assignedQuests(ctx), builtInQuests()...), savedQuests()...)
 	s.add(ctx, dropped)
 	return s
 }
@@ -144,7 +162,7 @@ func (s *Quests) addFile(d droppedFile) error {
 		save.Write(questsDir+"/"+qf.file, data)
 	}
 	for i, o := range s.list {
-		if !o.builtIn && o.file == qf.file {
+		if !o.builtIn && o.assigned == nil && o.file == qf.file {
 			s.list[i], s.sel = qf, i
 			return nil
 		}
@@ -232,8 +250,12 @@ func (s *Quests) Draw(dst *ebiten.Image, ctx *game.Context) {
 				f.Draw(dst, "►", x+14, ry, 2, pal.Yellow)
 			}
 		}
-		f.DrawShadow(dst, qf.q.Title, x+40, ry, 2, col)
-		about := questAbout(qf)
+		title := qf.q.Title
+		if qf.assigned != nil {
+			title = qf.assigned.Title
+		}
+		f.DrawShadow(dst, title, x+40, ry, 2, col)
+		about := questAbout(qf, time.Now())
 		f.DrawShadow(dst, about, x+w-16-f.Width(about, 1), ry+8, 1, pal.Ash)
 	}
 	if len(s.list) == 0 {
@@ -248,8 +270,15 @@ func (s *Quests) Draw(dst *ebiten.Image, ctx *game.Context) {
 }
 
 // questAbout describes a quest in a few words, such as "3 floors ·
-// French".
-func questAbout(qf questFile) string {
+// French", or for one a grown-up gave on the website, "◆ due Fri 2 Oct"
+// (◆ marks what the website sent, as in Word Lists).
+func questAbout(qf questFile, now time.Time) string {
+	if a := qf.assigned; a != nil {
+		if when := a.WhenText(now); when != "" {
+			return "◆ " + when
+		}
+		return "◆ from the website"
+	}
 	floors := "1 floor"
 	if n := len(qf.q.Maps); n != 1 {
 		floors = fmt.Sprintf("%d floors", n)
