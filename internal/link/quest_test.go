@@ -112,9 +112,47 @@ func TestQuestOrder(t *testing.T) {
 	if _, ok := Current([]Quest{qs["asg_minutes"], qs["asg_later"]}, questNow); ok {
 		t.Fatal("a complete or later quest is current")
 	}
-	// Due dates are shown in the player's time zone.
+	// The due date is the server's UTC date, even in New Zealand.
 	nz := time.FixedZone("NZDT", 13*3600)
-	if got := qs["asg_master"].WhenText(questNow.In(nz)); got != "due Sat 3 Oct" {
+	if got := qs["asg_master"].WhenText(questNow.In(nz)); got != "due Fri 2 Oct" {
 		t.Errorf("in New Zealand %q", got)
+	}
+}
+
+// A due date is the UTC calendar date the server and the website show
+// (the server sends the last moment of that day in UTC), east or west
+// of UTC; "today" is the player's own date (F-U3-01: east of UTC, the
+// game showed the next day).
+func TestDueDateIsTheUTCDate(t *testing.T) {
+	sydney := time.FixedZone("AEDT", 11*3600)
+	dublin := time.FixedZone("IST", 3600) // Dublin in summer
+	newYork := time.FixedZone("EST", -5*3600)
+	xmas := Quest{DueAt: "2026-12-24T23:59:59.999Z"}
+	july := Quest{DueAt: "2026-07-10T23:59:59.999Z"}
+	for _, tc := range []struct {
+		name string
+		q    Quest
+		now  time.Time
+		when string
+		late bool
+	}{
+		{"Sydney, days before", xmas, time.Date(2026, 12, 20, 12, 0, 0, 0, sydney), "due Thu 24 Dec", false},
+		{"Sydney, on the day", xmas, time.Date(2026, 12, 24, 12, 0, 0, 0, sydney), "due today", false},
+		// Still 24 Dec in UTC, but 25 Dec in Sydney: the day has gone.
+		{"Sydney, the day after", xmas, time.Date(2026, 12, 25, 9, 0, 0, 0, sydney), "was due 24 Dec", true},
+		{"Dublin in summer", july, time.Date(2026, 7, 8, 12, 0, 0, 0, dublin), "due Fri 10 Jul", false},
+		{"Dublin, just after midnight", july, time.Date(2026, 7, 11, 0, 30, 0, 0, dublin), "was due 10 Jul", true},
+		{"New York, the day before", xmas, time.Date(2026, 12, 23, 12, 0, 0, 0, newYork), "due tomorrow", false},
+		// Already 25 Dec in UTC, but still the due day in New York.
+		{"New York, the evening of the day", xmas, time.Date(2026, 12, 24, 20, 0, 0, 0, newYork), "due today", false},
+		{"New York, a start date", Quest{StartsAt: "2026-12-21T00:00:00Z", DueAt: xmas.DueAt},
+			time.Date(2026, 12, 20, 12, 0, 0, 0, newYork), "starts tomorrow", false}, // not "today"
+	} {
+		if got := tc.q.WhenText(tc.now); got != tc.when {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.when)
+		}
+		if got := tc.q.Late(tc.now); got != tc.late {
+			t.Errorf("%s: late %v", tc.name, got)
+		}
 	}
 }

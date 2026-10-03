@@ -125,38 +125,45 @@ func (q Quest) ProgressText() string {
 }
 
 // WhenText says when the quest is due, or when it starts if that is
-// still to come, in now's time zone: "due today", "due tomorrow", "due
-// Fri 2 Oct", "was due 20 Sep", "starts Mon 5 Oct", or "" when there is
-// no due date.
+// still to come: "due today", "due tomorrow", "due Fri 2 Oct", "was due
+// 20 Sep", "starts Mon 5 Oct", or "" when there is no due date. The
+// dates are the server's, UTC calendar dates, as the website shows them
+// (a quest is due at the last moment of its day in UTC); "today" is
+// now's date in the player's time zone (F-U3-01).
 func (q Quest) WhenText(now time.Time) string {
 	if s := q.Starts(); !s.IsZero() && now.Before(s) {
-		return "starts " + dayText(now, s.In(now.Location()))
+		return "starts " + dayText(now, s.UTC())
 	}
 	d := q.Due()
 	if d.IsZero() {
 		return ""
 	}
-	d = d.In(now.Location())
-	if now.After(d) {
+	d = d.UTC()
+	if daysFrom(now, d) < 0 {
 		return "was due " + d.Format("2 Jan")
 	}
 	return "due " + dayText(now, d)
 }
 
-// Late reports whether the quest's due date has passed and it isn't
-// complete.
+// Late reports whether the quest's due date (its UTC calendar date) is
+// before today, in the player's time zone, and it isn't complete.
 func (q Quest) Late(now time.Time) bool {
 	d := q.Due()
-	return !d.IsZero() && now.After(d) && !q.Progress.Complete
+	return !d.IsZero() && daysFrom(now, d.UTC()) < 0 && !q.Progress.Complete
 }
 
-// dayText names day t as seen from now: "today", "tomorrow", or a date
-// such as "Fri 2 Oct".
-func dayText(now, t time.Time) string {
+// daysFrom is how many days t's calendar date is after now's, each date
+// in its own time zone.
+func daysFrom(now, t time.Time) int {
 	y1, m1, d1 := now.Date()
 	y2, m2, d2 := t.Date()
-	days := int(time.Date(y2, m2, d2, 12, 0, 0, 0, time.UTC).Sub(time.Date(y1, m1, d1, 12, 0, 0, 0, time.UTC)).Hours() / 24)
-	switch days {
+	return int(time.Date(y2, m2, d2, 12, 0, 0, 0, time.UTC).Sub(time.Date(y1, m1, d1, 12, 0, 0, 0, time.UTC)).Hours() / 24)
+}
+
+// dayText names t's calendar date as seen from now: "today", "tomorrow",
+// or a date such as "Fri 2 Oct".
+func dayText(now, t time.Time) string {
+	switch daysFrom(now, t) {
 	case 0:
 		return "today"
 	case 1:
