@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
+	"image"
 	"strings"
 	"testing"
 
@@ -224,5 +225,35 @@ func TestAccountWithNobodyGoesToSwitch(t *testing.T) {
 	}
 	if _, ok := next().(*Learners); !ok {
 		t.Errorf("Account stayed")
+	}
+}
+
+// Each sign-in picture sits inside its own cell, beside its number and
+// inside the panel, and is drawn at the size it was made, so nine
+// pictures never cover each other, the numbers or the panel edge
+// (F-U4-01: they were drawn twice too big).
+func TestPictureGridFits(t *testing.T) {
+	panel := picturePanel()
+	if !panel.In(image.Rect(0, 0, game.ScreenW, game.ScreenH)) {
+		t.Fatalf("panel %v is off the screen", panel)
+	}
+	for i := range link.Grid {
+		r := pictureRect(i)
+		c := pictureCellAt(i)
+		cell := image.Rectangle{Min: c, Max: c.Add(image.Pt(pictureCell, pictureCell))}
+		if !r.In(cell) || !cell.In(panel) {
+			t.Errorf("picture %d at %v is outside its cell %v or the panel %v", i+1, r, cell, panel)
+		}
+		if r.Overlaps(pictureLabel(i)) {
+			t.Errorf("picture %d at %v covers its number at %v", i+1, r, pictureLabel(i))
+		}
+		for j := range i {
+			if r.Overlaps(pictureRect(j)) {
+				t.Errorf("pictures %d and %d overlap", j+1, i+1)
+			}
+		}
+	}
+	if img := pictureImage(0); img == nil || img.Bounds().Size() != pictureRect(0).Size() {
+		t.Fatalf("a picture is made at %v but drawn at %v: it would be stretched", img.Bounds().Size(), pictureRect(0).Size())
 	}
 }
