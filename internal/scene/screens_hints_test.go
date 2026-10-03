@@ -55,7 +55,7 @@ func TestAIIntroFits(t *testing.T) {
 	ctx := testContext(t)
 	withFont(t, ctx)
 	const w = 640 - 32 - 32
-	lines, _ := introLines(ctx.Font, w)
+	lines, _ := introLines(ctx.Font, w, false)
 	if len(lines) < 7 {
 		t.Fatalf("%d lines", len(lines))
 	}
@@ -140,5 +140,42 @@ func TestLongestAnswerFitsTypingPanel(t *testing.T) {
 		if got := ctx.Font.Width(s, 1); got > panel {
 			t.Errorf("%d × %q is %dpx wide, the panel is %dpx", typing.MaxLen, r, got, panel)
 		}
+	}
+}
+
+// The AI Helper's two footer lines sit clear of the key hint and of the
+// spending panel above them, and fit across the screen (F-U4-04: the
+// status line overprinted the hint). A child signed in at school is told
+// who looks after the screen, not asked for a key.
+func TestAISetupFooterAndSchoolWords(t *testing.T) {
+	ctx := testContext(t)
+	withFont(t, ctx)
+	const lineH, hintY = 16 + 1, game.ScreenH - 20 // text plus its shadow
+	if aiAboutY+lineH > aiStatusY || aiStatusY+lineH > hintY {
+		t.Errorf("about at %d, status at %d and hint at %d overlap", aiAboutY, aiStatusY, hintY)
+	}
+	// The tallest panel: every provider row (Draw: y 56, 18 a row, 14
+	// more), a 6 pixel gap, then 80 pixels of spending.
+	if bottom := 56 + 18*aiRows + 14 + 6 + 80; bottom > aiAboutY {
+		t.Errorf("the spending panel ends at %d, under the about line at %d", bottom, aiAboutY)
+	}
+	if w := ctx.Font.Width((&AISetup{sel: aiRowProvider}).about(ctx), 1); w > game.ScreenW-24 {
+		t.Errorf("the Provider row's help is %dpx wide: it is cut off", w)
+	}
+
+	if got := aiHeading(ctx); !strings.Contains(got, "parents and teachers") {
+		t.Errorf("at home the heading is %q", got)
+	}
+	ctx.Link = link.Open(link.Options{Store: memFiles{"link.json": []byte(`{"Way":"` + link.WayCard + `"}`)}, Server: "http://127.0.0.1:1"})
+	got := aiHeading(ctx)
+	if strings.Contains(got, "parents") || !strings.Contains(got, "teacher") {
+		t.Errorf("at school the heading is %q", got)
+	}
+	if w := ctx.Font.Width(got, 1); w > game.ScreenW-16 {
+		t.Errorf("the school heading is %dpx wide", w)
+	}
+	lines, _ := introLines(ctx.Font, game.ScreenW-64, true)
+	if all := strings.Join(lines, " "); strings.Contains(all, "key") {
+		t.Errorf("at school the intro asks for a key: %q", all)
 	}
 }

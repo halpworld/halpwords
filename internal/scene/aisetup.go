@@ -17,6 +17,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
 )
@@ -447,7 +448,7 @@ func (a *AISetup) Draw(dst *ebiten.Image, ctx *game.Context) {
 	cx := game.ScreenW / 2
 	gfx.DrawArt(dst, a.bg, 0, 0)
 	f.DrawCentered(dst, "AI Helper", cx, 6, 2, pal.Yellow)
-	f.DrawCentered(dst, "For parents and teachers: connect an AI to make the dungeon smarter.", cx, 40, 1, pal.Tan)
+	f.DrawCentered(dst, aiHeading(ctx), cx, 40, 1, pal.Tan)
 
 	ai, p := ctx.AI, ctx.AI.Provider()
 	const x, w, rowH, valX = 16, game.ScreenW - 32, 18, 170
@@ -522,11 +523,10 @@ func (a *AISetup) Draw(dst *ebiten.Image, ctx *game.Context) {
 		a.drawIntro(dst, ctx, x, y+rowH+26, w)
 	}
 
-	by := game.ScreenH - 52
 	if a.note != "" {
-		f.DrawCentered(dst, fit(f, a.note, game.ScreenW-24, 1), cx, by, 1, a.col)
+		f.DrawCentered(dst, fit(f, a.note, game.ScreenW-24, 1), cx, aiAboutY, 1, a.col)
 	} else {
-		f.DrawCentered(dst, fit(f, a.about(ctx), game.ScreenW-24, 1), cx, by, 1, pal.Ice)
+		f.DrawCentered(dst, fit(f, a.about(ctx), game.ScreenW-24, 1), cx, aiAboutY, 1, pal.Ice)
 	}
 	status, scol := "AI is off. The game plays the same, with its built-in puzzles.", pal.Ash
 	if ai.UsingHalpwords() {
@@ -536,7 +536,7 @@ func (a *AISetup) Draw(dst *ebiten.Image, ctx *game.Context) {
 	} else if p != nil || ai.Chosen() == llm.Halpwords {
 		status, scol = "AI is not working yet: "+ai.Problem(), pal.Orange
 	}
-	f.DrawCentered(dst, fit(f, status, game.ScreenW-24, 1), cx, by+18, 1, scol)
+	f.DrawCentered(dst, fit(f, status, game.ScreenW-24, 1), cx, aiStatusY, 1, scol)
 	f.DrawShadow(dst, "↑/↓ choose   ←/→ change   Enter select   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
 
 	switch a.mode {
@@ -552,12 +552,31 @@ func (a *AISetup) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 }
 
+// The AI Helper's two lines above the key hint (at ScreenH-20): what the
+// chosen row does, then whether the AI is on. Each is 16 pixels high
+// plus its shadow, so they sit clear of the hint and of the spending
+// panel above them.
+const (
+	aiAboutY  = game.ScreenH - 60
+	aiStatusY = game.ScreenH - 42
+)
+
+// aiHeading is the line under the AI Helper's title. The screen is for a
+// parent or teacher, but a child signed in at school can open it too, so
+// it tells them who looks after it.
+func aiHeading(ctx *game.Context) string {
+	if link.IsSchoolWay(ctx.Link.Way()) {
+		return "Your teacher looks after this. The game works fine without it."
+	}
+	return "For parents and teachers: connect an AI to make the dungeon smarter."
+}
+
 // about explains the chosen row.
 func (a *AISetup) about(ctx *game.Context) string {
 	p := ctx.AI.Provider()
 	switch a.sel {
 	case aiRowProvider:
-		return "Choose who runs the AI with ←/→. Off plays the game without it, and without Halpwords AI."
+		return "Choose who runs the AI with ←/→. Off plays without any AI."
 	case aiRowKey:
 		return "Get a key at " + p.KeyPage + ". It stays on this computer."
 	case aiRowGame:
@@ -601,7 +620,9 @@ func (a *AISetup) drawHalpwords(dst *ebiten.Image, ctx *game.Context, x, y, w in
 
 // introLines is what the AI does, wrapped to width, with whether each line
 // is a heading (the first and last) drawn brighter.
-func introLines(f *gfx.Font, width int) (lines []string, bright []bool) {
+// For a child signed in at school, the last line says who turns it on
+// rather than how.
+func introLines(f *gfx.Font, width int, school bool) (lines []string, bright []bool) {
 	src := []string{
 		"With an AI connected, the dungeon reacts to the words you are learning:",
 		"• floors get names and stories built around your words",
@@ -610,6 +631,9 @@ func introLines(f *gfx.Font, width int) (lines []string, bright []bool) {
 		"• a Scroll of Insight at campfires with memory tips for tricky words",
 		"• the Word Forge makes new word lists on any topic",
 		"Choose Halpwords AI (linked games), or Anthropic, OpenAI, Meta or DeepSeek and a key.",
+	}
+	if school {
+		src[len(src)-1] = "Your teacher can turn it on."
 	}
 	for i, l := range src {
 		for _, w := range wrap(f, l, width) {
@@ -623,7 +647,7 @@ func introLines(f *gfx.Font, width int) (lines []string, bright []bool) {
 // drawIntro explains what the AI does, when none is chosen.
 func (a *AISetup) drawIntro(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
 	f := ctx.Font
-	lines, bright := introLines(f, w-32)
+	lines, bright := introLines(f, w-32, link.IsSchoolWay(ctx.Link.Way()))
 	gfx.Window(dst, x, y, w, len(lines)*17+16)
 	for i, l := range lines {
 		col := pal.Steel

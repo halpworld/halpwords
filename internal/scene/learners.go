@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"image/color"
 	"strings"
 	"unicode"
@@ -783,6 +784,10 @@ var pictureKeys = [link.Grid][2]ebiten.Key{
 	{ebiten.Key7, ebiten.KeyNumpad7}, {ebiten.Key8, ebiten.KeyNumpad8}, {ebiten.Key9, ebiten.KeyNumpad9},
 }
 
+// picturesHint is the picture grid's key hint. A number taps its picture
+// at once; the arrows only move, and Enter taps the picture they are on.
+const picturesHint = "1-9 tap   Arrows choose, Enter tap   Backspace undo   Esc back"
+
 func (s *SignIn) updatePictures(ctx *game.Context) {
 	tapped := -1
 	for i, keys := range pictureKeys {
@@ -920,7 +925,8 @@ func showLongCode(code []rune, n int) string {
 // pictureImages are the picture set, drawn once.
 var pictureImages []*ebiten.Image
 
-// pictureSize is how big a picture is drawn: 8 pixels, each 5 by 5.
+// pictureScale is how big a picture is drawn: 8 pixels, each 5 by 5
+// screen pixels.
 const pictureScale = 5
 
 func pictureImage(i int) *ebiten.Image {
@@ -999,7 +1005,7 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 	case siPictures:
 		s.drawPictures(dst, ctx)
-		hint = "Arrows or 1-9 choose   Enter tap   Backspace undo   Esc back"
+		hint = picturesHint
 	case siWaiting:
 		f.DrawCentered(dst, "Signing in…", cx, 150, 2, pal.Ice)
 		hint = "Esc back"
@@ -1039,26 +1045,64 @@ func (s *SignIn) drawNames(dst *ebiten.Image, ctx *game.Context, x, y, w int) {
 	}
 }
 
+// The picture grid: 3 by 3 cells, each with its number (1 to 9) in the
+// top left corner and its picture beside it, in a panel.
+const (
+	pictureCell  = proc.PictureSize*pictureScale + 16
+	pictureGridY = 76
+)
+
+// pictureCellAt is the top left corner of cell i of the picture grid.
+func pictureCellAt(i int) image.Point {
+	gx := game.ScreenW/2 - 3*pictureCell/2
+	return image.Pt(gx+i%3*pictureCell, pictureGridY+i/3*pictureCell)
+}
+
+// picturePanel is the panel around the picture grid.
+func picturePanel() image.Rectangle {
+	at := pictureCellAt(0).Sub(image.Pt(8, 8))
+	return image.Rectangle{Min: at, Max: at.Add(image.Pt(3*pictureCell+16, 3*pictureCell+16))}
+}
+
+// pictureLabel is where the number of cell i is drawn: one digit.
+func pictureLabel(i int) image.Rectangle {
+	c := pictureCellAt(i)
+	return image.Rect(c.X+3, c.Y+2, c.X+3+8, c.Y+2+16)
+}
+
+// pictureRect is where the picture of cell i is drawn, right of its
+// number so neither covers the other.
+func pictureRect(i int) image.Rectangle {
+	c := pictureCellAt(i).Add(image.Pt(12, 8))
+	return image.Rectangle{Min: c, Max: c.Add(image.Pt(proc.PictureSize*pictureScale, proc.PictureSize*pictureScale))}
+}
+
 func (s *SignIn) drawPictures(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	cx := game.ScreenW / 2
-	const cell = proc.PictureSize*pictureScale + 16
-	gx, gy := cx-3*cell/2, 76
 	f.DrawCentered(dst, "Tap your 3 pictures, in order:", cx, 52, 1, pal.Ice)
-	gfx.Window(dst, gx-8, gy-8, 3*cell+16, 3*cell+16)
+	panel := picturePanel()
+	gfx.Window(dst, panel.Min.X, panel.Min.Y, panel.Dx(), panel.Dy())
 	for i, p := range s.grid {
-		px, py := gx+i%3*cell, gy+i/3*cell
+		c := pictureCellAt(i)
 		if i == s.cursor {
-			gfx.FillRect(dst, px+2, py+2, cell-4, cell-4, pal.Indigo)
+			gfx.FillRect(dst, c.X+2, c.Y+2, pictureCell-4, pictureCell-4, pal.Indigo)
 		}
 		if img := pictureImage(p); img != nil {
-			gfx.DrawArt(dst, img, px+8, py+8)
+			// The pictures are already drawn big (pictureScale), so they
+			// go on the screen as they are, not doubled like art.
+			r := pictureRect(i)
+			op := &ebiten.DrawImageOptions{}
+			op.GeoM.Scale(float64(r.Dx())/float64(img.Bounds().Dx()), float64(r.Dy())/float64(img.Bounds().Dy()))
+			op.GeoM.Translate(float64(r.Min.X), float64(r.Min.Y))
+			dst.DrawImage(img, op)
 		}
-		f.Draw(dst, fmt.Sprint(i+1), px+3, py+2, 1, pal.Ash)
+		l := pictureLabel(i)
+		f.Draw(dst, fmt.Sprint(i+1), l.Min.X, l.Min.Y, 1, pal.Ash)
 	}
 	// Only how many are tapped shows, never which.
 	dots := strings.Repeat("● ", len(s.picks)) + strings.Repeat("○ ", link.Picks-len(s.picks))
-	f.DrawCentered(dst, strings.TrimSpace(dots), cx, gy+3*cell+14, 2, pal.Yellow)
+	f.DrawCentered(dst, strings.TrimSpace(dots), cx, panel.Max.Y+6, 2, pal.Yellow)
 }
 
 // drawSignOut asks whether to sign out, and says what happens to the
