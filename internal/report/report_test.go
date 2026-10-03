@@ -157,7 +157,7 @@ func (f *fakeServer) set(status int) {
 	f.mu.Unlock()
 }
 
-func newOutbox(url string, token func() string) (*Outbox, *memStore) {
+func newOutbox(url string, token func(from string) string) (*Outbox, *memStore) {
 	st := &memStore{files: map[string][]byte{}}
 	return &Outbox{Queue: NewQueue(st), Sender: &Sender{Server: url, Token: token, UserAgent: "Halpwords/1.2.0 (linux; amd64)"}}, st
 }
@@ -198,20 +198,57 @@ func TestQueuedOfflineThenSent(t *testing.T) {
 	}
 }
 
+// A report goes with the token for the link it was made under (F-U3-06);
+// the tag itself never reaches the server.
 func TestLinkedGameSendsItsToken(t *testing.T) {
 	fk := &fakeServer{status: http.StatusCreated}
 	srv := httptest.NewServer(fk)
 	defer srv.Close()
-	token := ""
-	o, _ := newOutbox(srv.URL, func() string { return token })
+	from := ""
+	o, _ := newOutbox(srv.URL, func(f string) string {
+		if f == "dev_a" {
+			return "hwd_abc"
+		}
+		return ""
+	})
+	o.From = func() string { return from }
 	g := Game{Version: "1.2.0", Platform: "linux/amd64"}
-	o.Queue.Add(Upset(g, "name", ""))
+	if o.Linked() {
+		t.Error("linked before linking")
+	}
+	o.Queue.Add(Upset(g, "name", "")) // made unlinked
 	o.Flush(context.Background())
-	token = "hwd_abc"
-	o.Queue.Add(Upset(g, "name", ""))
+	from = "dev_a"
+	if !o.Linked() {
+		t.Error("not linked as dev_a")
+	}
+	r := Upset(g, "name", "")
+	r.From = "dev_a"
+	o.Queue.Add(r)
 	o.Flush(context.Background())
 	if len(fk.auth) != 2 || fk.auth[0] != "" || fk.auth[1] != "Bearer hwd_abc" || fk.ua[1] != "Halpwords/1.2.0 (linux; amd64)" {
 		t.Errorf("auth %q ua %q", fk.auth, fk.ua)
+	}
+	for _, r := range fk.got {
+		if r.From != "" {
+			t.Errorf("the server got from %q", r.From)
+		}
+	}
+}
+
+// Submit tags a report with the link playing, and the queue keeps the
+// tag across a restart.
+func TestSubmitTagsTheLink(t *testing.T) {
+	dead := httptest.NewServer(http.NotFoundHandler())
+	dead.Close()
+	o, st := newOutbox(dead.URL, nil)
+	o.From = func() string { return "dev_a" }
+	if err := o.Submit(Upset(Game{Version: "1", Platform: "x"}, "name", "")); err != nil {
+		t.Fatal(err)
+	}
+	rs, _ := NewQueue(st).Pending()
+	if len(rs) != 1 || rs[0].From != "dev_a" {
+		t.Errorf("queued %+v", rs)
 	}
 }
 

@@ -3,7 +3,8 @@ package game
 import (
 	"runtime"
 	"runtime/debug"
-	"strings"
+
+	"github.com/halpworld/halpwords/internal/link"
 )
 
 // Version is the game's version. Release builds set it with
@@ -44,13 +45,7 @@ func VersionText() string {
 
 // UserAgent is the game's User-Agent for requests to Halpwords, such as
 // "Halpwords/1.2.0 (linux; amd64)" or "Halpwords/dev (js; wasm)".
-func UserAgent() string {
-	v := strings.TrimPrefix(Version, "v")
-	if v == "" || strings.ContainsAny(v, " ()/;") {
-		v = "dev"
-	}
-	return "Halpwords/" + v + " (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
-}
+func UserAgent() string { return link.UserAgent(Version) }
 
 // Platform is the operating system and processor, "linux/amd64", for bug
 // reports.

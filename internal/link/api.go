@@ -349,7 +349,7 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 		return ErrUnlinked
 	}
 	if err != nil {
-		return err
+		return notLinkable(err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -384,7 +384,19 @@ func (c *Client) authed(ctx context.Context, gen int, method, path string, hdr h
 		if err := c.refresh(ctx, gen); err != nil {
 			return status, h, err
 		}
-		return c.call(ctx, method, path, c.AccessToken(), hdr, body, out)
+		status, h, err = c.call(ctx, method, path, c.AccessToken(), hdr, body, out)
 	}
-	return status, h, err
+	return status, h, notLinkable(err)
+}
+
+// notLinkable is err, or ErrNotLinkable when the server says the learner
+// can't use a linked game now (403 not_linkable: removed by the family,
+// say, which can be undone for a while). The game stays linked and says
+// so; once a grown-up sorts it out, the next sync works again.
+func notLinkable(err error) error {
+	var e *Error
+	if errors.As(err, &e) && e.Code == codeNotLinkable {
+		return ErrNotLinkable
+	}
+	return err
 }

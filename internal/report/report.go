@@ -66,6 +66,10 @@ type Report struct {
 	// Crash is the last crash.txt, in full, only when the player chose
 	// to send it.
 	Crash string `json:"crash,omitempty"`
+	// From is the link the report was made under (its device ID), or ""
+	// when the game wasn't linked. The queue keeps it; it is never sent
+	// (Sender.Send).
+	From string `json:"from,omitempty"`
 }
 
 // ErrInvalid means a report can't be sent as it is.
