@@ -10,11 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
+	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/pkg/compete"
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -158,6 +161,32 @@ func TestAccountHelpers(t *testing.T) {
 	ctx = linkedContext(t)
 	if items := a.items(ctx); len(items) != 3 || items[0] != acSync {
 		t.Fatalf("linked menu %v", items)
+	}
+}
+
+// The Account screen's message fits the screen, even a long one (it ran
+// off both sides: F-U3-03).
+func TestAccountMessageFits(t *testing.T) {
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := gfx.NewFont(face)
+	for _, msg := range []string{
+		"Synced.",
+		upperFirst(link.Explain(link.ErrNotLinkable)) + ".",
+		"A grown-up needs to check this learner's settings on the website. (403 not_linkable). " +
+			"And then some more words, to make it far too long for two lines of the screen.",
+	} {
+		lines := msgLines(f, msg)
+		if len(lines) == 0 || len(lines) > 2 {
+			t.Errorf("%q: %d lines", msg, len(lines))
+		}
+		for _, l := range lines {
+			if w := f.Width(l, 1); w > game.ScreenW-32 {
+				t.Errorf("%q: line %q is %d wide", msg, l, w)
+			}
+		}
 	}
 }
 

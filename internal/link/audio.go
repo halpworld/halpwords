@@ -117,7 +117,7 @@ func (c *Client) downloadPacks(ctx context.Context, cancel context.CancelFunc, g
 			return
 		}
 		data, status, err := c.fetchPack(ctx, gen, li)
-		if errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) {
+		if errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) || errors.Is(err, ErrNotLinkable) {
 			return
 		}
 		var e *Error

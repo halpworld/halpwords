@@ -222,7 +222,7 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		if q[0] == http.StatusTooManyRequests {
 			w.Header().Set("Retry-After", "1")
 		}
-		writeErr(w, q[0], map[int]string{401: "unauthenticated", 429: "rate_limited", 500: "internal", 503: "internal", 413: "too_large"}[q[0]])
+		writeErr(w, q[0], map[int]string{401: "unauthenticated", 403: "not_linkable", 429: "rate_limited", 500: "internal", 503: "internal", 413: "too_large"}[q[0]])
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
@@ -844,6 +844,35 @@ func TestTokenReusedUnlinks(t *testing.T) {
 	}
 	if c.AccessToken() != "" {
 		t.Error("tokens kept")
+	}
+}
+
+// TestNotLinkableStaysLinked: a learner who can't use a linked game now
+// (removed on the website, which the family can undo for a while: the
+// server answers 403 not_linkable) leaves the game linked, saying so in
+// plain words, and the next sync after a grown-up sorts it out works
+// (F-U3-03).
+func TestNotLinkableStaysLinked(t *testing.T) {
+	f, c, _, _ := linked(t)
+	for _, path := range []string{"/api/v1/token", "/api/v1/me"} {
+		if path == "/api/v1/token" {
+			f.failNext("/api/v1/me", 401)
+		}
+		f.failNext(path, 403)
+		err := c.Sync(context.Background())
+		if !errors.Is(err, ErrNotLinkable) {
+			t.Fatalf("%s: sync: %v", path, err)
+		}
+		s := c.Status()
+		if !s.Linked || !errors.Is(s.Err, ErrNotLinkable) {
+			t.Errorf("%s: status: %+v", path, s)
+		}
+		if msg := Explain(s.Err); strings.Contains(msg, "403") || strings.Contains(msg, "not_linkable") {
+			t.Errorf("%s: Explain = %q", path, msg)
+		}
+		if err := c.Sync(context.Background()); err != nil {
+			t.Fatalf("%s: sync once sorted out: %v", path, err)
+		}
 	}
 }
 

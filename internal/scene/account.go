@@ -265,6 +265,18 @@ func upperFirst(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// msgLines wraps the Account screen's message to fit the screen, in at
+// most two lines; a longer one is cut short.
+func msgLines(f *gfx.Font, msg string) []string {
+	const w = game.ScreenW - 32
+	lines := wrap(f, msg, w)
+	if len(lines) > 2 {
+		lines = []string{lines[0], strings.Join(lines[1:], " ")}
+	}
+	lines[len(lines)-1] = fit(f, lines[len(lines)-1], w, 1)
+	return lines
+}
+
 // Draw implements game.Scene.
 func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
@@ -352,7 +364,11 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, label, x+36, iy, 1, c)
 	}
 	if a.msg != "" {
-		f.DrawCentered(dst, a.msg, cx, game.ScreenH-44, 1, a.msgCol)
+		// Up to two lines, the last just above the key help.
+		lines := msgLines(f, a.msg)
+		for i, l := range lines {
+			f.DrawCentered(dst, l, cx, game.ScreenH-44-(len(lines)-1-i)*18, 1, a.msgCol)
+		}
 	}
 	f.DrawShadow(dst, "↑/↓ choose   Enter select   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
 
