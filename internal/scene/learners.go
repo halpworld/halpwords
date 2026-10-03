@@ -784,6 +784,10 @@ var pictureKeys = [link.Grid][2]ebiten.Key{
 	{ebiten.Key7, ebiten.KeyNumpad7}, {ebiten.Key8, ebiten.KeyNumpad8}, {ebiten.Key9, ebiten.KeyNumpad9},
 }
 
+// picturesHint is the picture grid's key hint. A number taps its picture
+// at once; the arrows only move, and Enter taps the picture they are on.
+const picturesHint = "1-9 tap   Arrows choose, Enter tap   Backspace undo   Esc back"
+
 func (s *SignIn) updatePictures(ctx *game.Context) {
 	tapped := -1
 	for i, keys := range pictureKeys {
@@ -1001,7 +1005,7 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 		}
 	case siPictures:
 		s.drawPictures(dst, ctx)
-		hint = "Arrows or 1-9 choose   Enter tap   Backspace undo   Esc back"
+		hint = picturesHint
 	case siWaiting:
 		f.DrawCentered(dst, "Signing in…", cx, 150, 2, pal.Ice)
 		hint = "Esc back"

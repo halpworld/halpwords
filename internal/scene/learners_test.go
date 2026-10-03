@@ -8,10 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/save"
+	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/pkg/proc"
 )
 
@@ -255,5 +258,21 @@ func TestPictureGridFits(t *testing.T) {
 	}
 	if img := pictureImage(0); img == nil || img.Bounds().Size() != pictureRect(0).Size() {
 		t.Fatalf("a picture is made at %v but drawn at %v: it would be stretched", img.Bounds().Size(), pictureRect(0).Size())
+	}
+}
+
+// The picture grid's hint says a number taps (it does, at once) and fits
+// on one line (F-U4-02: it said 1-9 choose, Enter tap).
+func TestPicturesHint(t *testing.T) {
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := gfx.NewFont(face)
+	if !strings.HasPrefix(picturesHint, "1-9 tap") {
+		t.Errorf("hint %q doesn't say a number taps", picturesHint)
+	}
+	if w := f.Width(picturesHint, 1); 8+w > game.ScreenW-8 {
+		t.Errorf("hint is %d pixels wide: it doesn't fit", w)
 	}
 }
