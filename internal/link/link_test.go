@@ -1279,6 +1279,34 @@ func TestWebBuildSendsClientHeader(t *testing.T) {
 	}
 }
 
+// The game sends a version the server can read, or "dev": a build from
+// an untagged commit has a version like "2218e3b", which the server took
+// as no version at all, so the devices page said "Unknown" (F-U3-02).
+func TestUserAgentVersion(t *testing.T) {
+	for v, want := range map[string]string{
+		"v1.2.0": "1.2.0", "1.2.0": "1.2.0", "v1.2.0-3-gabcdef-dirty": "1.2.0-3-gabcdef-dirty",
+		"dev": "dev", "": "dev", "2218e3b": "dev", "2218e3b-dirty": "dev", "c604de6": "dev",
+		"v1.2": "dev", "1.2.0 (x)": "dev",
+	} {
+		ua := UserAgent(v)
+		if !strings.HasPrefix(ua, "Halpwords/"+want+" (") || !uaRE.MatchString(ua) {
+			t.Errorf("UserAgent(%q) = %q, want version %q", v, ua, want)
+		}
+	}
+	inBrowser = true
+	t.Cleanup(func() { inBrowser = false })
+	f := newFake(t)
+	c := Open(Options{Store: newMemStore(), Server: f.srv.URL, Version: "2218e3b"})
+	if err := c.LinkNow(context.Background(), f.code); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.clients) != 1 || !strings.HasPrefix(f.clients[0], "halpwords/dev (") {
+		t.Errorf("X-Halpwords-Client %q", f.clients)
+	}
+}
+
 func TestUnlinkDuringSync(t *testing.T) {
 	f, c, _, _ := linked(t)
 	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})

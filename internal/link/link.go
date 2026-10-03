@@ -18,6 +18,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -731,15 +732,24 @@ func (c *Client) Decide(lang *words.Language, own profile.LangSettings, q *Quest
 	return ls, d
 }
 
-// userAgent is the game's User-Agent: "Halpwords/1.2.0 (darwin; arm64)",
-// or "Halpwords/dev (…)" for a build without a release version.
-func (c *Client) userAgent() string {
-	v := strings.TrimPrefix(strings.TrimSpace(c.o.Version), "v")
-	if v == "" || v[0] < '0' || v[0] > '9' || strings.ContainsAny(v, " ;()") {
+// releaseVersion is a version the server takes from a User-Agent: 1.2.0,
+// maybe with a suffix such as -3-gabcdef or -dirty (its api.GameVersion).
+var releaseVersion = regexp.MustCompile(`^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}([-+][0-9A-Za-z.+-]{1,40})?$`)
+
+// UserAgent is the User-Agent of a game of version, such as "v1.2.0":
+// "Halpwords/1.2.0 (darwin; arm64)", or "Halpwords/dev (…)" for a build
+// without a release version (one from an untagged commit is "2218e3b"),
+// which the server would otherwise not know as a version at all.
+func UserAgent(version string) string {
+	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if !releaseVersion.MatchString(v) {
 		v = "dev"
 	}
 	return "Halpwords/" + v + " (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
 }
+
+// userAgent is the game's User-Agent.
+func (c *Client) userAgent() string { return UserAgent(c.o.Version) }
 
 // clientHeader is the header the web build sends its version in, as the
 // server's docs/api says: "halpwords/1.2.0 (js; wasm)".
