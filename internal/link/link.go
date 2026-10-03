@@ -274,6 +274,12 @@ type state struct {
 	ListsGame string     `json:",omitempty"`
 	Lists     []ListInfo `json:",omitempty"`
 	Quests    []Quest    `json:",omitempty"`
+	// Maps are the hand-made quests grown-ups gave the learner (maps.go),
+	// with the ETag of GET /api/v1/maps and the game version (its
+	// User-Agent) that read them, as for lists.
+	Maps     []AssignedQuest `json:",omitempty"`
+	MapsETag string          `json:",omitempty"`
+	MapsGame string          `json:",omitempty"`
 	// SSO is a sign-in with a school account on its way.
 	SSO *SSOCode `json:",omitempty"`
 	// Runs are finished scored runs waiting to be sent for the rankings,

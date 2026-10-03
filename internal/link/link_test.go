@@ -127,6 +127,11 @@ type fake struct {
 	locked    bool            // sign-ins answer 403 locked
 	// meSeq makes GET /api/v1/me say last_seq, as newer servers do.
 	meSeq bool
+	// maps are GET /api/v1/maps' quests, with mapsETag its ETag; noMaps
+	// answers 404, as a server from before W10.4.
+	maps     []map[string]any
+	mapsETag string
+	noMaps   bool
 
 	// ai answers POST /api/v1/ai/{task}: a status and a body.
 	ai func(task string, body []byte) (int, any)
@@ -352,6 +357,24 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"assignments": []any{}})
+	case r.Method == "GET" && path == "/api/v1/maps":
+		if !auth() {
+			return
+		}
+		if f.noMaps {
+			writeErr(w, 404, "not_found")
+			return
+		}
+		w.Header().Set("ETag", f.mapsETag)
+		if r.Header.Get("If-None-Match") == f.mapsETag && f.mapsETag != "" {
+			w.WriteHeader(304)
+			return
+		}
+		qs := f.maps
+		if qs == nil {
+			qs = []map[string]any{}
+		}
+		writeJSON(w, 200, map[string]any{"quests": qs})
 	case r.Method == "GET" && path == "/api/v1/memory":
 		if !auth() {
 			return

@@ -1,12 +1,22 @@
 package scene
 
 import (
+	"encoding/json"
+	"io/fs"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/dungeon"
+	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
+	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/pkg/maps"
 	"github.com/halpworld/halpwords/pkg/puzzle"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -187,7 +197,45 @@ func TestAddQuestFile(t *testing.T) {
 	if !strings.Contains(s.msg, "broken.hwmap") || !strings.Contains(s.msg, "Row 0") {
 		t.Errorf("said %q", s.msg)
 	}
-	if got := questAbout(s.list[0]); got != "2 floors · any language" {
+	if got := questAbout(s.list[0], time.Now()); got != "2 floors · any language" {
 		t.Errorf("about %q", got)
 	}
+}
+
+// A quest a grown-up gave the learner in the website's map editor is
+// offered first in the Quest picker, marked and with its due date, and
+// starts like any other (F-U3-05, halpworld/halpwords#34).
+func TestAssignedQuestsOffered(t *testing.T) {
+	useTempDir(t)
+	ctx := testContext(t)
+	data, err := fs.ReadFile(assets.Quests, "quests/scribes-cellars.hwquest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, _ := json.Marshal(map[string]any{"Server": "http://127.0.0.1:1", "Access": "hwd_1", "Refresh": "hwr_1",
+		"AccessExp": time.Now().Add(time.Hour), "RefreshExp": time.Now().Add(time.Hour), "NextSeq": 1,
+		"Maps": []map[string]any{{"id": "asg_q1", "map_id": "map_1", "version": 2, "title": "Kit's quest",
+			"floors": 3, "due_at": "2026-12-24T23:59:59Z", "text": string(data)}}})
+	ctx.Link = link.Open(link.Options{Store: memFiles{"link.json": st}, Server: "http://127.0.0.1:1"})
+	s := NewQuests(ctx).(*Quests)
+	if len(s.list) < 2 || s.list[0].assigned == nil || s.list[0].assigned.Title != "Kit's quest" {
+		t.Fatalf("assigned quest not first: %+v", s.list)
+	}
+	now := time.Date(2026, 12, 20, 12, 0, 0, 0, time.UTC)
+	if got := questAbout(s.list[0], now); got != "◆ due Thu 24 Dec" {
+		t.Errorf("about %q", got)
+	}
+	if next, msg := questStart(ctx, s.list[0].q); next == nil {
+		t.Errorf("can't start: %s", msg)
+	}
+	// Dropping a quest of the same title doesn't replace the given one.
+	again, _ := s.list[0].q.Encode()
+	s.add(ctx, []droppedFile{{"cellars.hwquest", again}})
+	if s.list[0].assigned == nil {
+		t.Error("the given quest was replaced")
+	}
+	dst := ebiten.NewImage(game.ScreenW, game.ScreenH)
+	face, _ := unifont.ParseBytes(assets.UnifontHex)
+	ctx.Font = gfx.NewFont(face)
+	s.Draw(dst, ctx)
 }
