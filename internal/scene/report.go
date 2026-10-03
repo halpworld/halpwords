@@ -210,8 +210,7 @@ func (r *Report) send(ctx *game.Context) {
 
 // linked reports whether reports carry the linked game's token.
 func linked(ctx *game.Context) bool {
-	s := ctx.Reports
-	return s != nil && s.Sender != nil && s.Sender.Token != nil && s.Sender.Token() != ""
+	return ctx.Reports.Linked()
 }
 
 // Draw implements game.Scene.

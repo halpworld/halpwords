@@ -11,6 +11,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -74,6 +75,10 @@ type Context struct {
 	// play session going on.
 	linkSeen int
 	session  *session
+	// sendAs is Link, copied every frame, for the report outbox, which
+	// sends in the background (reportToken); nil until
+	// SendReportsAsLink.
+	sendAs *atomic.Pointer[link.Client]
 	// closing are links of learners switched away from, still closing
 	// in the background, by folder.
 	closing map[save.Folder]chan struct{}
@@ -349,14 +354,41 @@ func (c *Context) loadProfile() {
 }
 
 // NewOutbox returns the report queue in the user's folder, sending to
-// report.ServerURL(). Reports are anonymous: the game isn't linked to an
-// account yet. The link client (W1.8) sets Sender.Token to its access
-// token, "" when unlinked.
+// report.ServerURL(). Its reports are anonymous until SendReportsAsLink.
 func NewOutbox() *report.Outbox {
 	return &report.Outbox{
 		Queue:  report.NewQueue(save.Root),
 		Sender: &report.Sender{Server: report.ServerURL(), UserAgent: UserAgent()},
 	}
+}
+
+// SendReportsAsLink makes o send reports with the linked game's access
+// token, so the server knows which game sent them. Each report is tagged
+// with the link it was made under and goes with a token only if that
+// link is still the one playing when it is sent: a report written by one
+// learner and sent after switching to another goes anonymously, never
+// as the other learner. A report made while the game isn't linked is
+// anonymous.
+func (c *Context) SendReportsAsLink(o *report.Outbox) {
+	if c.sendAs == nil {
+		c.sendAs = &atomic.Pointer[link.Client]{}
+	}
+	c.sendAs.Store(c.Link)
+	s := o.Sender
+	o.From = func() string { return c.Link.DeviceID() } // on the game's goroutine
+	s.Token = func(from string) string { return c.reportToken(s.Server, from) }
+}
+
+// reportToken is the access token of the link playing, or "" when it
+// isn't linked, isn't the link from that a report was made under, or is
+// linked to another server than server, the one reports go to: a token
+// is only ever sent to the server that made it.
+func (c *Context) reportToken(server, from string) string {
+	l := c.sendAs.Load()
+	if l == nil || from == "" || l.DeviceID() != from || strings.TrimRight(l.Server(), "/") != strings.TrimRight(server, "/") {
+		return ""
+	}
+	return l.AccessToken()
 }
 
 // UserDir is where saves, settings and the user's own word lists live, e.g.
@@ -397,6 +429,7 @@ func New(first func(*Context) Scene) (*Game, error) {
 		ctx.AI.Check(p.ID) // free: it lists the models the key can use
 	}
 	ctx.Reports = NewOutbox()
+	ctx.SendReportsAsLink(ctx.Reports)
 	go ctx.Reports.Flush(context.Background()) // reports left from last time
 	ctx.scenes.stack = []Scene{first(ctx)}
 	return &Game{ctx: ctx}, nil

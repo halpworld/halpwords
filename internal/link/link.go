@@ -482,6 +482,20 @@ func (c *Client) Linked() bool {
 // Server is the address of the server the game links to.
 func (c *Client) Server() string { return c.server }
 
+// DeviceID is the server's ID for this link of the game, or "" when the
+// game isn't linked. Each learner's link has its own.
+func (c *Client) DeviceID() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.st.linked() {
+		return ""
+	}
+	return c.st.DeviceID
+}
+
 // AccessToken is the device's access token, or "" when the game isn't
 // linked. It may have run out; the link refreshes it at its next sync.
 func (c *Client) AccessToken() string {

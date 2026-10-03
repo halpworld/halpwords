@@ -24,6 +24,9 @@ func (c *Context) openLink() {
 // lists, the word memory from the server and settings a grown-up set. It
 // never waits for the network.
 func (c *Context) pollLink() {
+	if c.sendAs != nil {
+		c.sendAs.Store(c.Link) // switching learners changes Link
+	}
 	n := c.Link.Changes()
 	if n == c.linkSeen {
 		return

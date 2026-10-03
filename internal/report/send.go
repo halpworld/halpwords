@@ -50,10 +50,10 @@ const (
 type Sender struct {
 	// Server is the server's address (ServerURL()).
 	Server string
-	// Token returns the linked game's access token, or "" when the game
-	// isn't linked; nil is never linked. Without a token a report is
-	// anonymous.
-	Token func() string
+	// Token returns the access token to send a report made under the
+	// link from (Report.From) with, or "" to send it anonymously; nil
+	// sends every report anonymously.
+	Token func(from string) string
 	// UserAgent is the game's User-Agent, "Halpwords/1.2.0 (linux; amd64)".
 	UserAgent string
 	// Client sends the requests; nil is one with a 20-second timeout.
@@ -67,6 +67,8 @@ func (s *Sender) Send(ctx context.Context, r Report) (Outcome, error) {
 	if err := r.Check(); err != nil {
 		return Refused, err
 	}
+	from := r.From
+	r.From = "" // the server never sees it
 	body, err := json.Marshal(r)
 	if err != nil {
 		return Refused, err
@@ -80,7 +82,7 @@ func (s *Sender) Send(ctx context.Context, r Report) (Outcome, error) {
 		req.Header.Set("User-Agent", s.UserAgent)
 	}
 	if s.Token != nil {
-		if t := s.Token(); t != "" {
+		if t := s.Token(from); t != "" {
 			req.Header.Set("Authorization", "Bearer "+t)
 		}
 	}
@@ -107,6 +109,10 @@ func (s *Sender) Send(ctx context.Context, r Report) (Outcome, error) {
 type Outbox struct {
 	Queue  *Queue
 	Sender *Sender
+	// From returns the link reports are being made under (its device
+	// ID), or "" when the game isn't linked; Submit tags each report
+	// with it. nil tags none.
+	From func() string
 
 	mu       sync.Mutex
 	flushing bool
@@ -114,6 +120,9 @@ type Outbox struct {
 
 // Submit queues r and starts sending the queue in the background.
 func (o *Outbox) Submit(r Report) error {
+	if o.From != nil {
+		r.From = o.From()
+	}
 	if err := o.Queue.Add(r); err != nil {
 		return err
 	}
@@ -166,6 +175,12 @@ func (o *Outbox) Flush(ctx context.Context) (int, error) {
 			return sent, err
 		}
 	}
+}
+
+// Linked reports whether a report submitted now would be sent with a
+// token, not anonymously.
+func (o *Outbox) Linked() bool {
+	return o != nil && o.From != nil && o.Sender != nil && o.Sender.Token != nil && o.Sender.Token(o.From()) != ""
 }
 
 // Waiting returns how many reports are queued.
