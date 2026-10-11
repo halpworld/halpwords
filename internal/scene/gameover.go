@@ -22,6 +22,8 @@ import (
 const (
 	unrankedLate  = "Not ranked online: it is a new day"
 	unrankedNoDay = "Not ranked online"
+	// unrankedFloor is for a run that cleared no floor (#93).
+	unrankedFloor = "Not ranked online: clear a floor first"
 )
 
 // maxName is the longest name the Hall of Fame keeps.
@@ -41,8 +43,9 @@ type GameOver struct {
 	code   string // the share code
 	best   int    // the best score before this run
 	gaveUp bool
-	// unranked is set for a Daily Dungeon finished on another day, or
-	// one whose day is not known: it is not sent for the rankings.
+	// unranked is set for a run that is not sent for the rankings: a
+	// Daily Dungeon finished on another day, or one whose day is not
+	// known, or a run that cleared no floor (compete.Run.Ranked).
 	unranked bool
 	// unrankedNote says why, on the screen.
 	unrankedNote string
@@ -79,10 +82,16 @@ func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
 			g.unrankedNote = unrankedNoDay // no date was missed
 		}
 	}
-	if r.mode.Scored() && r.race == nil && r.quest == nil && r.assign == nil && r.deck != nil && !g.unranked {
+	rankable := r.mode.Scored() && r.race == nil && r.quest == nil && r.assign == nil && r.deck != nil
+	run := compete.Run{Share: share, Tally: r.tally, Secs: int(r.played)}
+	if rankable && !g.unranked && !run.Ranked() {
+		// Given up or lost on floor 1: no board takes it (#93).
+		g.unranked, g.unrankedNote = true, unrankedFloor
+	}
+	if rankable && !g.unranked {
 		// Sent for the rankings when the game is linked; the server
 		// ranks it only if a grown-up put the learner on a board.
-		sendRun(ctx, compete.Run{Share: share, Tally: r.tally, Secs: int(r.played)}, compete.ListHash(r.deck.Entries()))
+		sendRun(ctx, run, compete.ListHash(r.deck.Entries()))
 	}
 	key := compete.TableKey(r.mode, r.lang.Code)
 	g.best = ctx.Profile.Fame.Best(key)

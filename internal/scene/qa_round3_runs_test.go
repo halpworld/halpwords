@@ -169,6 +169,7 @@ func TestQARound3SuspendedDailyResume(t *testing.T) {
 		}
 		got.run.sound = &game.Sound{Muted: true}
 		got.run.tally.Damage = 30
+		got.run.depth = 2 // a floor cleared, so it can rank (#93)
 		runNow = func() time.Time { return k.now }
 		g := newGameOver(ctx, got.run, true)
 		if len(sent) != k.sends || g.unranked != (k.sends == 0) {

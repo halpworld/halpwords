@@ -282,6 +282,7 @@ func TestDailyRankedOnlyOnItsDay(t *testing.T) {
 		r := newRun(ctx, fr, rpg.Rogue, s)
 		r.sound = &game.Sound{Muted: true}
 		r.tally.Damage = 50
+		r.depth = 2 // a floor cleared, so it can rank (#93)
 		runNow = func() time.Time { return c.finish }
 		g := newGameOver(ctx, r, true)
 		if g.unranked != c.unranked || (len(sent) == 0) != c.unranked {
@@ -297,9 +298,54 @@ func TestDailyRankedOnlyOnItsDay(t *testing.T) {
 	sent = nil
 	h := newRun(ctx, fr, rpg.Knight, runSetup{mode: compete.Hardcore, seed: 4242, seeded: true})
 	h.sound = &game.Sound{Muted: true}
+	h.depth = 2
 	runNow = func() time.Time { return at(30, 1, 0, 0) }
 	if g := newGameOver(ctx, h, true); g.unranked || len(sent) != 1 {
 		t.Fatalf("Hardcore: unranked %v, %d runs sent", g.unranked, len(sent))
+	}
+}
+
+// A Hardcore or Daily run that cleared no floor is not sent for the
+// rankings, and the game over screen says so (#93). It still has a
+// score for the Hall of Fame.
+func TestNoFloorClearedNotRanked(t *testing.T) {
+	ctx := testContext(t)
+	fr, _ := words.Lookup("fr")
+	var sent []compete.Run
+	oldSend, oldNow := sendRun, runNow
+	t.Cleanup(func() { sendRun, runNow = oldSend, oldNow })
+	sendRun = func(_ *game.Context, r compete.Run, _ string) { sent = append(sent, r) }
+	day := time.Date(2026, time.September, 24, 9, 0, 0, 0, time.Local)
+	runNow = func() time.Time { return day }
+	for _, setup := range []runSetup{
+		{mode: compete.Hardcore, seed: 4242, seeded: true},
+		dailySetup(ctx, fr),
+	} {
+		for _, c := range []struct {
+			depth int
+			sends int
+		}{{1, 0}, {2, 1}, {5, 1}} {
+			sent = nil
+			r := newRun(ctx, fr, rpg.Knight, setup)
+			r.sound = &game.Sound{Muted: true}
+			r.depth = c.depth
+			r.tally.Damage = 40
+			g := newGameOver(ctx, r, true)
+			if len(sent) != c.sends || g.unranked != (c.sends == 0) {
+				t.Errorf("%v floor %d: %d sent, unranked %v", setup.mode, c.depth, len(sent), g.unranked)
+			}
+			if c.sends == 0 && (g.unrankedNote != unrankedFloor || g.score <= 0) {
+				t.Errorf("%v floor %d: note %q, score %d", setup.mode, c.depth, g.unrankedNote, g.score)
+			}
+		}
+	}
+	// A Daily on a later day says why it is late, not the floor.
+	runNow = func() time.Time { return day.AddDate(0, 0, 1) }
+	r := newRun(ctx, fr, rpg.Knight, dailySetup(ctx, fr))
+	r.sound = &game.Sound{Muted: true}
+	r.day = "2026-09-24"
+	if g := newGameOver(ctx, r, true); g.unrankedNote != unrankedLate {
+		t.Errorf("late daily on floor 1: note %q", g.unrankedNote)
 	}
 }
 

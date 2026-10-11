@@ -662,6 +662,16 @@ if it is **finished on its own day**. A Daily that ends on another day, or
 whose day is unknown, is never ranked, and the game says so when you
 suspend and at game over.
 
+*Now (owner decisions 2026-10-11, game #93, done):* decision (owner): a
+Hardcore or Daily run counts on the online rankings **only if the player
+cleared at least one floor** (reached floor 2). The rule is
+`compete.MinRankedFloor` and `Share.Ranked`/`Run.Ranked` in `pkg/compete`,
+shared with halpwords-server: the game doesn't queue such a run
+(`link.Client.Run`) and its game over screen says "Not ranked online:
+clear a floor first"; the server keeps none, from any game version (old
+games still send them). The run keeps its score, share code and local
+Hall of Fame place.
+
 *Now (M5, done):* `internal/compete` (now `pkg/compete`) (no Ebitengine dependency) holds the
 score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
 `halloffame.json`.
