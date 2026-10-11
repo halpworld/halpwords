@@ -130,7 +130,7 @@ func (c *Crawl) choose(ctx *game.Context, it pauseItem) {
 		ctx.Push(newOptions(ctx))
 	case pauseReport:
 		c.play(audio.Select)
-		ctx.Push(newReport(ctx, c.run.seedCode()))
+		ctx.Push(newReport(ctx, c.run.seedCode(), c.run.reportLists(ctx)))
 	case pauseGiveUp:
 		c.enter(modeQuit)
 	case pauseSuspend:

@@ -662,6 +662,16 @@ if it is **finished on its own day**. A Daily that ends on another day, or
 whose day is unknown, is never ranked, and the game says so when you
 suspend and at game over.
 
+*Now (owner decisions 2026-10-11, game #93, done):* decision (owner): a
+Hardcore or Daily run counts on the online rankings **only if the player
+cleared at least one floor** (reached floor 2). The rule is
+`compete.MinRankedFloor` and `Share.Ranked`/`Run.Ranked` in `pkg/compete`,
+shared with halpwords-server: the game doesn't queue such a run
+(`link.Client.Run`) and its game over screen says "Not ranked online:
+clear a floor first"; the server keeps none, from any game version (old
+games still send them). The run keeps its score, share code and local
+Hall of Fame place.
+
 *Now (M5, done):* `internal/compete` (now `pkg/compete`) (no Ebitengine dependency) holds the
 score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
 `halloffame.json`.
@@ -1055,6 +1065,20 @@ late or wrong dodge stuns the raider for a moment. The finale shows the
 class's totals and what the player did. The game never grades a raid
 and keeps nothing of it; the server keeps the answers of learners whose
 progress may be kept (halpwords-server's `internal/bossraid`).
+
+*Now (owner decisions 2026-10-11, halpwords-server #129, done):*
+**a report says which list it is about.** "Something upset me → A word
+list" in the pause menu names the run's list from the server, by ID only
+(`report.Report.Target`, `"target": "list:<id>"` in POST
+/api/v1/reports): at once when the run plays one, after a "Which word
+list?" step when it plays several (with "Another list, or I'm not sure"),
+and none for the player's own or built-in lists, races, or an unlinked
+game. The target goes only with the link's token, so an anonymous
+report never carries it. The server checks that the linked learner has
+the list and then opens a moderation item for it; it ignores an unknown
+or foreign target, and servers from before ignore the field. Learner
+names are not targets: other learners appear in the game only by
+pseudonym, with room-only IDs.
 
 ## 11. Cross-platform build and distribution
 

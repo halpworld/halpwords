@@ -45,13 +45,13 @@ func TestReportCrashOnlyWhenTicked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := newReport(ctx, "ABCD-1234")
+	r := newReport(ctx, "ABCD-1234", nil)
 	if r.crash == "" {
 		t.Fatal("crash.txt not read")
 	}
 	r.kind, r.text = report.KindBug, []rune("It froze")
 	r.send(ctx)
-	r2 := newReport(ctx, "ABCD-1234")
+	r2 := newReport(ctx, "ABCD-1234", nil)
 	r2.kind, r2.sendCrash = report.KindBug, true
 	r2.send(ctx)
 	if r.failed || r2.failed || r2.step != reportDone {
@@ -79,7 +79,7 @@ func TestReportUpset(t *testing.T) {
 	useTempDir(t)
 	ctx := testContext(t)
 	ctx.Reports = busyOutbox(t)
-	r := newReport(ctx, "")
+	r := newReport(ctx, "", nil)
 	r.kind, r.about = report.KindUpset, "picture"
 	r.send(ctx)
 	rs, _ := ctx.Reports.Queue.Pending()

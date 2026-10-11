@@ -2,6 +2,7 @@ package scene
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -25,6 +26,7 @@ const (
 	reportChoose reportStep = iota // which kind of report
 	reportBug                      // the game's details and crash.txt
 	reportUpset                    // what upset the player
+	reportWhich                    // which of the run's server lists
 	reportText                     // an optional note, then send
 	reportDone                     // thanks
 )
@@ -37,10 +39,17 @@ var reportKinds = []string{"Something's wrong with the game", "Something upset m
 // player ticks the box after seeing it in full, the last crash.txt; or
 // "Something upset me", picked from a few choices, with optional text.
 // Reports are queued in the user's folder and sent when the game is
-// online (ctx.Reports).
+// online (ctx.Reports). A report about a word list names the server's
+// list the run plays, by ID only (halpwords-server #129), so staff can
+// act on it; the player picks it when there are several.
 type Report struct {
 	bg   *ebiten.Image
 	seed string
+	// lists are the lists from the server the run plays, which a report
+	// about a word list can name.
+	lists []reportList
+	// target is the list the report names (report.ListTarget), or "".
+	target string
 
 	step      reportStep
 	sel       int
@@ -55,10 +64,41 @@ type Report struct {
 	crashLines []string // crash wrapped to the box, made when first drawn
 }
 
+// The most lists the reportWhich step offers, and the longest title it
+// shows, so the choices fit the screen.
+const (
+	maxReportLists = 8
+	maxReportTitle = 48
+)
+
+// reportList is a list from the server that a report can name.
+type reportList struct{ id, title string }
+
+// reportLists are the lists from the server that run r plays, when the
+// game is linked: those a report about a word list can name. A race's
+// list is the room's, so a race names none.
+func (r *run) reportLists(ctx *game.Context) []reportList {
+	if r == nil || r.race != nil || !ctx.Link.Linked() {
+		return nil
+	}
+	lists, _ := runLists(ctx, r.lang, r.quest, r.assign, r.pool)
+	var out []reportList
+	for _, l := range lists {
+		if li, ok := ctx.Link.Info(l); ok && li.ID != "" && len(out) < maxReportLists {
+			title := []rune(strings.TrimSpace(li.Title))
+			if len(title) > maxReportTitle {
+				title = append(title[:maxReportTitle-1], '…')
+			}
+			out = append(out, reportList{id: li.ID, title: string(title)})
+		}
+	}
+	return out
+}
+
 // newReport creates the Report screen for a run with the seed ("" when
-// there is no run).
-func newReport(ctx *game.Context, seed string) *Report {
-	r := &Report{bg: backdrop(5, 1.3), seed: seed}
+// there is no run) that plays lists, the run's lists from the server.
+func newReport(ctx *game.Context, seed string, lists []reportList) *Report {
+	r := &Report{bg: backdrop(5, 1.3), seed: seed, lists: lists}
 	if b, err := save.Root.Read(game.CrashFile); err == nil {
 		r.crash = string(b)
 		if len(r.crash) > report.MaxCrash {
@@ -86,6 +126,8 @@ func (r *Report) Update(ctx *game.Context) error {
 		r.updateBug(ctx)
 	case reportUpset:
 		r.updateUpset(ctx)
+	case reportWhich:
+		r.updateWhich(ctx)
 	case reportText:
 		r.updateText(ctx)
 	case reportDone:
@@ -157,17 +199,51 @@ func (r *Report) updateUpset(ctx *game.Context) {
 		r.step, r.sel = reportChoose, 1
 		return
 	}
-	if pickFrom(ctx, &r.sel, len(report.Abouts)) {
-		r.about, r.step = report.Abouts[r.sel], reportText
+	if !pickFrom(ctx, &r.sel, len(report.Abouts)) {
+		return
+	}
+	r.about, r.step, r.target = report.Abouts[r.sel], reportText, ""
+	if r.about != "list" {
+		return
+	}
+	switch len(r.lists) {
+	case 0: // the run's lists are the player's own or built in
+	case 1:
+		r.target = report.ListTarget(r.lists[0].id)
+	default:
+		r.step, r.sel = reportWhich, 0
 	}
 }
+
+// updateWhich picks which of the run's lists from the server upset the
+// player, or none of them.
+func (r *Report) updateWhich(ctx *game.Context) {
+	if input.Back() {
+		ctx.Sound.Play(audio.Back)
+		r.step, r.sel = reportUpset, slices.Index(report.Abouts, "list")
+		return
+	}
+	if !pickFrom(ctx, &r.sel, len(r.lists)+1) {
+		return
+	}
+	r.target, r.step = "", reportText
+	if r.sel < len(r.lists) {
+		r.target = report.ListTarget(r.lists[r.sel].id)
+	}
+}
+
+// whichNone is the last choice of the reportWhich step.
+const whichNone = "Another list, or I'm not sure"
 
 func (r *Report) updateText(ctx *game.Context) {
 	switch {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
 		r.step = reportBug
-		if r.kind == report.KindUpset {
+		switch {
+		case r.kind == report.KindUpset && r.about == "list" && len(r.lists) > 1:
+			r.step = reportWhich
+		case r.kind == report.KindUpset:
 			r.step = reportUpset
 		}
 		return
@@ -192,7 +268,9 @@ func (r *Report) updateText(ctx *game.Context) {
 func (r *Report) build() report.Report {
 	g := report.Game{Version: game.VersionText(), Platform: game.Platform()}
 	if r.kind == report.KindUpset {
-		return report.Upset(g, r.about, string(r.text))
+		u := report.Upset(g, r.about, string(r.text))
+		u.Target = r.target
+		return u
 	}
 	return report.Bug(g, r.seed, string(r.text), r.crash, r.sendCrash)
 }
@@ -248,6 +326,18 @@ func (r *Report) Draw(dst *ebiten.Image, ctx *game.Context) {
 			r.drawChoice(dst, ctx, report.AboutLabels[a], x, y+36+i*22, w, i == r.sel)
 		}
 		f.DrawCentered(dst, "If you ever feel unsafe, tell a grown-up you trust.", cx, y+60+len(report.Abouts)*22, 1, pal.Tan)
+		help = "↑/↓ choose   Enter select   Esc back"
+	case reportWhich:
+		n := len(r.lists) + 1
+		gfx.Window(dst, x, y, w, 40+n*22)
+		f.DrawCentered(dst, "Which word list?", cx, y+12, 1, pal.Ice)
+		for i := range n {
+			label := whichNone
+			if i < len(r.lists) {
+				label = r.lists[i].title
+			}
+			r.drawChoice(dst, ctx, label, x, y+36+i*22, w, i == r.sel)
+		}
 		help = "↑/↓ choose   Enter select   Esc back"
 	case reportText:
 		r.drawText(dst, ctx, x, y, w)

@@ -87,6 +87,22 @@ func (r Run) Check() error {
 	return nil
 }
 
+// MinRankedFloor is the least floor a run must have reached to count on
+// the rankings: the player cleared at least one floor (game #93, owner
+// decision 2026-10-11). A run given up or lost on floor 1 still has a
+// score, a share code and a Hall of Fame place on the computer, but no
+// board takes it, so boards don't fill with runs nobody played.
+const MinRankedFloor = 2
+
+// Ranked reports whether a run reached far enough to count on the
+// rankings (MinRankedFloor). The game doesn't send a run that doesn't,
+// and halpwords-server doesn't keep one, from any version of the game.
+// It says nothing about plausibility, which is Check's.
+func (s Share) Ranked() bool { return s.Floor >= MinRankedFloor }
+
+// Ranked is r.Share.Ranked().
+func (r Run) Ranked() bool { return r.Share.Ranked() }
+
 // MaxChests is more than the most chests a floor has (two or three, and
 // a mimic is one of them).
 const MaxChests = 4

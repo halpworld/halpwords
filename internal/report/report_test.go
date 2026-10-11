@@ -25,7 +25,10 @@ func TestFixtures(t *testing.T) {
 	bug.ID = "0b6f6f0e-3c1a-4c1e-9d55-2a7c3e1f9a10"
 	upset := Upset(Game{Version: "1.2.0", Platform: "windows/amd64"}, "player", "  A player in the race had a rude name.\x07 ")
 	upset.ID = "5d2c9a47-8e61-4b0f-a3d2-71c4f09e6b38"
-	for name, r := range map[string]Report{"bug": bug, "upset": upset} {
+	list := Upset(Game{Version: "1.3.0", Platform: "darwin/arm64"}, "list", "")
+	list.ID = "9a1e7c52-0f3b-4d8a-b6e4-3c2d1f0a8b77"
+	list.Target = ListTarget("0192f1a4-7b3c-7d2e-9f10-5a6b7c8d9e0f")
+	for name, r := range map[string]Report{"bug": bug, "upset": upset, "upset_list": list} {
 		if err := r.Check(); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -72,6 +75,13 @@ func TestCheck(t *testing.T) {
 		"no id":       {Kind: KindBug, Game: g},
 		"bug about":   {ID: "a", Kind: KindBug, About: "name", Game: g},
 		"upset crash": {ID: "a", Kind: KindUpset, About: "name", Crash: "x", Game: g},
+		"bug target":  {ID: "a", Kind: KindBug, Target: ListTarget("abc"), Game: g},
+		"list target, not about a list": {ID: "a", Kind: KindUpset, About: "name", Target: ListTarget("abc"),
+			Game: g},
+		"target with a name":  {ID: "a", Kind: KindUpset, About: "list", Target: "list:Mr Smith", Game: g},
+		"target without kind": {ID: "a", Kind: KindUpset, About: "list", Target: "abc", Game: g},
+		"target too long": {ID: "a", Kind: KindUpset, About: "list", Target: ListTarget(strings.Repeat("a", 65)),
+			Game: g},
 	} {
 		if r.Check() == nil {
 			t.Errorf("%s: accepted", name)
@@ -232,6 +242,42 @@ func TestLinkedGameSendsItsToken(t *testing.T) {
 	for _, r := range fk.got {
 		if r.From != "" {
 			t.Errorf("the server got from %q", r.From)
+		}
+	}
+}
+
+// A report's target goes only with the link's token: made unlinked, or
+// under a link that is gone, it is sent without it (#129).
+func TestTargetOnlyWithToken(t *testing.T) {
+	fk := &fakeServer{status: http.StatusCreated}
+	srv := httptest.NewServer(fk)
+	defer srv.Close()
+	o, st := newOutbox(srv.URL, func(f string) string {
+		if f == "dev_a" {
+			return "hwd_abc"
+		}
+		return ""
+	})
+	g := Game{Version: "1.3.0", Platform: "linux/amd64"}
+	for _, from := range []string{"dev_a", "", "dev_gone"} {
+		r := Upset(g, "list", "")
+		r.Target, r.From = ListTarget("0192f1a4-7b3c-7d2e-9f10-5a6b7c8d9e0f"), from
+		if err := o.Queue.Add(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rs, _ := NewQueue(st).Pending(); len(rs) != 3 || rs[1].Target == "" {
+		t.Fatalf("the queue lost the target: %+v", rs)
+	}
+	if n, err := o.Flush(context.Background()); n != 3 || err != nil {
+		t.Fatalf("sent %d, %v", n, err)
+	}
+	if len(fk.got) != 3 || fk.got[0].Target != "list:0192f1a4-7b3c-7d2e-9f10-5a6b7c8d9e0f" || fk.auth[0] == "" {
+		t.Fatalf("linked: %+v %q", fk.got, fk.auth)
+	}
+	for i := 1; i < 3; i++ {
+		if fk.got[i].Target != "" || fk.auth[i] != "" {
+			t.Errorf("anonymous report %d sent target %q", i, fk.got[i].Target)
 		}
 	}
 }

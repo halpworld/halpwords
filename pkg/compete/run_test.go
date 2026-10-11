@@ -48,3 +48,24 @@ func TestRunCheck(t *testing.T) {
 		}
 	}
 }
+
+// A run counts on the rankings only once a floor is cleared (#93): one
+// lost or given up on floor 1 doesn't, whatever its score.
+func TestRanked(t *testing.T) {
+	for floor, want := range map[int]bool{0: false, 1: false, 2: true, 3: true, MaxFloor: true} {
+		tally := Tally{Damage: 300, Perfect: 5}
+		r := Run{Share: Share{Lang: "fr", Seed: 42, Floor: floor, Score: tally.Score(floor)}, Tally: tally, Secs: 600}
+		if r.Ranked() != want || r.Share.Ranked() != want {
+			t.Errorf("floor %d: ranked %v, want %v", floor, r.Ranked(), want)
+		}
+	}
+	// Floor 1 with no play is plausible (Check passes) but not ranked.
+	idle := Run{Share: Share{Lang: "fr", Seed: 42, Floor: 1, Score: Tally{}.Score(1)}}
+	if err := idle.Check(); err != nil || idle.Ranked() {
+		t.Fatalf("an idle floor-1 run: check %v, ranked %v", err, idle.Ranked())
+	}
+	daily := Share{Lang: "fr", Daily: true, Month: 9, Day: 22, Floor: 1, Score: 1000}
+	if daily.Ranked() {
+		t.Fatal("a Daily Dungeon on floor 1 is ranked")
+	}
+}

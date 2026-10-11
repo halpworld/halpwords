@@ -3,8 +3,8 @@
 //
 // A report is "Something's wrong with the game" (a bug: the version,
 // platform and seed, and the last crash.txt only if the player ticked the
-// box after reading it) or "Something upset me" (what it was about, and
-// optional text). Reports wait in a queue in the user's folder until the
+// box after reading it) or "Something upset me" (what it was about,
+// optional text and, for a list from the server, the list's ID). Reports wait in a queue in the user's folder until the
 // server has them, so they work offline. A game that isn't linked to an
 // account sends no token, so its reports are anonymous; the report itself
 // never holds the player's name or anything about the computer beyond its
@@ -17,6 +17,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -66,11 +67,30 @@ type Report struct {
 	// Crash is the last crash.txt, in full, only when the player chose
 	// to send it.
 	Crash string `json:"crash,omitempty"`
+	// Target names what an upset report is about, by ID only, so the
+	// server can put it in front of a moderator (halpwords-server #129):
+	// ListTarget for a list from the server that the run plays. It is
+	// sent only with the link's token (Sender.Send); the server checks
+	// that the linked learner has the list, and ignores it otherwise. A
+	// server from before it ignores it too.
+	Target string `json:"target,omitempty"`
 	// From is the link the report was made under (its device ID), or ""
 	// when the game wasn't linked. The queue keeps it; it is never sent
 	// (Sender.Send).
 	From string `json:"from,omitempty"`
 }
+
+// TargetList is the kind of target a list from the server is.
+const TargetList = "list"
+
+// ListTarget is the Target for the server's list with the ID.
+func ListTarget(id string) string { return TargetList + ":" + id }
+
+// MaxTarget is the longest Target.
+const MaxTarget = 80
+
+// targetForm is a Target: a kind and an ID, never a name or text.
+var targetForm = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}:[A-Za-z0-9_-]{1,64}$`)
 
 // ErrInvalid means a report can't be sent as it is.
 var ErrInvalid = errors.New("report: invalid")
@@ -105,6 +125,10 @@ func (r Report) Check() error {
 	case r.Kind == KindUpset && (r.Seed != "" || r.Crash != ""):
 		return ErrInvalid
 	case utf8.RuneCountInString(r.Text) > MaxText || len(r.Crash) > MaxCrash:
+		return ErrInvalid
+	case r.Target != "" && (r.Kind != KindUpset || len(r.Target) > MaxTarget || !targetForm.MatchString(r.Target)):
+		return ErrInvalid
+	case strings.HasPrefix(r.Target, TargetList+":") && r.About != "list":
 		return ErrInvalid
 	}
 	for _, f := range []string{r.Game.Version, r.Game.Platform, r.Seed} {

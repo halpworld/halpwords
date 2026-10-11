@@ -55,11 +55,21 @@ func TestRunsAndBoards(t *testing.T) {
 		t.Errorf("%d runs sent, want 2", n)
 	}
 
+	// A run that cleared no floor is not queued (#93).
+	idle := compete.Run{Share: compete.Share{Lang: "fr", Seed: 43, Floor: 1, Score: tally.Score(1)}, Tally: tally, Secs: 200}
+	c.Run(idle, "0123456789abcdef")
+	c.mu.Lock()
+	queued := len(c.st.Runs)
+	c.mu.Unlock()
+	if queued != 0 {
+		t.Error("a floor-1 run was queued")
+	}
+
 	// Not linked: nothing is queued.
 	c.Unlink()
 	c.Run(run, "0123456789abcdef")
 	c.mu.Lock()
-	queued := len(c.st.Runs)
+	queued = len(c.st.Runs)
 	c.mu.Unlock()
 	if queued != 0 || len(c.Boards()) != 0 {
 		t.Error("runs or boards kept after unlinking")

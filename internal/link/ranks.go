@@ -26,10 +26,11 @@ type qRun struct {
 
 // Run queues a finished scored run to be ranked, if the game is linked.
 // Only a grown-up can put the learner on a board; the server drops runs
-// of learners who aren't on one. listHash is compete.ListHash of the
-// run's words. It returns at once.
+// of learners who aren't on one. A run that cleared no floor
+// (compete.Run.Ranked) isn't queued: no board takes it. listHash is
+// compete.ListHash of the run's words. It returns at once.
 func (c *Client) Run(r compete.Run, listHash string) {
-	if c == nil || r.Share.Score <= 0 {
+	if c == nil || r.Share.Score <= 0 || !r.Ranked() {
 		return
 	}
 	c.mu.Lock()
