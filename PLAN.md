@@ -1066,6 +1066,20 @@ class's totals and what the player did. The game never grades a raid
 and keeps nothing of it; the server keeps the answers of learners whose
 progress may be kept (halpwords-server's `internal/bossraid`).
 
+*Now (owner decisions 2026-10-11, halpwords-server #129, done):*
+**a report says which list it is about.** "Something upset me → A word
+list" in the pause menu names the run's list from the server, by ID only
+(`report.Report.Target`, `"target": "list:<id>"` in POST
+/api/v1/reports): at once when the run plays one, after a "Which word
+list?" step when it plays several (with "Another list, or I'm not sure"),
+and none for the player's own or built-in lists, races, or an unlinked
+game. The target goes only with the link's token, so an anonymous
+report never carries it. The server checks that the linked learner has
+the list and then opens a moderation item for it; it ignores an unknown
+or foreign target, and servers from before ignore the field. Learner
+names are not targets: other learners appear in the game only by
+pseudonym, with room-only IDs.
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |

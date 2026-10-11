@@ -69,6 +69,15 @@ func (s *Sender) Send(ctx context.Context, r Report) (Outcome, error) {
 	}
 	from := r.From
 	r.From = "" // the server never sees it
+	token := ""
+	if s.Token != nil {
+		token = s.Token(from)
+	}
+	if token == "" {
+		// What an anonymous report is about stays on the computer: only
+		// the linked learner's server can check it.
+		r.Target = ""
+	}
 	body, err := json.Marshal(r)
 	if err != nil {
 		return Refused, err
@@ -81,10 +90,8 @@ func (s *Sender) Send(ctx context.Context, r Report) (Outcome, error) {
 	if s.UserAgent != "" {
 		req.Header.Set("User-Agent", s.UserAgent)
 	}
-	if s.Token != nil {
-		if t := s.Token(from); t != "" {
-			req.Header.Set("Authorization", "Bearer "+t)
-		}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	c := s.Client
 	if c == nil {

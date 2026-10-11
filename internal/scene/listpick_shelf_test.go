@@ -12,6 +12,7 @@ import (
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
+	"github.com/halpworld/halpwords/internal/report"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
 	"github.com/halpworld/halpwords/pkg/compete"
@@ -271,5 +272,69 @@ func TestImportTwiceIsOneList(t *testing.T) {
 	lp = adventureLists(ctx, fr, runSetup{mode: compete.Adventure})
 	if note, _ := lp.note(); note != "" {
 		t.Errorf("note %q", note)
+	}
+}
+
+// A report about a word list names the run's list from the server, by
+// its ID only: at once when the run plays one, after asking which when
+// it plays several, and none when the player says it was another list
+// (halpwords-server #129). Other reports, and runs of the player's own
+// lists, name nothing.
+func TestReportNamesTheRunsServerList(t *testing.T) {
+	colours := map[string]any{"id": "lst_colours", "version": 1, "title": "Colours", "language": "fr",
+		"text": sentColours, "source": "sent", "sent_at": "2026-10-01T18:00:00Z"}
+	numbers := map[string]any{"id": "lst_numbers", "version": 1, "title": "Numbers", "language": "fr",
+		"text": sentNumbers, "source": "sent", "sent_at": "2026-10-01T18:00:00Z"}
+	ctx := shelfContext(t, colours, numbers)
+	withFont(t, ctx)
+	ctx.Reports = busyOutbox(t)
+	fr, _ := words.Lookup("fr")
+	upsetAbout := func(lists []reportList, about string, keys ...ebiten.Key) report.Report {
+		t.Helper()
+		r := newReport(ctx, "", lists)
+		r.kind, r.step, r.sel = report.KindUpset, reportUpset, slices.Index(report.Abouts, about)
+		update(t, ctx, r, ebiten.KeyEnter)
+		for _, k := range keys {
+			update(t, ctx, r, k)
+		}
+		if r.step != reportText {
+			t.Fatalf("about %s: at step %d, not the note", about, r.step)
+		}
+		return r.build()
+	}
+
+	one := newRun(ctx, fr, rpg.Rogue, pickOnly(t, ctx, fr, "lst_colours")).reportLists(ctx)
+	if len(one) != 1 || one[0].id != "lst_colours" || one[0].title != "Colours" {
+		t.Fatalf("one list: %+v", one)
+	}
+	if got := upsetAbout(one, "list"); got.Target != "list:lst_colours" || got.Check() != nil {
+		t.Errorf("one list: target %q, %v", got.Target, got.Check())
+	}
+	if got := upsetAbout(one, "name"); got.Target != "" {
+		t.Errorf("about a name: target %q", got.Target)
+	}
+
+	two := []reportList{{"lst_colours", "Colours"}, {"lst_numbers", "Numbers"}}
+	if got := upsetAbout(two, "list", ebiten.KeyArrowDown, ebiten.KeyEnter); got.Target != "list:lst_numbers" {
+		t.Errorf("the second of two: target %q", got.Target)
+	}
+	if got := upsetAbout(two, "list", ebiten.KeyArrowUp, ebiten.KeyEnter); got.Target != "" {
+		t.Errorf("another list: target %q", got.Target)
+	}
+	which := newReport(ctx, "", two)
+	which.kind, which.about, which.step = report.KindUpset, "list", reportWhich
+	which.Draw(ebiten.NewImage(game.ScreenW, game.ScreenH), ctx)
+	update(t, ctx, which, ebiten.KeyEscape)
+	if which.step != reportUpset || report.Abouts[which.sel] != "list" {
+		t.Errorf("back from which list: step %d, sel %d", which.step, which.sel)
+	}
+
+	starters := newRun(ctx, fr, rpg.Rogue, runSetup{mode: compete.Hardcore}).reportLists(ctx)
+	if len(starters) != 0 {
+		t.Errorf("a Hardcore run of the built-in lists names %+v", starters)
+	}
+	ctx.Link.Unlink()
+	if got := newRun(ctx, fr, rpg.Rogue, runSetup{mode: compete.Adventure}).reportLists(ctx); len(got) != 0 {
+		t.Errorf("unlinked: %+v", got)
 	}
 }
