@@ -128,7 +128,7 @@ func (c *Client) signedIn(t tokens, way string) {
 	// works until it quits, which tries to write them again.
 	c.setTokens(t)
 	c.stateUnsaved = c.saveState() != nil
-	c.failures, c.note = 0, ""
+	c.failures, c.note, c.suspended = 0, "", false
 	c.loadLists()
 	c.changes++
 }
@@ -156,11 +156,18 @@ func (c *Client) Sync(ctx context.Context) error {
 	c.syncs++
 	switch {
 	case err == nil:
-		c.err, c.failures = nil, 0
+		c.err, c.failures, c.suspended = nil, 0, false
 		c.st.LastSync = c.now()
 		c.saveState()
 	case errors.Is(err, ErrNotLinked), errors.Is(err, ErrUnlinked):
 		// unlinked while syncing, here or on the website: Note says so
+	case isSuspended(err):
+		// Paused by the server (halpwords-server#130): not a failure
+		// to back off from or go quiet about, and never an unlink. The
+		// next sync comes at the usual time and clears it once the
+		// suspension is lifted.
+		err = ErrSuspended
+		c.err, c.failures, c.suspended = err, 0, true
 	default:
 		c.err = err
 		c.failures++
@@ -212,7 +219,7 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 func stopsSync(ctx context.Context, err error) bool {
 	var e *Error
 	return errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) || ctx.Err() != nil ||
-		(errors.As(err, &e) && e.Status == http.StatusUnauthorized)
+		isSuspended(err) || (errors.As(err, &e) && e.Status == http.StatusUnauthorized)
 }
 
 // syncMe fetches the learner. syncMu is held.
@@ -634,7 +641,7 @@ func (c *Client) unlink(keepFiles bool) {
 		c.o.Store.Remove(queueFile)
 	}
 	c.memories, c.packFails = map[string]*fetched{}, nil
-	c.err, c.failures, c.note = nil, 0, ""
+	c.err, c.failures, c.note, c.suspended = nil, 0, "", false
 	c.loadLists()
 	if !keepFiles {
 		c.saveState()

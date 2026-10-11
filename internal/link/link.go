@@ -324,6 +324,11 @@ type Status struct {
 	// Note is something to tell the player once, such as that the game
 	// was unlinked.
 	Note string
+	// Suspended is set while the server pauses syncing for the learner's
+	// account (halpwords-server#130): the game stays linked, keeps its
+	// progress and tries again at the usual times, and says "Can't sync
+	// right now. Ask your grown-up." It clears at the next good sync.
+	Suspended bool
 	// Outdated is set when the server says this game is too old for
 	// some of its features.
 	Outdated bool
@@ -385,8 +390,10 @@ type Client struct {
 	syncs    int // syncs ended
 	err      error
 	failures int
-	note     string
-	batch    int // events per batch; halved after a too_large answer
+	// suspended: the last sync was paused by the server (Status.Suspended).
+	suspended bool
+	note      string
+	batch     int // events per batch; halved after a too_large answer
 
 	kick    chan struct{}
 	stop    chan struct{}
@@ -522,17 +529,18 @@ func (c *Client) Status() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	s := Status{
-		Linked:   c.st.linked(),
-		Busy:     c.busy,
-		Signing:  c.signing,
-		Syncs:    c.syncs,
-		LinkedAt: c.st.LinkedAt,
-		LastSync: c.st.LastSync,
-		Pending:  c.q.len(),
-		Err:      c.err,
-		Offline:  c.failures >= quietAfter,
-		Note:     c.note,
-		Lists:    len(c.st.Lists),
+		Linked:    c.st.linked(),
+		Busy:      c.busy,
+		Signing:   c.signing,
+		Syncs:     c.syncs,
+		LinkedAt:  c.st.LinkedAt,
+		LastSync:  c.st.LastSync,
+		Pending:   c.q.len(),
+		Err:       c.err,
+		Offline:   c.failures >= quietAfter,
+		Suspended: c.suspended,
+		Note:      c.note,
+		Lists:     len(c.st.Lists),
 	}
 	if m := c.st.Me; m != nil {
 		s.Learner = m.Learner.DisplayName

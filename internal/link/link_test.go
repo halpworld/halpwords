@@ -125,6 +125,10 @@ type fake struct {
 	unlinked  int             // devices unlinked by the game
 	tickets   map[string]bool // play tickets not used yet
 	locked    bool            // sign-ins answer 403 locked
+	// suspended answers 403 account_suspended to everything but linking,
+	// as the server does while the learner's account is suspended
+	// (halpwords-server#130).
+	suspended bool
 	// meSeq makes GET /api/v1/me say last_seq, as newer servers do.
 	meSeq bool
 	// maps are GET /api/v1/maps' quests, with mapsETag its ETag; noMaps
@@ -228,6 +232,10 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Retry-After", "1")
 		}
 		writeErr(w, q[0], map[int]string{401: "unauthenticated", 403: "not_linkable", 429: "rate_limited", 500: "internal", 503: "internal", 413: "too_large"}[q[0]])
+		return
+	}
+	if f.suspended && path != "/api/v1/link" && path != "/api/v1/link/class" {
+		writeErr(w, 403, "account_suspended")
 		return
 	}
 	body, _ := io.ReadAll(r.Body)

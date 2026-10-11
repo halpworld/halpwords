@@ -323,11 +323,8 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 		if st.Lists > 0 {
 			line(plural(st.Lists, "assigned list")+", in Word Lists", pal.Steel)
 		}
-		switch {
-		case st.Offline:
-			line("Can't reach the website. The game keeps trying.", pal.Tan)
-		case st.Err != nil:
-			line(upperFirst(link.Explain(st.Err))+".", pal.Tan)
+		if s, c := syncProblem(st); s != "" {
+			line(s, c)
 		}
 		if st.Outdated {
 			line("A new version of Halpwords is out: please update.", pal.Yellow)
@@ -391,4 +388,20 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, "Answers not yet sent won't reach the website.", dx, dy+32, 1, pal.Tan)
 		f.DrawShadow(dst, "Y unlink   N cancel", dx, dy+72, 1, pal.Ash)
 	}
+}
+
+// syncProblem is the line saying why the last sync didn't work, or ""
+// when it did. A suspended account (halpwords-server#130) gets a calm
+// line for the child rather than an error: the game stays linked and
+// picks up by itself once a grown-up sorts it out.
+func syncProblem(st link.Status) (string, color.RGBA) {
+	switch {
+	case st.Suspended:
+		return "Can't sync right now. Ask your grown-up. Your progress is kept.", pal.Ice
+	case st.Offline:
+		return "Can't reach the website. The game keeps trying.", pal.Tan
+	case st.Err != nil:
+		return upperFirst(link.Explain(st.Err)) + ".", pal.Tan
+	}
+	return "", color.RGBA{}
 }
