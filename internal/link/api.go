@@ -46,6 +46,10 @@ const (
 	codeInvalidRequest  = "invalid_request"
 	codeTooLarge        = "too_large"
 	codeRateLimited     = "rate_limited"
+	// codeAccountSuspended: the server has paused syncing because every
+	// adult on the learner's account is suspended (halpwords-server#130).
+	// The link stays; it works again when the suspension is lifted.
+	codeAccountSuspended = "account_suspended"
 )
 
 // Errors the Account screen explains.
@@ -54,6 +58,10 @@ var (
 	ErrBadCode = errors.New("that code didn't work: codes work once, for 15 minutes")
 	// ErrNotLinkable is a learner who can't be linked now.
 	ErrNotLinkable = errors.New("this learner can't be linked right now: ask your grown-up to check the website")
+	// ErrSuspended is a sync the server has paused for the learner's
+	// account (403 account_suspended). The game stays linked, keeps its
+	// progress and tries again at the usual times.
+	ErrSuspended = errors.New("can't sync right now: ask your grown-up")
 	// ErrUnlinked is a game that was unlinked (on the website, say), or whose tokens are
 	// no longer good: it has to be linked again.
 	ErrUnlinked = errors.New("this game was unlinked")
@@ -69,7 +77,7 @@ func Explain(err error) string {
 	switch {
 	case err == nil:
 		return ""
-	case errors.Is(err, ErrBadCode), errors.Is(err, ErrNotLinkable), errors.Is(err, ErrUnlinked),
+	case errors.Is(err, ErrBadCode), errors.Is(err, ErrNotLinkable), errors.Is(err, ErrUnlinked), errors.Is(err, ErrSuspended),
 		errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked),
 		errors.Is(err, ErrSSOPending), errors.Is(err, ErrSSOExpired), errors.Is(err, ErrSSORefused), errors.Is(err, ErrSSOOff), errors.Is(err, ErrSSOBusy):
 		return err.Error()
@@ -393,6 +401,13 @@ func (c *Client) authed(ctx context.Context, gen int, method, path string, hdr h
 // can't use a linked game now (403 not_linkable: removed by the family,
 // say, which can be undone for a while). The game stays linked and says
 // so; once a grown-up sorts it out, the next sync works again.
+// isSuspended reports whether the server paused syncing for the
+// learner's account. It is never a reason to unlink.
+func isSuspended(err error) bool {
+	var e *Error
+	return errors.Is(err, ErrSuspended) || (errors.As(err, &e) && e.Status == http.StatusForbidden && e.Code == codeAccountSuspended)
+}
+
 func notLinkable(err error) error {
 	var e *Error
 	if errors.As(err, &e) && e.Code == codeNotLinkable {

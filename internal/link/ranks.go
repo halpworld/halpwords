@@ -86,8 +86,9 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 				Chests: t.Chests, Misses: t.Misses}}
 		_, _, err := c.authed(ctx, gen, http.MethodPost, "/api/v1/runs", nil, body, nil)
 		var e *Error
-		if err != nil && !(errors.As(err, &e) && e.Status >= 400 && e.Status < 500 &&
-			e.Status != http.StatusUnauthorized && e.Status != http.StatusTooManyRequests) {
+		// A paused account (halpwords-server#130) keeps the run for later.
+		if err != nil && (isSuspended(err) || !(errors.As(err, &e) && e.Status >= 400 && e.Status < 500 &&
+			e.Status != http.StatusUnauthorized && e.Status != http.StatusTooManyRequests)) {
 			return err
 		}
 		c.mu.Lock()

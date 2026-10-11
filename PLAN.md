@@ -925,7 +925,13 @@ browser won't let a page set `User-Agent`, the web build sends its version
 as `X-Halpwords-Client: halpwords/1.2.0 (js; wasm)` instead. Unlinking
 also tells the server (`POST /api/v1/unlink`, in the background, after
 refreshing an old access token), so the game leaves the child's page on
-the website; offline, the family removes it there. Still to do:
+the website; offline, the family removes it there. A sync the server
+refuses with 403 `account_suspended` (every adult on the learner's account
+is suspended, halpwords-server#130) is not a failure and never an unlink:
+the game keeps the link, the queue and the lists, syncs at the usual three
+minutes with no backoff, and Account says "Can't sync right now. Ask your
+grown-up. Your progress is kept." (`Status.Suspended`) until a sync works
+again. Still to do:
 checking it all against staging (W1.8's "Done when"),
 per-assignment settings, and the accommodations the game doesn't have yet
 (cheaper hints, larger text, no timed dodges).
