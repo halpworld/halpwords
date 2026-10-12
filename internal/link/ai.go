@@ -37,7 +37,7 @@ func (c *Client) AIAvailable() bool {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.st.linked() && !c.aiOff && c.st.Me != nil && c.st.Me.AI != nil && c.st.Me.AI.Available
+	return c.st.linked() && !c.st.Stopped && !c.aiOff && c.st.Me != nil && c.st.Me.AI != nil && c.st.Me.AI.Available
 }
 
 // AskAI sends req to Halpwords AI's task (POST /api/v1/ai/{task}) and
@@ -50,7 +50,9 @@ func (c *Client) AskAI(ctx context.Context, task string, req, out any) error {
 	}
 	c.mu.Lock()
 	gen := c.gen
-	ok := c.st.linked() && c.st.Me != nil && c.st.Me.AI != nil && slices.Contains(c.st.Me.AI.Tasks, task)
+	// Not while the learner's progress is stopped: the server refuses
+	// it (403 not_linkable), so the game doesn't ask.
+	ok := c.st.linked() && !c.st.Stopped && c.st.Me != nil && c.st.Me.AI != nil && slices.Contains(c.st.Me.AI.Tasks, task)
 	c.mu.Unlock()
 	if !ok {
 		return ErrNoAI

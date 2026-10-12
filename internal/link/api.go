@@ -21,6 +21,10 @@ type Error struct {
 	Message string
 	// RetryAfter is how long a rate_limited answer says to wait.
 	RetryAfter time.Duration
+	// Reason says more about some codes: not_linkable with reason
+	// progress_stopped is a learner who stopped their own progress being
+	// kept (ErrProgressStopped).
+	Reason string
 	// Details are, for invalid_request, the paths of the problems.
 	Details []struct {
 		Path    string `json:"path"`
@@ -50,6 +54,9 @@ const (
 	// adult on the learner's account is suspended (halpwords-server#130).
 	// The link stays; it works again when the suspension is lifted.
 	codeAccountSuspended = "account_suspended"
+	// reasonProgressStopped: with not_linkable, the learner stopped their
+	// own progress being kept (halpwords-server PLAN §25, 2026-10-12).
+	reasonProgressStopped = "progress_stopped"
 )
 
 // Errors the Account screen explains.
@@ -62,6 +69,11 @@ var (
 	// account (403 account_suspended). The game stays linked, keeps its
 	// progress and tries again at the usual times.
 	ErrSuspended = errors.New("can't sync right now: ask your grown-up")
+	// ErrProgressStopped is a sync of a learner who stopped their own
+	// progress being kept (403 not_linkable, reason progress_stopped).
+	// The game stays linked and works as before on this computer; it
+	// sends nothing, and only My choices talks to the server.
+	ErrProgressStopped = errors.New("your progress isn't being kept, so this game doesn't sync")
 	// ErrUnlinked is a game that was unlinked (on the website, say), or whose tokens are
 	// no longer good: it has to be linked again.
 	ErrUnlinked = errors.New("this game was unlinked")
@@ -78,7 +90,7 @@ func Explain(err error) string {
 	case err == nil:
 		return ""
 	case errors.Is(err, ErrBadCode), errors.Is(err, ErrNotLinkable), errors.Is(err, ErrUnlinked), errors.Is(err, ErrSuspended),
-		errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked),
+		errors.Is(err, ErrProgressStopped), errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked),
 		errors.Is(err, ErrSSOPending), errors.Is(err, ErrSSOExpired), errors.Is(err, ErrSSORefused), errors.Is(err, ErrSSOOff), errors.Is(err, ErrSSOBusy):
 		return err.Error()
 	case errors.Is(err, context.DeadlineExceeded):
@@ -102,6 +114,9 @@ func retryable(err error) (bool, time.Duration) {
 		return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded), 0
 	}
 	switch {
+	case e.Code == codeAskedTooOften:
+		// A limit of a day, not of the moment (My choices).
+		return false, 0
 	case e.Code == codeRateLimited || e.Status == http.StatusTooManyRequests:
 		return e.RetryAfter <= 30*time.Second, e.RetryAfter
 	case e.Status >= 500:
@@ -262,6 +277,7 @@ func errorFrom(status int, h http.Header, data []byte) *Error {
 		Error struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
+			Reason  string `json:"reason"`
 			Details []struct {
 				Path    string `json:"path"`
 				Message string `json:"message"`
@@ -269,7 +285,7 @@ func errorFrom(status int, h http.Header, data []byte) *Error {
 		} `json:"error"`
 	}
 	if json.Unmarshal(data, &eb) == nil && eb.Error.Code != "" {
-		e.Code, e.Message, e.Details = eb.Error.Code, eb.Error.Message, eb.Error.Details
+		e.Code, e.Message, e.Reason, e.Details = eb.Error.Code, eb.Error.Message, eb.Error.Reason, eb.Error.Details
 	}
 	if s, err := strconv.Atoi(h.Get("Retry-After")); err == nil && s >= 0 {
 		e.RetryAfter = time.Duration(s) * time.Second
@@ -397,10 +413,6 @@ func (c *Client) authed(ctx context.Context, gen int, method, path string, hdr h
 	return status, h, notLinkable(err)
 }
 
-// notLinkable is err, or ErrNotLinkable when the server says the learner
-// can't use a linked game now (403 not_linkable: removed by the family,
-// say, which can be undone for a while). The game stays linked and says
-// so; once a grown-up sorts it out, the next sync works again.
 // isSuspended reports whether the server paused syncing for the
 // learner's account. It is never a reason to unlink.
 func isSuspended(err error) bool {
@@ -408,9 +420,17 @@ func isSuspended(err error) bool {
 	return errors.Is(err, ErrSuspended) || (errors.As(err, &e) && e.Status == http.StatusForbidden && e.Code == codeAccountSuspended)
 }
 
+// notLinkable is err, or ErrNotLinkable when the server says the learner
+// can't use a linked game now (403 not_linkable: removed by the family,
+// say, which can be undone for a while), or ErrProgressStopped when that
+// is because they stopped their own progress being kept. The game stays
+// linked and says so; once it is sorted out, the next sync works again.
 func notLinkable(err error) error {
 	var e *Error
-	if errors.As(err, &e) && e.Code == codeNotLinkable {
+	switch {
+	case errors.As(err, &e) && e.Code == codeNotLinkable && e.Reason == reasonProgressStopped:
+		return ErrProgressStopped
+	case errors.As(err, &e) && e.Code == codeNotLinkable:
 		return ErrNotLinkable
 	}
 	return err

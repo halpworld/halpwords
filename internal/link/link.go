@@ -290,6 +290,14 @@ type state struct {
 	// player's own: the own file name, by the list's server id (moveOut).
 	// Like NextSeq, it outlives the link.
 	Kept map[string]string `json:",omitempty"`
+	// Stopped is set while the learner has stopped their own progress
+	// being kept (ErrProgressStopped): the game queues nothing until a
+	// sync works again. It is kept so the game knows offline too.
+	Stopped bool `json:",omitempty"`
+	// ChildNotice is the ref of the child-link notice ("who can see your
+	// progress") the server has recorded as shown on this link; "" until
+	// then (choices.go).
+	ChildNotice string `json:",omitempty"`
 }
 
 func (s *state) linked() bool { return s.Refresh != "" }
@@ -329,6 +337,12 @@ type Status struct {
 	// progress and tries again at the usual times, and says "Can't sync
 	// right now. Ask your grown-up." It clears at the next good sync.
 	Suspended bool
+	// Stopped is set while the learner has stopped their own progress
+	// being kept (halpwords-server PLAN §25, 2026-10-12): the game stays
+	// linked and works as before, sends nothing and says "Your progress
+	// isn't being kept." My choices can ask to keep it again. It clears
+	// at the next good sync.
+	Stopped bool
 	// Outdated is set when the server says this game is too old for
 	// some of its features.
 	Outdated bool
@@ -472,6 +486,12 @@ func Open(o Options) *Client {
 		if c.dropQueued() || expired {
 			c.writeParked()
 		}
+		if c.st.linked() && c.st.Stopped {
+			// Stopped: a queue from an older game (or one that stopped
+			// before it saved) is never sent.
+			c.dropStopped()
+			c.saveState()
+		}
 	}
 	c.st.NextSeq = max(c.st.NextSeq, c.q.maxSeq()+1, maxParkedSeq(c.parked)+1, 1)
 	if c.st.linked() && c.st.Server != "" && c.st.Server != c.server {
@@ -539,6 +559,7 @@ func (c *Client) Status() Status {
 		Err:       c.err,
 		Offline:   c.failures >= quietAfter,
 		Suspended: c.suspended,
+		Stopped:   c.st.Stopped && c.st.linked(),
 		Note:      c.note,
 		Lists:     len(c.st.Lists),
 	}

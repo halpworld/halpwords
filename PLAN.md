@@ -1086,6 +1086,28 @@ or foreign target, and servers from before ignore the field. Learner
 names are not targets: other learners appear in the game only by
 pseudonym, with room-only IDs.
 
+*Now (server R6 game side, 2026-10-12, done):* **My choices.** A linked
+game has a *My choices* screen (Account → My choices, `scene/choices.go`,
+`link/choices.go`, `GET/POST /api/v1/choices…`). It shows the child-link
+notice "Who can see your progress" (the server's versioned words; the
+version shown is recorded on the device), and for a family's teenager
+only the controls that apply: agreeing to, or saying no to, friend groups
+and ranking boards (13–17, after the notice), and at 16–17 "Stop keeping
+my progress" (with a Y/N confirm step), "I want Halpwords to keep my
+progress again" (a grown-up confirms by email; the screen shows that it
+waits, and the request can be taken back). The Account screen fetches
+My choices once linked and opens them when the child notice (once per
+link) or the one-time 16–17 notice (once per learner, across website
+and game) is due. When the server answers 403 `not_linkable` with
+`reason: progress_stopped`, the game stays linked and keeps its lists,
+drops the queued events and unsent runs, queues nothing more (kept in
+`link.json` as `Stopped`, so offline too), syncs at the usual times with
+no backoff, and Account says "Your progress isn't being kept, so this
+game doesn't sync. It still works here." (`Status.Stopped`) until a sync
+works again. A server without My choices answers 404: the menu item is
+hidden. Not done: an under-16 "ask your grown-up" button (the website
+has none yet), and the screen is English only like the rest of the game.
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |
@@ -1235,3 +1257,6 @@ teacher "class pack" export.
 | LLM | Optional. Claude first, OpenAI-compatible/local second. Set up by a parent or teacher. Always family-safe. |
 | Stack | Go + Ebitengine. |
 | Font | GNU Unifont subset (OFL 1.1). |
+| Stopped progress (2026-10-12) | A learner who stopped their own progress being kept (server 403 `not_linkable`, reason `progress_stopped`) keeps the link and plays as before; the game drops what waited to be sent and queues nothing until a sync works again. Never an unlink, never a failure (§10a). |
+| My choices (2026-10-12) | Notice words come from the server, never from the game, so the game and website say the same thing; the game sends back the notice ref it showed. Agreeing needs the notice shown first; saying no doesn't. Stopping needs a Y/N confirm. The child notice is recorded in the background; one that fails is shown again next time. |
+| My choices review fixes (2026-10-12) | Lead's review round; where there was a choice, the stricter reading. **A stop drops everything at once:** when the stop is seen, the game removes the queue file, the runs waiting to be sent and this learner's parked entries. It does it again on start if the save says stopped. While stopped there is no AI and there are no play tickets, and live play ends. **State order:** suspended, offline, error and removed come before Stopped. Stopped clears when the server says the learner isn't stopped. Sync now and "who can see" are hidden while stopped. **No choices:** only a 404 to `GET /choices` means an older server (ErrNoChoices); a 404 to a POST is an ordinary error. The brief's "404 with no error code" rule can't tell an older server apart, because every server answers an unknown route with `404 not_found`. **Notices:** Esc on the child notice doesn't count as seen; it comes back next time, and only Enter records it. Esc on the 16-17 notice does count as seen, because the server's GET already claimed it; the game still posts it, for older servers. After linking, "Linked!" stays until a key is pressed or about two seconds pass, and the first notice page shows it again. **Screens:** Esc while sending shows "still sending". If a change worked but the list couldn't be reloaded, the screen says the change worked and then names the reload problem. The server's hint is shown, and Enter means "change". Saying no to an ask you agreed to has a short confirm. Titles wrap, long words and addresses break onto the next line, and pages show n/m or "end". The list scrolls. **Y/N** read the typed character, so QWERTZ keyboards work. This applies on My choices and Account only; other scenes are unchanged. **A 13-15 with nothing asked** gets the meaning of the website's `kid.choices.empty`; the server now sends visibility even when there are no asks. The game is English only, so its own lines have no ga drafts. |

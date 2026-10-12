@@ -149,6 +149,14 @@ type fake struct {
 	runStatus int
 	boards    []any
 
+	// stopped answers 403 not_linkable, reason progress_stopped, to all
+	// but linking, tokens, unlinking and My choices, as the server does
+	// while the learner has stopped their progress being kept. choices
+	// answers /api/v1/choices...: a status and a body (a string is an
+	// error code); nil answers 404, as an older server.
+	stopped bool
+	choices func(method, path string, body []byte) (int, any)
+
 	playMu sync.Mutex
 	playWS http.HandlerFunc // answers /api/v1/play, outside mu
 }
@@ -236,6 +244,12 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	if f.suspended && path != "/api/v1/link" && path != "/api/v1/link/class" {
 		writeErr(w, 403, "account_suspended")
+		return
+	}
+	if f.stopped && path != "/api/v1/link" && path != "/api/v1/token" && path != "/api/v1/unlink" &&
+		!strings.HasPrefix(path, "/api/v1/choices") {
+		writeJSON(w, 403, map[string]any{"error": map[string]any{"code": "not_linkable", "reason": "progress_stopped",
+			"message": "fake progress_stopped"}})
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
@@ -454,6 +468,20 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, status, v)
+	case strings.HasPrefix(path, "/api/v1/choices") && f.choices != nil:
+		if !auth() {
+			return
+		}
+		status, v := f.choices(r.Method, path, body)
+		switch {
+		case status == http.StatusNoContent:
+			w.WriteHeader(status)
+		case status >= 400:
+			code, _ := v.(string)
+			writeErr(w, status, code)
+		default:
+			writeJSON(w, status, v)
+		}
 	default:
 		writeErr(w, 404, "not_found")
 	}

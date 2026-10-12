@@ -24,7 +24,8 @@ type qRun struct {
 	At       time.Time
 }
 
-// Run queues a finished scored run to be ranked, if the game is linked.
+// Run queues a finished scored run to be ranked, if the game is linked
+// and the learner's progress is kept.
 // Only a grown-up can put the learner on a board; the server drops runs
 // of learners who aren't on one. A run that cleared no floor
 // (compete.Run.Ranked) isn't queued: no board takes it. listHash is
@@ -35,7 +36,7 @@ func (c *Client) Run(r compete.Run, listHash string) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.st.linked() {
+	if !c.st.linked() || c.st.Stopped {
 		return
 	}
 	c.st.Runs = append(c.st.Runs, qRun{Code: r.Share.Code(), Tally: r.Tally, Secs: r.Secs, ListHash: listHash, At: c.now()})

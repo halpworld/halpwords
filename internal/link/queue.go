@@ -117,7 +117,8 @@ func (c *Client) nextSeq() int64 {
 	return s
 }
 
-// Answer queues an answer given in the game, if the game is linked. lang
+// Answer queues an answer given in the game, if the game is linked and
+// the learner's progress is kept (not Status.Stopped). lang
 // is the language code, mode the game mode and the kind of answer, such as
 // "adventure:attack" or "practice". An answer to a word of an assigned
 // list is sent as it is; any other answer (to the player's own lists)
@@ -128,7 +129,7 @@ func (c *Client) Answer(lang string, e words.Entry, mode string, a words.Answer)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.st.linked() {
+	if !c.st.linked() || c.st.Stopped {
 		return
 	}
 	now := c.now()
@@ -171,7 +172,8 @@ type Session struct {
 	ListID string
 }
 
-// Session queues a play session that has ended, if the game is linked.
+// Session queues a play session that has ended, if the game is linked
+// and the learner's progress is kept.
 // Sessions shorter than a few seconds are not sent.
 func (c *Client) Session(s Session) {
 	if c == nil || s.Secs < 5 {
@@ -179,7 +181,7 @@ func (c *Client) Session(s Session) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.st.linked() {
+	if !c.st.linked() || c.st.Stopped {
 		return
 	}
 	c.q.Sessions = append(c.q.Sessions, qSession{Seq: c.nextSeq(), At: s.Start, Mode: cleanMode(s.Mode, false),

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -158,7 +159,15 @@ func (c *Client) Sync(ctx context.Context) error {
 	case err == nil:
 		c.err, c.failures, c.suspended = nil, 0, false
 		c.st.LastSync = c.now()
+		c.st.Stopped = false
 		c.saveState()
+	case errors.Is(err, ErrProgressStopped):
+		// The learner stopped their own progress being kept: not a
+		// failure and never an unlink. What waits to be sent is
+		// dropped, as nothing more is kept; the next sync comes at the
+		// usual time and clears it once their progress is kept again.
+		c.stopProgress()
+		c.err, c.failures, c.suspended = nil, 0, false
 	case errors.Is(err, ErrNotLinked), errors.Is(err, ErrUnlinked):
 		// unlinked while syncing, here or on the website: Note says so
 	case isSuspended(err):
@@ -219,7 +228,48 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 func stopsSync(ctx context.Context, err error) bool {
 	var e *Error
 	return errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) || ctx.Err() != nil ||
-		isSuspended(err) || (errors.As(err, &e) && e.Status == http.StatusUnauthorized)
+		isSuspended(err) || errors.Is(err, ErrProgressStopped) || (errors.As(err, &e) && e.Status == http.StatusUnauthorized)
+}
+
+// stopProgress drops what waits to be sent and stops queuing more, as
+// the learner stopped their progress being kept. c.mu is held.
+func (c *Client) stopProgress() {
+	if !c.st.Stopped {
+		c.changes++
+	}
+	c.st.Stopped = true
+	c.dropStopped()
+	c.saveState()
+	if p := c.play; p != nil {
+		// Play takes p.mu before c.mu, so not here.
+		go p.endStopped()
+	}
+}
+
+// dropStopped forgets, on disk too and at once, every event this game
+// kept for a learner whose progress is stopped: the queue, unsent runs
+// and what was parked for them after an earlier link. Nothing of the
+// stopped time is ever sent, even by a game that stops before its next
+// save. c.mu is held, so the queue file is removed here rather than by
+// writeQueue, which takes the lock (the queue is empty, so writeQueue
+// would only remove it too).
+func (c *Client) dropStopped() {
+	c.q = queue{}
+	c.st.Runs = nil
+	c.dirty = false
+	if c.o.Store != nil {
+		if err := c.o.Store.Remove(queueFile); err != nil {
+			c.dirty = true // Save tries again
+		}
+	}
+	if c.st.Me != nil && c.st.Me.Learner.ID != "" {
+		id := c.st.Me.Learner.ID
+		n := len(c.parked)
+		c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return p.Learner == id })
+		if len(c.parked) != n {
+			c.writeParked()
+		}
+	}
 }
 
 // syncMe fetches the learner. syncMu is held.

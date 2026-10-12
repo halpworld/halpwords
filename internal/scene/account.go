@@ -1,6 +1,8 @@
 package scene
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"image/color"
 	"strings"
@@ -35,9 +37,10 @@ const (
 	acUnlinkItem
 	acBack
 	acSchool
+	acChoices
 )
 
-var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school"}
+var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school", "My choices"}
 
 // school reports whether the game signed in at school, with a login card,
 // the class code or a school account: it signs out rather than unlinks
@@ -61,7 +64,25 @@ type Account struct {
 	syncUntil  int // Sync Now asked for: Status.Syncs says when it is done
 	msg        string
 	msgCol     color.RGBA
+	// checked is set once My choices were fetched to see whether a
+	// notice is due (the child notice after linking, the one at 16 or
+	// 17), and checking while they are on their way. noChoices: the
+	// server has no My choices.
+	checked   bool
+	checking  chan chResult
+	noChoices bool
+	// due are fetched choices with a notice due, waiting to open: on the
+	// next key, which then only opens them, or after dueWait more ticks,
+	// so "Linked!" is read and no key press lands on the wrong screen.
+	due     *link.Choices
+	dueWait int
+	// linked is "Linked!", said again on the notice it opens.
+	linked string
 }
+
+// choicesPause is how long the Account screen waits for a key before it
+// opens a notice that is due: about two seconds.
+const choicesPause = 120
 
 // NewAccount creates the Account screen.
 func NewAccount(ctx *game.Context) game.Scene {
@@ -70,7 +91,15 @@ func NewAccount(ctx *game.Context) game.Scene {
 
 func (a *Account) items(ctx *game.Context) []acItem {
 	if ctx.Link.Linked() {
-		return []acItem{acSync, acUnlinkItem, acBack}
+		var items []acItem
+		if !ctx.Link.Status().Stopped {
+			// Stopped, nothing syncs: no button that can't do anything.
+			items = append(items, acSync)
+		}
+		if !a.noChoices {
+			items = append(items, acChoices)
+		}
+		return append(items, acUnlinkItem, acBack)
 	}
 	return []acItem{acLink, acSchool, acBack}
 }
@@ -93,12 +122,17 @@ func (a *Account) Update(ctx *game.Context) error {
 		return nil
 	}
 	st := ctx.Link.Status()
+	if ch := a.checkChoices(ctx, st); ch != nil {
+		ctx.Replace(ch)
+		return nil
+	}
 	if a.linking && !st.Signing {
 		a.linking = false
 		switch {
 		case st.Linked:
 			ctx.Sound.Play(audio.Perfect)
-			a.say("Linked! Your progress now goes to your grown-up's account.", pal.Lime)
+			a.linked = "Linked! Your progress now goes to your grown-up's account."
+			a.say(a.linked, pal.Lime)
 			a.sel = 0
 		default:
 			ctx.Sound.Play(audio.Wrong)
@@ -111,8 +145,12 @@ func (a *Account) Update(ctx *game.Context) error {
 		switch {
 		case !st.Linked:
 			a.say("", pal.Steel)
-		case st.Err != nil:
-			a.say(upperFirst(link.Explain(st.Err))+".", pal.Rose)
+		case st.Suspended, st.Err != nil:
+			// A problem says more than being stopped does.
+			s, _ := syncProblem(st)
+			a.say(s, pal.Rose)
+		case st.Stopped:
+			a.say("Your progress isn't being kept, so nothing syncs.", pal.Ice)
 		default:
 			a.say("Synced.", pal.Lime)
 		}
@@ -123,17 +161,17 @@ func (a *Account) Update(ctx *game.Context) error {
 		return nil
 	case acUnlink:
 		switch {
-		case input.Pressed(ebiten.KeyY) && school(ctx):
+		case typedYes(ctx) && school(ctx):
 			ctx.Sound.Play(audio.Select)
 			a.signingOut = ctx.SignOut()
 			a.mode = acBrowse
 			a.say("Signing out…", pal.Ice)
-		case input.Pressed(ebiten.KeyY):
+		case typedYes(ctx):
 			ctx.Link.Unlink()
 			ctx.Sound.Play(audio.Select)
 			a.say("Unlinked. Your progress is still here.", pal.Lime)
 			a.mode, a.sel = acBrowse, 0
-		case input.Pressed(ebiten.KeyN) || input.Back():
+		case typedNo(ctx) || input.Back():
 			ctx.Sound.Play(audio.Back)
 			a.mode = acBrowse
 		}
@@ -172,6 +210,9 @@ func (a *Account) Update(ctx *game.Context) error {
 			}
 			ctx.Link.SyncNow()
 			a.say("Syncing…", pal.Ice)
+		case acChoices:
+			ctx.Sound.Play(audio.Select)
+			ctx.Replace(NewChoices(ctx))
 		case acUnlinkItem:
 			ctx.Sound.Play(audio.Select)
 			a.mode = acUnlink
@@ -194,6 +235,64 @@ func (a *Account) Update(ctx *game.Context) error {
 		}
 	}
 	return nil
+}
+
+// checkChoices fetches My choices once the game is linked, in the
+// background, to open them when a notice is due: the child notice
+// after linking, or the one-time notice at 16 or 17. It returns the
+// screen to open, or nil. It opens them on the next key, which does
+// nothing else, or after a pause, so "Linked!" isn't cut off; the
+// notice says it again. The choices it fetched are the ones shown: the
+// server counted the notice at 16 or 17 as told when it sent it.
+func (a *Account) checkChoices(ctx *game.Context, st link.Status) *Choices {
+	if !st.Linked {
+		a.checked, a.checking, a.noChoices, a.due, a.linked = false, nil, false, nil, ""
+		return nil
+	}
+	if a.due != nil {
+		if a.mode != acBrowse {
+			return nil
+		}
+		a.dueWait--
+		if a.dueWait > 0 && !anyKey(ctx) {
+			return nil
+		}
+		ch, msg := a.due, a.linked
+		a.due, a.linked = nil, ""
+		return newChoicesWith(ctx, ch, msg)
+	}
+	if a.checking != nil {
+		select {
+		case r := <-a.checking:
+			a.checking = nil
+			a.noChoices = errors.Is(r.err, link.ErrNoChoices)
+			if r.err == nil && (ctx.Link.ChildNoticeDue() && r.ch.ChildNotice.Ref != "" || r.ch.OlderNotice) {
+				a.due, a.dueWait = r.ch, choicesPause
+			}
+		default:
+		}
+		return nil
+	}
+	if a.checked || a.linking || st.Signing {
+		return nil
+	}
+	a.checked = true
+	out := make(chan chResult, 1)
+	a.checking = out
+	go func(lc *link.Client) {
+		bg, cancel := context.WithTimeout(context.Background(), askTimeout)
+		defer cancel()
+		ch, err := lc.Choices(bg)
+		out <- chResult{ch: ch, err: err}
+	}(ctx.Link)
+	return nil
+}
+
+// anyKey reports whether a key the menus use was pressed, or a
+// character typed, this tick.
+func anyKey(ctx *game.Context) bool {
+	return input.Confirm() || input.Back() || input.Up() || input.Down() || input.Pressed(ebiten.KeySpace) ||
+		ctx.Input != nil && len(ctx.Input.Chars) > 0
 }
 
 func (a *Account) leave(ctx *game.Context) {
@@ -310,9 +409,14 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 			name = "a learner"
 		}
 		line("Linked to "+name+"'s account.", pal.Lime)
-		line(link.SeenByText(st.SeenBy), pal.Ice)
+		if !st.Stopped {
+			// Nothing is kept while stopped, so nobody sees it.
+			line(link.SeenByText(st.SeenBy), pal.Ice)
+		}
 		line("Last sync: "+ago(time.Now(), st.LastSync), pal.Steel)
 		switch {
+		case st.Stopped:
+			// syncProblem says so.
 		case st.Busy:
 			line("Syncing…", pal.Ice)
 		case st.Pending > 0:
@@ -391,17 +495,26 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 }
 
 // syncProblem is the line saying why the last sync didn't work, or ""
-// when it did. A suspended account (halpwords-server#130) gets a calm
+// when it did. A learner who stopped their own progress being kept gets
+// a calm line: the game stays linked and works as before. A suspended account (halpwords-server#130) gets a calm
 // line for the child rather than an error: the game stays linked and
 // picks up by itself once a grown-up sorts it out.
+//
+// A suspended, removed or paused account, or another error, says more
+// than being stopped does, so it comes first (PLAN §14, 2026-10-12).
 func syncProblem(st link.Status) (string, color.RGBA) {
 	switch {
 	case st.Suspended:
+		if st.Stopped {
+			return "Can't sync right now. Ask your grown-up.", pal.Ice
+		}
 		return "Can't sync right now. Ask your grown-up. Your progress is kept.", pal.Ice
 	case st.Offline:
 		return "Can't reach the website. The game keeps trying.", pal.Tan
 	case st.Err != nil:
 		return upperFirst(link.Explain(st.Err)) + ".", pal.Tan
+	case st.Stopped:
+		return "Your progress isn't being kept, so this game doesn't sync. It still works here.", pal.Ice
 	}
 	return "", color.RGBA{}
 }

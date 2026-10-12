@@ -311,6 +311,9 @@ func (p *Play) Join(code string) {
 	case !p.c.Linked():
 		p.st.Problem = "Link this game to play together."
 		return
+	case p.c.Status().Stopped:
+		p.st.Problem = playStopped
+		return
 	}
 	p.st.Notice = ""
 	p.st.Phase = PlayJoining
@@ -360,6 +363,28 @@ func (p *Play) stopLocked() {
 		time.AfterFunc(leaveWait, p.cancel)
 		p.cancel = nil
 	}
+}
+
+// playStopped says why a learner who stopped their own progress being
+// kept can't play together: the server takes nothing from this game now.
+const playStopped = "Your progress isn't being kept, so you can't play together now."
+
+// endStopped leaves the room at once, as the learner stopped their own
+// progress being kept, and says why.
+func (p *Play) endStopped() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.st.Phase == PlayOff {
+		return
+	}
+	p.stopLocked()
+	p.st.Phase = PlayOff
+	p.st.Room = Room{}
+	p.st.Events = nil
+	p.st.Problem = playStopped
+	p.st.Race, p.st.Results = nil, nil
+	p.st.Raid, p.st.Finale, p.st.Summary = nil, nil, nil
+	p.st.Changes++
 }
 
 // bye is the leave message; the writer closes the connection after it.
@@ -501,6 +526,8 @@ func (p *Play) explain(err error) (problem string, again bool) {
 		return end.problem, false
 	case errors.Is(err, ErrNotLinked), errors.Is(err, ErrUnlinked):
 		return "Link this game to play together.", false
+	case errors.Is(err, ErrProgressStopped):
+		return playStopped, false
 	case errors.As(err, &ce):
 		switch ce.Code {
 		case 1001, 1006, 1011, 1013:
@@ -555,8 +582,12 @@ type ticketReply struct {
 func (p *Play) session(ctx context.Context, run int) (bool, error) {
 	c := p.c
 	c.mu.Lock()
-	gen := c.gen
+	gen, stopped := c.gen, c.st.Stopped
 	c.mu.Unlock()
+	if stopped {
+		// The server refuses a ticket now: don't ask for one.
+		return false, ErrProgressStopped
+	}
 	// Whatever talks to the server holds syncMu, so the tokens aren't
 	// refreshed twice at once; a sync running now gets a moment.
 	for !c.syncMu.TryLock() {
