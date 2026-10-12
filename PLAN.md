@@ -1086,6 +1086,28 @@ or foreign target, and servers from before ignore the field. Learner
 names are not targets: other learners appear in the game only by
 pseudonym, with room-only IDs.
 
+*Now (server R6 game side, 2026-10-12, done):* **My choices.** A linked
+game has a *My choices* screen (Account → My choices, `scene/choices.go`,
+`link/choices.go`, `GET/POST /api/v1/choices…`). It shows the child-link
+notice "Who can see your progress" (the server's versioned words; the
+version shown is recorded on the device), and for a family's teenager
+only the controls that apply: agreeing to, or saying no to, friend groups
+and ranking boards (13–17, after the notice), and at 16–17 "Stop keeping
+my progress" (with a Y/N confirm step), "I want Halpwords to keep my
+progress again" (a grown-up confirms by email; the screen shows that it
+waits, and the request can be taken back). The Account screen fetches
+My choices once linked and opens them when the child notice (once per
+link) or the one-time 16–17 notice (once per learner, across website
+and game) is due. When the server answers 403 `not_linkable` with
+`reason: progress_stopped`, the game stays linked and keeps its lists,
+drops the queued events and unsent runs, queues nothing more (kept in
+`link.json` as `Stopped`, so offline too), syncs at the usual times with
+no backoff, and Account says "Your progress isn't being kept, so this
+game doesn't sync. It still works here." (`Status.Stopped`) until a sync
+works again. A server without My choices answers 404: the menu item is
+hidden. Not done: an under-16 "ask your grown-up" button (the website
+has none yet), and the screen is English only like the rest of the game.
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |
@@ -1235,3 +1257,5 @@ teacher "class pack" export.
 | LLM | Optional. Claude first, OpenAI-compatible/local second. Set up by a parent or teacher. Always family-safe. |
 | Stack | Go + Ebitengine. |
 | Font | GNU Unifont subset (OFL 1.1). |
+| Stopped progress (2026-10-12) | A learner who stopped their own progress being kept (server 403 `not_linkable`, reason `progress_stopped`) keeps the link and plays as before; the game drops what waited to be sent and queues nothing until a sync works again. Never an unlink, never a failure (§10a). |
+| My choices (2026-10-12) | Notice words come from the server, never from the game, so the game and website say the same thing; the game sends back the notice ref it showed. Agreeing needs the notice shown first; saying no doesn't. Stopping needs a Y/N confirm. The child notice is recorded in the background; one that fails is shown again next time. |

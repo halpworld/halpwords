@@ -159,7 +159,7 @@ func TestAccountHelpers(t *testing.T) {
 		t.Fatalf("unlinked menu %v", items)
 	}
 	ctx = linkedContext(t)
-	if items := a.items(ctx); len(items) != 3 || items[0] != acSync {
+	if items := a.items(ctx); len(items) != 4 || items[0] != acSync || items[1] != acChoices {
 		t.Fatalf("linked menu %v", items)
 	}
 }

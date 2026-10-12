@@ -1,6 +1,8 @@
 package scene
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"image/color"
 	"strings"
@@ -35,9 +37,10 @@ const (
 	acUnlinkItem
 	acBack
 	acSchool
+	acChoices
 )
 
-var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school"}
+var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school", "My choices"}
 
 // school reports whether the game signed in at school, with a login card,
 // the class code or a school account: it signs out rather than unlinks
@@ -61,6 +64,13 @@ type Account struct {
 	syncUntil  int // Sync Now asked for: Status.Syncs says when it is done
 	msg        string
 	msgCol     color.RGBA
+	// checked is set once My choices were fetched to see whether a
+	// notice is due (the child notice after linking, the one at 16 or
+	// 17), and checking while they are on their way. noChoices: the
+	// server has no My choices.
+	checked   bool
+	checking  chan chResult
+	noChoices bool
 }
 
 // NewAccount creates the Account screen.
@@ -70,7 +80,10 @@ func NewAccount(ctx *game.Context) game.Scene {
 
 func (a *Account) items(ctx *game.Context) []acItem {
 	if ctx.Link.Linked() {
-		return []acItem{acSync, acUnlinkItem, acBack}
+		if a.noChoices {
+			return []acItem{acSync, acUnlinkItem, acBack}
+		}
+		return []acItem{acSync, acChoices, acUnlinkItem, acBack}
 	}
 	return []acItem{acLink, acSchool, acBack}
 }
@@ -93,6 +106,10 @@ func (a *Account) Update(ctx *game.Context) error {
 		return nil
 	}
 	st := ctx.Link.Status()
+	if ch := a.checkChoices(ctx, st); ch != nil {
+		ctx.Replace(ch)
+		return nil
+	}
 	if a.linking && !st.Signing {
 		a.linking = false
 		switch {
@@ -111,6 +128,8 @@ func (a *Account) Update(ctx *game.Context) error {
 		switch {
 		case !st.Linked:
 			a.say("", pal.Steel)
+		case st.Stopped:
+			a.say("Your progress isn't being kept, so nothing syncs.", pal.Ice)
 		case st.Err != nil:
 			a.say(upperFirst(link.Explain(st.Err))+".", pal.Rose)
 		default:
@@ -172,6 +191,9 @@ func (a *Account) Update(ctx *game.Context) error {
 			}
 			ctx.Link.SyncNow()
 			a.say("Syncing…", pal.Ice)
+		case acChoices:
+			ctx.Sound.Play(audio.Select)
+			ctx.Replace(NewChoices(ctx))
 		case acUnlinkItem:
 			ctx.Sound.Play(audio.Select)
 			a.mode = acUnlink
@@ -193,6 +215,42 @@ func (a *Account) Update(ctx *game.Context) error {
 			a.leave(ctx)
 		}
 	}
+	return nil
+}
+
+// checkChoices fetches My choices once the game is linked, in the
+// background, to open them when a notice is due: the child notice
+// after linking, or the one-time notice at 16 or 17. It returns the
+// screen to open, or nil.
+func (a *Account) checkChoices(ctx *game.Context, st link.Status) *Choices {
+	if !st.Linked {
+		a.checked, a.checking, a.noChoices = false, nil, false
+		return nil
+	}
+	if a.checking != nil {
+		select {
+		case r := <-a.checking:
+			a.checking = nil
+			a.noChoices = errors.Is(r.err, link.ErrNoChoices)
+			if r.err == nil && a.mode == acBrowse && (ctx.Link.ChildNoticeDue() && r.ch.ChildNotice.Ref != "" || r.ch.OlderNotice) {
+				return newChoicesWith(ctx, r.ch)
+			}
+		default:
+		}
+		return nil
+	}
+	if a.checked || a.linking || st.Signing {
+		return nil
+	}
+	a.checked = true
+	out := make(chan chResult, 1)
+	a.checking = out
+	go func(lc *link.Client) {
+		bg, cancel := context.WithTimeout(context.Background(), askTimeout)
+		defer cancel()
+		ch, err := lc.Choices(bg)
+		out <- chResult{ch: ch, err: err}
+	}(ctx.Link)
 	return nil
 }
 
@@ -313,6 +371,8 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 		line(link.SeenByText(st.SeenBy), pal.Ice)
 		line("Last sync: "+ago(time.Now(), st.LastSync), pal.Steel)
 		switch {
+		case st.Stopped:
+			// syncProblem says so.
 		case st.Busy:
 			line("Syncing…", pal.Ice)
 		case st.Pending > 0:
@@ -391,11 +451,14 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 }
 
 // syncProblem is the line saying why the last sync didn't work, or ""
-// when it did. A suspended account (halpwords-server#130) gets a calm
+// when it did. A learner who stopped their own progress being kept gets
+// a calm line: the game stays linked and works as before. A suspended account (halpwords-server#130) gets a calm
 // line for the child rather than an error: the game stays linked and
 // picks up by itself once a grown-up sorts it out.
 func syncProblem(st link.Status) (string, color.RGBA) {
 	switch {
+	case st.Stopped:
+		return "Your progress isn't being kept, so this game doesn't sync. It still works here.", pal.Ice
 	case st.Suspended:
 		return "Can't sync right now. Ask your grown-up. Your progress is kept.", pal.Ice
 	case st.Offline:
