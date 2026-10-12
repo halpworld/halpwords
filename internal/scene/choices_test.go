@@ -24,6 +24,11 @@ type choicesSite struct {
 	agreed                  bool
 	posts                   []string
 	noChoices               bool
+	// gets counts GET /api/v1/choices; with failAfter set, those after
+	// the first failAfter fail (503).
+	gets, failAfter int
+	// asks are the purposes asked; nil asks rankings only.
+	asks []string
 }
 
 func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +45,22 @@ func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
 	case s.noChoices && strings.HasPrefix(path, "/api/v1/choices"):
 		w.WriteHeader(http.StatusNotFound)
 	case path == "/api/v1/choices":
+		s.gets++
+		if s.failAfter > 0 && s.gets > s.failAfter {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		// The GET claims the one-time notice, as the server does.
+		older := s.older
+		s.older = false
+		asks := []any{map[string]any{"purpose": "rankings", "agreed": s.agreed, "label": "Put me on the ranking boards",
+			"hint": "Your made-up name shows on boards your grown-up turned on."}}
+		if s.asks != nil {
+			asks = []any{}
+			for _, a := range s.asks {
+				asks = append(asks, map[string]any{"purpose": a, "agreed": s.agreed, "label": "Ask " + a, "hint": "h"})
+			}
+		}
 		p := map[string]any{"can_stop": !s.stopped, "stopped": s.stopped, "waiting": s.waiting}
 		if s.stopped && !s.waiting {
 			p["restart"] = map[string]any{"ref": "teen-progress/1/en/r", "title": "Keeping your progress again",
@@ -48,15 +69,15 @@ func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"family": true,
 			"child_notice": map[string]any{"ref": "child-link/1/en/c", "title": "Who can see your progress",
 				"body": []string{"This game is now linked to Halpwords.", "Your parent can see it."}},
-			"older_notice": s.older,
+			"older_notice": older,
 			"visibility": map[string]any{"ref": "teen-visibility/1/en/v", "title": "Who can see you", "body": []string{"b"},
-				"asks": []any{map[string]any{"purpose": "rankings", "agreed": s.agreed, "label": "Put me on the ranking boards"}}},
+				"asks": asks},
 			"progress": p})
 	case strings.HasPrefix(path, "/api/v1/choices/"):
 		s.posts = append(s.posts, strings.TrimPrefix(path, "/api/v1/choices/"))
 		switch path {
 		case "/api/v1/choices/older":
-			s.older = false
+			// A no-op: the GET claimed it.
 		case "/api/v1/choices/agreement":
 			s.agreed = req["agree"] == true
 		case "/api/v1/choices/progress/stop":
@@ -136,15 +157,16 @@ func TestAccountOpensChoicesAfterLinking(t *testing.T) {
 		c = a.checkChoices(ctx, ctx.Link.Status())
 		time.Sleep(5 * time.Millisecond)
 	}
-	if c.step != chOnPage || c.page.kind != chChild || c.page.title != "Who can see your progress" {
+	if c.step != chOnPage || c.page.kind != chOlder || !strings.Contains(c.page.body[0], "stop Halpwords keeping your progress") ||
+		!strings.Contains(c.page.body[0], "outside your family") {
 		t.Fatalf("first: %+v", c.page)
 	}
 	drawChoices(t, ctx, c)
 	chPress(t, ctx, c, ebiten.KeyEnter)
-	if c.step != chOnPage || c.page.kind != chOlder || !strings.Contains(c.page.body[0], "stop Halpwords keeping your progress") ||
-		!strings.Contains(c.page.body[0], "outside your family") {
+	if c.step != chOnPage || c.page.kind != chChild || c.page.title != "Who can see your progress" {
 		t.Fatalf("second: %+v", c.page)
 	}
+	drawChoices(t, ctx, c)
 	chPress(t, ctx, c, ebiten.KeyEnter)
 	if c.step != chList {
 		t.Fatalf("step %d", c.step)
@@ -211,9 +233,20 @@ func TestChoicesStopAndRestart(t *testing.T) {
 	if !c.ch.Visibility.Asks[0].Agreed {
 		t.Error("not agreed")
 	}
-	// Saying no needs no notice.
+	// Saying no needs no notice, only a short confirm that says what it
+	// does: N keeps yes, Y says no.
 	c.sel = 1
 	chPress(t, ctx, c, ebiten.KeyEnter)
+	if c.step != chWithdraw {
+		t.Fatalf("no confirm for saying no: %d", c.step)
+	}
+	drawChoices(t, ctx, c)
+	chPress(t, ctx, c, ebiten.KeyN)
+	if c.step != chList || !c.ch.Visibility.Asks[0].Agreed {
+		t.Fatalf("N didn't keep yes: %d", c.step)
+	}
+	chPress(t, ctx, c, ebiten.KeyEnter)
+	chPress(t, ctx, c, ebiten.KeyY)
 	chSettle(t, ctx, c)
 	if c.ch.Visibility.Asks[0].Agreed {
 		t.Error("still agreed")
