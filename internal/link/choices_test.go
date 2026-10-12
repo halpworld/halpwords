@@ -129,9 +129,12 @@ func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (i
 				p["restart"] = map[string]any{"ref": "teen-progress/1/en/r", "title": "Keep it", "body": []string{"b"},
 					"label": "Keep my progress", "hint": "h"}
 			}
+			// The GET claims the one-time notice, as the server does.
+			older := s.older
+			s.older = false
 			return 200, map[string]any{"family": true,
 				"child_notice": map[string]any{"ref": "child-link/1/en/c", "title": "Who can see", "body": []string{"Your parent."}},
-				"older_notice": s.older,
+				"older_notice": older,
 				"visibility": map[string]any{"ref": "teen-visibility/1/en/v", "title": "t", "body": []string{"b"},
 					"asks": []any{map[string]any{"purpose": "rankings", "agreed": false, "label": "Rankings", "hint": "h"}}},
 				"progress": p}
@@ -141,7 +144,7 @@ func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (i
 			}
 			s.seen = req["notice_ref"].(string)
 		case "/api/v1/choices/older":
-			s.older = false
+			// A no-op: the GET claimed it.
 		case "/api/v1/choices/agreement":
 			if req["purpose"] != "rankings" {
 				return 409, codeNotAsked
@@ -205,6 +208,9 @@ func TestChoices(t *testing.T) {
 	if err := c.MarkOlder(ctx); err != nil || cs.older {
 		t.Errorf("older: %v", err)
 	}
+	if again, err := c.Choices(ctx); err != nil || again.OlderNotice {
+		t.Errorf("older notice in a second answer: %+v %v", again, err)
+	}
 	if err := c.SetAgreement(ctx, "rankings", true, ch.Visibility.Ref); err != nil {
 		t.Fatal(err)
 	}
@@ -259,14 +265,17 @@ func TestChoices(t *testing.T) {
 	}
 }
 
-// TestChoicesOldServer: a server without My choices answers 404, which
-// is ErrNoChoices; nothing else changes.
+// TestChoicesOldServer: a server without My choices answers its GET
+// with 404, which is ErrNoChoices; nothing else changes.
 func TestChoicesOldServer(t *testing.T) {
 	_, c, _, _ := linked(t)
 	if _, err := c.Choices(context.Background()); !errors.Is(err, ErrNoChoices) {
 		t.Errorf("choices: %v", err)
 	}
-	if err := c.SawNotice(context.Background(), "child-link/1/en/c"); !errors.Is(err, ErrNoChoices) {
+	// Only the GET tells an older server (G4): a 404 to a choice is a
+	// normal error, shown as it is.
+	var e *Error
+	if err := c.SawNotice(context.Background(), "child-link/1/en/c"); errors.Is(err, ErrNoChoices) || !errors.As(err, &e) || e.Status != 404 {
 		t.Errorf("notice: %v", err)
 	}
 	if s := c.Status(); !s.Linked || s.Stopped || !c.ChildNoticeDue() {

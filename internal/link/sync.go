@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -237,10 +238,38 @@ func (c *Client) stopProgress() {
 		c.changes++
 	}
 	c.st.Stopped = true
+	c.dropStopped()
+	c.saveState()
+	if p := c.play; p != nil {
+		// Play takes p.mu before c.mu, so not here.
+		go p.endStopped()
+	}
+}
+
+// dropStopped forgets, on disk too and at once, every event this game
+// kept for a learner whose progress is stopped: the queue, unsent runs
+// and what was parked for them after an earlier link. Nothing of the
+// stopped time is ever sent, even by a game that stops before its next
+// save. c.mu is held, so the queue file is removed here rather than by
+// writeQueue, which takes the lock (the queue is empty, so writeQueue
+// would only remove it too).
+func (c *Client) dropStopped() {
 	c.q = queue{}
 	c.st.Runs = nil
-	c.dirty = true
-	c.saveState()
+	c.dirty = false
+	if c.o.Store != nil {
+		if err := c.o.Store.Remove(queueFile); err != nil {
+			c.dirty = true // Save tries again
+		}
+	}
+	if c.st.Me != nil && c.st.Me.Learner.ID != "" {
+		id := c.st.Me.Learner.ID
+		n := len(c.parked)
+		c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return p.Learner == id })
+		if len(c.parked) != n {
+			c.writeParked()
+		}
+	}
 }
 
 // syncMe fetches the learner. syncMu is held.

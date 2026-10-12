@@ -114,6 +114,9 @@ func retryable(err error) (bool, time.Duration) {
 		return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded), 0
 	}
 	switch {
+	case e.Code == codeAskedTooOften:
+		// A limit of a day, not of the moment (My choices).
+		return false, 0
 	case e.Code == codeRateLimited || e.Status == http.StatusTooManyRequests:
 		return e.RetryAfter <= 30*time.Second, e.RetryAfter
 	case e.Status >= 500:

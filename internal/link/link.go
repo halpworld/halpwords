@@ -486,6 +486,12 @@ func Open(o Options) *Client {
 		if c.dropQueued() || expired {
 			c.writeParked()
 		}
+		if c.st.linked() && c.st.Stopped {
+			// Stopped: a queue from an older game (or one that stopped
+			// before it saved) is never sent.
+			c.dropStopped()
+			c.saveState()
+		}
 	}
 	c.st.NextSeq = max(c.st.NextSeq, c.q.maxSeq()+1, maxParkedSeq(c.parked)+1, 1)
 	if c.st.linked() && c.st.Server != "" && c.st.Server != c.server {

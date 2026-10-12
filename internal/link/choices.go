@@ -62,7 +62,9 @@ type Choices struct {
 	// ChildNotice says who can see the learner's progress.
 	ChildNotice Notice `json:"child_notice"`
 	// OlderNotice is set when the one-time notice for 16- and
-	// 17-year-olds is due (MarkOlder once it is shown).
+	// 17-year-olds is due. The server counts it as told by this answer
+	// (it is set in one answer only), so show it from this Choices,
+	// never from a later fetch.
 	OlderNotice bool         `json:"older_notice"`
 	Visibility  *Visibility  `json:"visibility,omitempty"`
 	Progress    *OwnProgress `json:"progress,omitempty"`
@@ -71,13 +73,18 @@ type Choices struct {
 // Errors of My choices.
 var (
 	// ErrNoChoices is a server without My choices (one older than
-	// 2026-10-12): the game shows nothing more than before.
+	// 2026-10-12; GET /api/v1/choices answers 404): the game shows
+	// nothing more than before.
 	ErrNoChoices = errors.New("my choices need a newer server")
 	// ErrNoticeChanged is a notice that changed since it was fetched:
 	// fetch Choices again and show the new words.
 	ErrNoticeChanged = errors.New("the words changed: read them again")
 	// ErrNotOwn is a choice the learner can't make themself now.
 	ErrNotOwn = errors.New("you can't change that yourself now")
+	// ErrAskedTooOften is a learner who asked to keep their progress
+	// again a few times today already (429 asked_too_often): each ask
+	// emails their grown-ups.
+	ErrAskedTooOften = errors.New("you've asked a few times today: you can ask again tomorrow")
 )
 
 // The error codes of My choices.
@@ -85,6 +92,7 @@ const (
 	codeNoticeChanged = "notice_changed"
 	codeNotAsked      = "not_asked"
 	codeNotOwn        = "not_own"
+	codeAskedTooOften = "asked_too_often"
 )
 
 // own makes a My choices request as the device. It waits for a sync that
@@ -107,12 +115,19 @@ func (c *Client) own(ctx context.Context, method, path string, body, out any) er
 	_, _, err := c.authed(ctx, gen, method, path, nil, body, out)
 	var e *Error
 	switch {
-	case errors.As(err, &e) && e.Status == http.StatusNotFound:
+	case errors.As(err, &e) && e.Status == http.StatusNotFound && method == http.MethodGet:
+		// Only the GET tells an older server: every server answers a
+		// route it doesn't have with 404 not_found, the same as a
+		// newer server's own "not found", so the code can't tell them
+		// apart. A choice is only offered after the GET worked, so a
+		// 404 there is a normal error, shown as it is.
 		return ErrNoChoices
 	case errors.As(err, &e) && e.Code == codeNoticeChanged:
 		return ErrNoticeChanged
 	case errors.As(err, &e) && (e.Code == codeNotAsked || e.Code == codeNotOwn):
 		return ErrNotOwn
+	case errors.As(err, &e) && e.Code == codeAskedTooOften:
+		return ErrAskedTooOften
 	}
 	return err
 }
@@ -127,12 +142,18 @@ func (c *Client) Choices(ctx context.Context) (*Choices, error) {
 	stopped := ch.Progress != nil && ch.Progress.Stopped
 	c.mu.Lock()
 	again := c.st.Stopped && !stopped
-	if stopped {
+	switch {
+	case stopped && c.st.linked():
 		c.stopProgress()
+	case again:
+		// Kept again, as the server says: the game queues again at once
+		// and syncs (the server drops anything from before, S1).
+		c.st.Stopped = false
+		c.changes++
+		c.saveState()
 	}
 	c.mu.Unlock()
 	if again {
-		// Kept again: the next sync clears Status.Stopped.
 		c.SyncNow()
 	}
 	return &ch, nil
@@ -165,7 +186,9 @@ func (c *Client) SawNotice(ctx context.Context, ref string) error {
 }
 
 // MarkOlder tells the server the one-time notice for 16- and
-// 17-year-olds was shown, here or on the website: it isn't shown again.
+// 17-year-olds was shown. Servers from 2026-10-12 count it as told when
+// GET /api/v1/choices sets OlderNotice and take this as a no-op; it is
+// kept for servers that still wait for it.
 func (c *Client) MarkOlder(ctx context.Context) error {
 	return c.own(ctx, http.MethodPost, "/api/v1/choices/older", nil, nil)
 }
