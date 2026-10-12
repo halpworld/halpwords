@@ -158,7 +158,15 @@ func (c *Client) Sync(ctx context.Context) error {
 	case err == nil:
 		c.err, c.failures, c.suspended = nil, 0, false
 		c.st.LastSync = c.now()
+		c.st.Stopped = false
 		c.saveState()
+	case errors.Is(err, ErrProgressStopped):
+		// The learner stopped their own progress being kept: not a
+		// failure and never an unlink. What waits to be sent is
+		// dropped, as nothing more is kept; the next sync comes at the
+		// usual time and clears it once their progress is kept again.
+		c.stopProgress()
+		c.err, c.failures, c.suspended = nil, 0, false
 	case errors.Is(err, ErrNotLinked), errors.Is(err, ErrUnlinked):
 		// unlinked while syncing, here or on the website: Note says so
 	case isSuspended(err):
@@ -219,7 +227,20 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 func stopsSync(ctx context.Context, err error) bool {
 	var e *Error
 	return errors.Is(err, ErrNotLinked) || errors.Is(err, ErrUnlinked) || ctx.Err() != nil ||
-		isSuspended(err) || (errors.As(err, &e) && e.Status == http.StatusUnauthorized)
+		isSuspended(err) || errors.Is(err, ErrProgressStopped) || (errors.As(err, &e) && e.Status == http.StatusUnauthorized)
+}
+
+// stopProgress drops what waits to be sent and stops queuing more, as
+// the learner stopped their progress being kept. c.mu is held.
+func (c *Client) stopProgress() {
+	if !c.st.Stopped {
+		c.changes++
+	}
+	c.st.Stopped = true
+	c.q = queue{}
+	c.st.Runs = nil
+	c.dirty = true
+	c.saveState()
 }
 
 // syncMe fetches the learner. syncMu is held.
