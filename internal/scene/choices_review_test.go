@@ -223,13 +223,22 @@ func TestChoicesWhileStopped(t *testing.T) {
 	}
 }
 
-// TestChoicesNothingAsked (G6): a 13-15 with nothing asked is told,
-// as the website says, that nobody outside the family can see them.
+// TestChoicesNothingAsked (G6): a 13-15 with nothing asked gets
+// visibility with no asks and no notice, and is told, as the website
+// says, that nobody outside the family can see them.
 func TestChoicesNothingAsked(t *testing.T) {
 	site := &choicesSite{asks: []string{}}
 	ctx := choicesContext(t, site)
 	ctx.Link.SawNotice(context.Background(), "child-link/1/en/c")
-	c := newChoicesWith(ctx, &link.Choices{Family: true, Visibility: &link.Visibility{Notice: link.Notice{Ref: "v"}}}, "")
+	site.mu.Lock()
+	site.stopped, site.waiting = false, false
+	site.mu.Unlock()
+	c := NewChoices(ctx).(*Choices)
+	chSettle(t, ctx, c)
+	if c.ch == nil || c.ch.Visibility == nil || len(c.ch.Visibility.Asks) != 0 || c.ch.Visibility.Ref != "" {
+		t.Fatalf("visibility with nothing asked: %+v", c.ch)
+	}
+	c.ch.Progress = nil // a 13-15 has no progress choices
 	var all []string
 	for _, l := range c.infoLines(ctx.Font, ctx.Link.Status(), 1000) {
 		all = append(all, l.s)

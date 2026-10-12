@@ -66,13 +66,17 @@ func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
 			p["restart"] = map[string]any{"ref": "teen-progress/1/en/r", "title": "Keeping your progress again",
 				"body": []string{"You stopped it."}, "label": "I want Halpwords to keep my progress again", "hint": "h"}
 		}
+		vis := map[string]any{"ref": "teen-visibility/1/en/v", "title": "Who can see you", "body": []string{"b"}, "asks": asks}
+		if len(asks) == 0 {
+			// Nothing asked: no notice, as the server sends it.
+			vis = map[string]any{"asks": asks}
+		}
 		json.NewEncoder(w).Encode(map[string]any{"family": true,
 			"child_notice": map[string]any{"ref": "child-link/1/en/c", "title": "Who can see your progress",
 				"body": []string{"This game is now linked to Halpwords.", "Your parent can see it."}},
 			"older_notice": older,
-			"visibility": map[string]any{"ref": "teen-visibility/1/en/v", "title": "Who can see you", "body": []string{"b"},
-				"asks": asks},
-			"progress": p})
+			"visibility":   vis,
+			"progress":     p})
 	case strings.HasPrefix(path, "/api/v1/choices/"):
 		s.posts = append(s.posts, strings.TrimPrefix(path, "/api/v1/choices/"))
 		switch path {
