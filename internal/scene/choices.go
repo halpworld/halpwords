@@ -132,6 +132,16 @@ func (c *Choices) say(msg string, col color.RGBA) { c.msg, c.msgCol, c.msg2 = ms
 
 // run makes a request in the background, then fetches the choices again.
 func (c *Choices) run(ctx *game.Context, done string, do func(context.Context, *link.Client) error) {
+	var with func(context.Context, *link.Client) (string, error)
+	if do != nil {
+		with = func(bg context.Context, lc *link.Client) (string, error) { return done, do(bg, lc) }
+	}
+	c.runWith(ctx, done, with)
+}
+
+// runWith is run whose action says what to tell the learner when it
+// worked.
+func (c *Choices) runWith(ctx *game.Context, done string, do func(context.Context, *link.Client) (string, error)) {
 	lc := ctx.Link
 	out := make(chan chResult, 1)
 	c.out, c.step, c.still = out, chBusy, false
@@ -139,10 +149,12 @@ func (c *Choices) run(ctx *game.Context, done string, do func(context.Context, *
 		bg, cancel := context.WithTimeout(context.Background(), askTimeout)
 		defer cancel()
 		if do != nil {
-			if err := do(bg, lc); err != nil {
+			msg, err := do(bg, lc)
+			if err != nil {
 				out <- chResult{err: err}
 				return
 			}
+			done = msg
 		}
 		ch, err := lc.Choices(bg)
 		out <- chResult{ch: ch, err: err, done: done, acted: do != nil}
@@ -279,8 +291,14 @@ func (c *Choices) Update(ctx *game.Context) error {
 		switch {
 		case typedYes(ctx):
 			ctx.Sound.Play(audio.Select)
-			c.run(ctx, "Done. We emailed your grown-up. Nothing changes until they decide.",
-				func(bg context.Context, lc *link.Client) error { return lc.AskStopProgress(bg) })
+			c.runWith(ctx, "", func(bg context.Context, lc *link.Client) (string, error) {
+				already, err := lc.AskStopProgress(bg)
+				if err == nil && !already.IsZero() {
+					// A stale screen: nobody was emailed again.
+					return "You already asked your grown-up on " + link.AskDate(already) + ".", nil
+				}
+				return "Done. We emailed your grown-up. Nothing changes until they decide.", err
+			})
 		case typedNo(ctx) || input.Back():
 			ctx.Sound.Play(audio.Back)
 			c.step = chList
@@ -347,7 +365,7 @@ func choicesProblem(err error) string {
 	case errors.Is(err, link.ErrNotOwn):
 		return "You can't change that yourself right now."
 	case errors.Is(err, link.ErrAskedTooOften):
-		return "You've asked a few times today. You can ask again tomorrow."
+		return "You've asked a few times already. You can ask again later."
 	}
 	return upperFirst(link.Explain(err)) + "."
 }
@@ -558,7 +576,8 @@ func (c *Choices) Draw(dst *ebiten.Image, ctx *game.Context) {
 			col color.RGBA
 		}{
 			{"Do you want to ask your grown-up to stop keeping your progress?", pal.Ice},
-			{"We will send them an email. Nothing changes until they decide.", pal.Ice},
+			{"We will send them an email. If they say yes, Halpwords deletes your progress. Your games still work.", pal.Ice},
+			{"Nothing changes until they decide.", pal.Ice},
 		} {
 			for _, l := range wrapHard(f, p.s, dw-40) {
 				f.DrawShadow(dst, l, dx, ty, 1, p.col)
@@ -566,7 +585,7 @@ func (c *Choices) Draw(dst *ebiten.Image, ctx *game.Context) {
 			}
 			ty += 4
 		}
-		f.DrawShadow(dst, "Y yes, ask them   N no", dx, dy+104, 1, pal.Ash)
+		f.DrawShadow(dst, "Y yes, ask them   N no", dx, dy+160, 1, pal.Ash)
 	case chWithdraw:
 		const dw = 480
 		a := c.ch.Visibility.Asks[c.items()[c.sel].ask]
@@ -710,12 +729,20 @@ func (c *Choices) infoLines(f *gfx.Font, st link.Status, width int) []chLine {
 	case p != nil && p.CanStop:
 		line("Halpwords keeps your progress. You can stop that yourself.", pal.Steel)
 	case p != nil && p.Ask != nil && !p.Ask.WaitingSince.IsZero():
-		line("You asked your grown-up on "+p.Ask.WaitingSince.Local().Format("2 January 2006")+
+		line("You asked your grown-up on "+link.AskDate(p.Ask.WaitingSince)+
 			" to stop keeping your progress. Nothing changes until they decide. If they don't answer in 14 days, your request ends and you can ask again.", pal.Steel)
 	case p != nil && p.Ask != nil && p.Ask.Kept:
-		line("Your grown-up decided to keep your progress. You can talk to them about it.", pal.Steel)
+		s := "Your grown-up decided to keep your progress. You can talk to them about it."
+		if !p.Ask.AskAgainAfter.IsZero() {
+			s += " You can ask again after " + link.AskDate(p.Ask.AskAgainAfter) + "."
+		}
+		line(s, pal.Steel)
 	case p != nil && p.Ask != nil && p.Ask.CanAsk:
-		line("Halpwords keeps your progress, like the words you know and your scores. If you want that to stop, you can ask your grown-up. They decide.", pal.Steel)
+		line("Halpwords keeps your progress, like the words you know and your scores, so your games can save it. If you want that to stop, you can ask your grown-up. They decide. "+
+			"If they say yes, Halpwords deletes your progress. Your games still work.", pal.Steel)
+	case p != nil && p.Ask != nil:
+		// Nobody to email now (as the website's kid.ask.talk).
+		line("Halpwords keeps your progress. If you want that to stop, talk to your grown-up about it.", pal.Steel)
 	case c.ch.Visibility == nil:
 		line("For now, your grown-up makes these choices for you.", pal.Steel)
 	}

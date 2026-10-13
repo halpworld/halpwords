@@ -110,11 +110,12 @@ func TestNotLinkableReason(t *testing.T) {
 // or (young) for a child under 16, who can only ask their grown-up.
 type choicesServer struct {
 	stopped, waiting, older bool
-	// young: under 16; asked, kept: where their ask stands.
-	young, asked, kept bool
-	seen               string
-	posts              []string
-	bodies             []map[string]any
+	// young: under 16; asked, kept: where their ask stands; capped: past
+	// the cap of asks.
+	young, asked, kept, capped bool
+	seen                       string
+	posts                      []string
+	bodies                     []map[string]any
 }
 
 func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (int, any) {
@@ -132,6 +133,9 @@ func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (i
 				a := map[string]any{"can_ask": !s.asked && !s.kept, "kept": s.kept}
 				if s.asked {
 					a["waiting_since"] = "2026-10-13T09:30:00Z"
+				}
+				if s.kept {
+					a["ask_again_after"] = "2026-10-27T23:30:00Z"
 				}
 				p["ask"] = a
 			}
@@ -175,9 +179,13 @@ func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (i
 				return 409, codeNotOwn
 			}
 			if s.asked {
+				return 200, map[string]any{"already": true, "waiting_since": "2026-10-13T09:30:00Z"}
+			}
+			if s.capped {
 				return 429, codeAskedTooOften
 			}
 			s.asked = true
+			return 200, map[string]any{"already": false}
 		case "/api/v1/choices/progress/ask/cancel":
 			if !s.asked {
 				return 409, codeNotOwn
@@ -307,8 +315,8 @@ func TestChoicesAsk(t *testing.T) {
 	if p := ch.Progress; p == nil || p.CanStop || p.Ask == nil || !p.Ask.CanAsk || !p.Ask.WaitingSince.IsZero() {
 		t.Fatalf("before asking: %+v", ch.Progress)
 	}
-	if err := c.AskStopProgress(ctx); err != nil {
-		t.Fatal(err)
+	if already, err := c.AskStopProgress(ctx); err != nil || !already.IsZero() {
+		t.Fatal(already, err)
 	}
 	if got := cs.bodies[len(cs.bodies)-1]; got["confirm"] != true {
 		t.Errorf("asked with %v", got)
@@ -318,8 +326,9 @@ func TestChoicesAsk(t *testing.T) {
 	if err != nil || ch.Progress.Ask.CanAsk || !ch.Progress.Ask.WaitingSince.Equal(want) {
 		t.Fatalf("waiting: %+v %v", ch.Progress.Ask, err)
 	}
-	if err := c.AskStopProgress(ctx); !errors.Is(err, ErrAskedTooOften) {
-		t.Errorf("past the cap: %v", err)
+	// A stale screen asking again is told when it asked.
+	if already, err := c.AskStopProgress(ctx); err != nil || !already.Equal(want) || AskDate(already) != "13 October 2026" {
+		t.Errorf("asked twice: %v %v", already, err)
 	}
 	if err := c.TakeBackAsk(ctx); err != nil || cs.asked {
 		t.Fatalf("take back: %v", err)
@@ -327,9 +336,17 @@ func TestChoicesAsk(t *testing.T) {
 	if err := c.TakeBackAsk(ctx); !errors.Is(err, ErrNotOwn) {
 		t.Errorf("took back twice: %v", err)
 	}
+	cs.capped = true
+	if _, err := c.AskStopProgress(ctx); !errors.Is(err, ErrAskedTooOften) {
+		t.Errorf("past the cap: %v", err)
+	}
 	cs.kept = true
 	if ch, err = c.Choices(ctx); err != nil || !ch.Progress.Ask.Kept || ch.Progress.Ask.CanAsk {
 		t.Errorf("kept: %+v %v", ch.Progress.Ask, err)
+	}
+	// The UTC date, as the website shows it, whatever the local zone.
+	if got := AskDate(ch.Progress.Ask.AskAgainAfter); got != "27 October 2026" {
+		t.Errorf("ask again after %s", got)
 	}
 	if s := c.Status(); !s.Linked || s.Stopped {
 		t.Errorf("the ask changed the link: %+v", s)
