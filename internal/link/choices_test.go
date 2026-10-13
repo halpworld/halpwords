@@ -106,12 +106,16 @@ func TestNotLinkableReason(t *testing.T) {
 	}
 }
 
-// choicesServer is My choices on the fake server, for a 16-year-old.
+// choicesServer is My choices on the fake server, for a 16-year-old,
+// or (young) for a child under 16, who can only ask their grown-up.
 type choicesServer struct {
 	stopped, waiting, older bool
-	seen                    string
-	posts                   []string
-	bodies                  []map[string]any
+	// young: under 16; asked, kept: where their ask stands; capped: past
+	// the cap of asks.
+	young, asked, kept, capped bool
+	seen                       string
+	posts                      []string
+	bodies                     []map[string]any
 }
 
 func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (int, any) {
@@ -124,7 +128,17 @@ func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (i
 		}
 		switch path {
 		case "/api/v1/choices":
-			p := map[string]any{"can_stop": !s.stopped, "stopped": s.stopped, "waiting": s.waiting}
+			p := map[string]any{"can_stop": !s.stopped && !s.young, "stopped": s.stopped, "waiting": s.waiting}
+			if s.young {
+				a := map[string]any{"can_ask": !s.asked && !s.kept, "kept": s.kept}
+				if s.asked {
+					a["waiting_since"] = "2026-10-13T09:30:00Z"
+				}
+				if s.kept {
+					a["ask_again_after"] = "2026-10-27T23:30:00Z"
+				}
+				p["ask"] = a
+			}
 			if s.stopped && !s.waiting {
 				p["restart"] = map[string]any{"ref": "teen-progress/1/en/r", "title": "Keep it", "body": []string{"b"},
 					"label": "Keep my progress", "hint": "h"}
@@ -160,6 +174,23 @@ func (s *choicesServer) serve(f *fake) func(method, path string, body []byte) (i
 				return 409, codeNoticeChanged
 			}
 			s.waiting = true
+		case "/api/v1/choices/progress/ask":
+			if !s.young || s.kept || req["confirm"] != true {
+				return 409, codeNotOwn
+			}
+			if s.asked {
+				return 200, map[string]any{"already": true, "waiting_since": "2026-10-13T09:30:00Z"}
+			}
+			if s.capped {
+				return 429, codeAskedTooOften
+			}
+			s.asked = true
+			return 200, map[string]any{"already": false}
+		case "/api/v1/choices/progress/ask/cancel":
+			if !s.asked {
+				return 409, codeNotOwn
+			}
+			s.asked = false
 		case "/api/v1/choices/progress/cancel":
 			if !s.waiting {
 				return 409, codeNotOwn
@@ -262,6 +293,63 @@ func TestChoices(t *testing.T) {
 	}
 	if s := c.Status(); !s.Linked || !s.Stopped || f.unlinked != 0 {
 		t.Errorf("at the end: %+v", s)
+	}
+}
+
+// TestChoicesAsk: a child under 16 asks their grown-up to stop keeping
+// their progress (servers from 2026-10-13), sees when they asked, takes
+// it back, and is told when a grown-up kept it. The game keeps syncing
+// throughout: the ask changes nothing by itself.
+func TestChoicesAsk(t *testing.T) {
+	f, c, _, _ := linked(t)
+	cs := &choicesServer{young: true}
+	f.mu.Lock()
+	f.choices = cs.serve(f)
+	f.mu.Unlock()
+	ctx := context.Background()
+
+	ch, err := c.Choices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := ch.Progress; p == nil || p.CanStop || p.Ask == nil || !p.Ask.CanAsk || !p.Ask.WaitingSince.IsZero() {
+		t.Fatalf("before asking: %+v", ch.Progress)
+	}
+	if already, err := c.AskStopProgress(ctx); err != nil || !already.IsZero() {
+		t.Fatal(already, err)
+	}
+	if got := cs.bodies[len(cs.bodies)-1]; got["confirm"] != true {
+		t.Errorf("asked with %v", got)
+	}
+	ch, err = c.Choices(ctx)
+	want := time.Date(2026, 10, 13, 9, 30, 0, 0, time.UTC)
+	if err != nil || ch.Progress.Ask.CanAsk || !ch.Progress.Ask.WaitingSince.Equal(want) {
+		t.Fatalf("waiting: %+v %v", ch.Progress.Ask, err)
+	}
+	// A stale screen asking again is told when it asked.
+	if already, err := c.AskStopProgress(ctx); err != nil || !already.Equal(want) || AskDate(already) != "13 October 2026" {
+		t.Errorf("asked twice: %v %v", already, err)
+	}
+	if err := c.TakeBackAsk(ctx); err != nil || cs.asked {
+		t.Fatalf("take back: %v", err)
+	}
+	if err := c.TakeBackAsk(ctx); !errors.Is(err, ErrNotOwn) {
+		t.Errorf("took back twice: %v", err)
+	}
+	cs.capped = true
+	if _, err := c.AskStopProgress(ctx); !errors.Is(err, ErrAskedTooOften) {
+		t.Errorf("past the cap: %v", err)
+	}
+	cs.kept = true
+	if ch, err = c.Choices(ctx); err != nil || !ch.Progress.Ask.Kept || ch.Progress.Ask.CanAsk {
+		t.Errorf("kept: %+v %v", ch.Progress.Ask, err)
+	}
+	// The UTC date, as the website shows it, whatever the local zone.
+	if got := AskDate(ch.Progress.Ask.AskAgainAfter); got != "27 October 2026" {
+		t.Errorf("ask again after %s", got)
+	}
+	if s := c.Status(); !s.Linked || s.Stopped {
+		t.Errorf("the ask changed the link: %+v", s)
 	}
 }
 

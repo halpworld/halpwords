@@ -52,7 +52,34 @@ type OwnProgress struct {
 	Stopped bool     `json:"stopped"`
 	Waiting bool     `json:"waiting"`
 	Restart *Restart `json:"restart,omitempty"`
+	// Ask is a family's child under 16 asking their grown-up to stop
+	// keeping their progress (servers from 2026-10-13); nil when it
+	// doesn't apply, or from an older server.
+	Ask *ProgressAsk `json:"ask,omitempty"`
 }
+
+// ProgressAsk is where a child under 16 stands with asking their
+// grown-up to stop keeping their progress. The ask changes nothing by
+// itself: only a grown-up can stop it, on the website.
+type ProgressAsk struct {
+	// CanAsk offers "Ask my grown-up to stop keeping my progress".
+	CanAsk bool `json:"can_ask"`
+	// WaitingSince is when they asked, while no grown-up has answered
+	// (they can take it back); zero otherwise. The ask ends by itself
+	// after 14 days.
+	WaitingSince time.Time `json:"waiting_since,omitempty"`
+	// Kept: a grown-up decided to keep their progress. Say only that,
+	// and when they can ask again (AskAgainAfter).
+	Kept bool `json:"kept"`
+	// AskAgainAfter is when a kept answer ends and they can ask again;
+	// zero otherwise.
+	AskAgainAfter time.Time `json:"ask_again_after,omitempty"`
+}
+
+// AskDate is how the game writes an ask's dates: the UTC calendar date,
+// as the website does, so both say the same day (halpwords-server PLAN
+// §25 2026-10-13).
+func AskDate(t time.Time) string { return t.UTC().Format("2 January 2006") }
 
 // Choices is GET /api/v1/choices: only what applies to the learner is
 // there.
@@ -82,9 +109,9 @@ var (
 	// ErrNotOwn is a choice the learner can't make themself now.
 	ErrNotOwn = errors.New("you can't change that yourself now")
 	// ErrAskedTooOften is a learner who asked to keep their progress
-	// again a few times today already (429 asked_too_often): each ask
-	// emails their grown-ups.
-	ErrAskedTooOften = errors.New("you've asked a few times today: you can ask again tomorrow")
+	// again, or to stop it, a few times today already (429
+	// asked_too_often): each ask emails their grown-ups.
+	ErrAskedTooOften = errors.New("you've asked a few times already: you can ask again later")
 )
 
 // The error codes of My choices.
@@ -229,4 +256,30 @@ func (c *Client) StartProgress(ctx context.Context, ref string) error {
 // no grown-up has confirmed yet.
 func (c *Client) CancelProgress(ctx context.Context) error {
 	return c.own(ctx, http.MethodPost, "/api/v1/choices/progress/cancel", nil, nil)
+}
+
+// AskStopProgress asks the learner's grown-ups to stop keeping their
+// progress, once the learner said yes: every guardian gets an email, and
+// nothing else changes (OwnProgress.Ask.WaitingSince). The game keeps
+// syncing: only a grown-up can stop it. If an ask was already waiting
+// (a stale screen), nobody is emailed and already is when it was asked;
+// it is zero for a new ask.
+func (c *Client) AskStopProgress(ctx context.Context) (already time.Time, err error) {
+	var out struct {
+		Already      bool      `json:"already"`
+		WaitingSince time.Time `json:"waiting_since,omitempty"`
+	}
+	if err := c.own(ctx, http.MethodPost, "/api/v1/choices/progress/ask", map[string]bool{"confirm": true}, &out); err != nil {
+		return time.Time{}, err
+	}
+	if out.Already {
+		return out.WaitingSince, nil
+	}
+	return time.Time{}, nil
+}
+
+// TakeBackAsk takes back the learner's waiting ask to stop keeping their
+// progress.
+func (c *Client) TakeBackAsk(ctx context.Context) error {
+	return c.own(ctx, http.MethodPost, "/api/v1/choices/progress/ask/cancel", nil, nil)
 }

@@ -21,7 +21,8 @@ import (
 // in a linked game, who can see the learner's progress, and what a
 // teenager in a family can decide themself: being in friend groups and
 // on ranking boards (13-17), and, at 16 or 17, stopping Halpwords keeping
-// their progress. Only what applies is shown. The words of the notices
+// their progress; under 16, asking their grown-up to stop it
+// (halpwords-server PLAN §25, 2026-10-13). Only what applies is shown. The words of the notices
 // come from the server, so they are the ones the website shows.
 
 // chStep is what My choices is doing.
@@ -34,6 +35,7 @@ const (
 	chList            // the choices
 	chStop            // confirming a stop
 	chWithdraw        // confirming saying no to something agreed
+	chAskStop         // confirming asking a grown-up to stop keeping progress
 	chBusy            // an answer is on its way
 )
 
@@ -69,6 +71,8 @@ const (
 	chItemStop
 	chItemRestart
 	chItemCancel
+	chItemAskStop  // under 16: ask a grown-up to stop keeping progress
+	chItemTakeBack // take that ask back
 	chItemBack
 )
 
@@ -128,6 +132,16 @@ func (c *Choices) say(msg string, col color.RGBA) { c.msg, c.msgCol, c.msg2 = ms
 
 // run makes a request in the background, then fetches the choices again.
 func (c *Choices) run(ctx *game.Context, done string, do func(context.Context, *link.Client) error) {
+	var with func(context.Context, *link.Client) (string, error)
+	if do != nil {
+		with = func(bg context.Context, lc *link.Client) (string, error) { return done, do(bg, lc) }
+	}
+	c.runWith(ctx, done, with)
+}
+
+// runWith is run whose action says what to tell the learner when it
+// worked.
+func (c *Choices) runWith(ctx *game.Context, done string, do func(context.Context, *link.Client) (string, error)) {
 	lc := ctx.Link
 	out := make(chan chResult, 1)
 	c.out, c.step, c.still = out, chBusy, false
@@ -135,10 +149,12 @@ func (c *Choices) run(ctx *game.Context, done string, do func(context.Context, *
 		bg, cancel := context.WithTimeout(context.Background(), askTimeout)
 		defer cancel()
 		if do != nil {
-			if err := do(bg, lc); err != nil {
+			msg, err := do(bg, lc)
+			if err != nil {
 				out <- chResult{err: err}
 				return
 			}
+			done = msg
 		}
 		ch, err := lc.Choices(bg)
 		out <- chResult{ch: ch, err: err, done: done, acted: do != nil}
@@ -211,6 +227,10 @@ func (c *Choices) items() []chItem {
 			// Only when asking can work (the server says so): otherwise
 			// the list says to ask a parent or guardian.
 			items = append(items, chItem{kind: chItemRestart})
+		case p.Ask != nil && !p.Ask.WaitingSince.IsZero():
+			items = append(items, chItem{kind: chItemTakeBack})
+		case p.Ask != nil && p.Ask.CanAsk:
+			items = append(items, chItem{kind: chItemAskStop})
 		}
 	}
 	return append(items, chItem{kind: chItemBack})
@@ -263,6 +283,22 @@ func (c *Choices) Update(ctx *game.Context) error {
 			ctx.Sound.Play(audio.Select)
 			c.run(ctx, "Done. Your progress isn't being kept now. Your grown-ups get an email.",
 				func(bg context.Context, lc *link.Client) error { return lc.StopProgress(bg) })
+		case typedNo(ctx) || input.Back():
+			ctx.Sound.Play(audio.Back)
+			c.step = chList
+		}
+	case chAskStop:
+		switch {
+		case typedYes(ctx):
+			ctx.Sound.Play(audio.Select)
+			c.runWith(ctx, "", func(bg context.Context, lc *link.Client) (string, error) {
+				already, err := lc.AskStopProgress(bg)
+				if err == nil && !already.IsZero() {
+					// A stale screen: nobody was emailed again.
+					return "You already asked your grown-up on " + link.AskDate(already) + ".", nil
+				}
+				return "Done. We emailed your grown-up. Nothing changes until they decide.", err
+			})
 		case typedNo(ctx) || input.Back():
 			ctx.Sound.Play(audio.Back)
 			c.step = chList
@@ -329,7 +365,7 @@ func choicesProblem(err error) string {
 	case errors.Is(err, link.ErrNotOwn):
 		return "You can't change that yourself right now."
 	case errors.Is(err, link.ErrAskedTooOften):
-		return "You've asked a few times today. You can ask again tomorrow."
+		return "You've asked a few times already. You can ask again later."
 	}
 	return upperFirst(link.Explain(err)) + "."
 }
@@ -459,6 +495,12 @@ func (c *Choices) updateList(ctx *game.Context) {
 			c.run(ctx, "Done. Your progress still isn't being kept.", func(bg context.Context, lc *link.Client) error {
 				return lc.CancelProgress(bg)
 			})
+		case chItemAskStop:
+			c.step = chAskStop
+		case chItemTakeBack:
+			c.run(ctx, "Done. You took back your request. Nothing has changed.", func(bg context.Context, lc *link.Client) error {
+				return lc.TakeBackAsk(bg)
+			})
 		case chItemBack:
 			c.leave(ctx)
 		}
@@ -525,6 +567,25 @@ func (c *Choices) Draw(dst *ebiten.Image, ctx *game.Context) {
 			ty += 4
 		}
 		f.DrawShadow(dst, "Y stop keeping it   N cancel", dx, dy+160, 1, pal.Ash)
+	case chAskStop:
+		const dw = 480
+		dx, dy := dialog(dst, ctx, "ASK YOUR GROWN-UP?", dw, 190)
+		ty := dy
+		for _, p := range []struct {
+			s   string
+			col color.RGBA
+		}{
+			{"Do you want to ask your grown-up to stop keeping your progress?", pal.Ice},
+			{"We will send them an email. If they say yes, Halpwords deletes your progress. Your games still work.", pal.Ice},
+			{"Nothing changes until they decide.", pal.Ice},
+		} {
+			for _, l := range wrapHard(f, p.s, dw-40) {
+				f.DrawShadow(dst, l, dx, ty, 1, p.col)
+				ty += 16
+			}
+			ty += 4
+		}
+		f.DrawShadow(dst, "Y yes, ask them   N no", dx, dy+160, 1, pal.Ash)
 	case chWithdraw:
 		const dw = 480
 		a := c.ch.Visibility.Asks[c.items()[c.sel].ask]
@@ -667,6 +728,21 @@ func (c *Choices) infoLines(f *gfx.Font, st link.Status, width int) []chLine {
 		line("Your progress isn't being kept. This game still works on this computer.", pal.Steel)
 	case p != nil && p.CanStop:
 		line("Halpwords keeps your progress. You can stop that yourself.", pal.Steel)
+	case p != nil && p.Ask != nil && !p.Ask.WaitingSince.IsZero():
+		line("You asked your grown-up on "+link.AskDate(p.Ask.WaitingSince)+
+			" to stop keeping your progress. Nothing changes until they decide. If they don't answer in 14 days, your request ends and you can ask again.", pal.Steel)
+	case p != nil && p.Ask != nil && p.Ask.Kept:
+		s := "Your grown-up decided to keep your progress. You can talk to them about it."
+		if !p.Ask.AskAgainAfter.IsZero() {
+			s += " You can ask again after " + link.AskDate(p.Ask.AskAgainAfter) + "."
+		}
+		line(s, pal.Steel)
+	case p != nil && p.Ask != nil && p.Ask.CanAsk:
+		line("Halpwords keeps your progress, like the words you know and your scores, so your games can save it. If you want that to stop, you can ask your grown-up. They decide. "+
+			"If they say yes, Halpwords deletes your progress. Your games still work.", pal.Steel)
+	case p != nil && p.Ask != nil:
+		// Nobody to email now (as the website's kid.ask.talk).
+		line("Halpwords keeps your progress. If you want that to stop, talk to your grown-up about it.", pal.Steel)
 	case c.ch.Visibility == nil:
 		line("For now, your grown-up makes these choices for you.", pal.Steel)
 	}
@@ -746,6 +822,10 @@ func (c *Choices) drawList(dst *ebiten.Image, ctx *game.Context, x, w int) {
 			label = fit(f, c.progress().Restart.Label, w-80, 1)
 		case chItemCancel:
 			label = "Don't ask to keep it after all"
+		case chItemAskStop:
+			label = fit(f, "Ask my grown-up to stop keeping my progress", w-80, 1)
+		case chItemTakeBack:
+			label = "Take back my request"
 		case chItemBack:
 			label = "Back"
 		}

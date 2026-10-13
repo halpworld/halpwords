@@ -3,6 +3,7 @@ package scene
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,12 @@ type choicesSite struct {
 	gets, failAfter int
 	// asks are the purposes asked; nil asks rankings only.
 	asks []string
+	// young: an 8-12, who can only ask their grown-up to stop keeping
+	// their progress (servers from 2026-10-13; oldAsk: a server from
+	// before, which doesn't say); asked and kept are where that stands.
+	young, oldAsk, asked, kept bool
+	// noGrownUp: nobody to email (no guardian who isn't suspended).
+	noGrownUp bool
 }
 
 func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +68,17 @@ func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
 				asks = append(asks, map[string]any{"purpose": a, "agreed": s.agreed, "label": "Ask " + a, "hint": "h"})
 			}
 		}
-		p := map[string]any{"can_stop": !s.stopped, "stopped": s.stopped, "waiting": s.waiting}
+		p := map[string]any{"can_stop": !s.stopped && !s.young, "stopped": s.stopped, "waiting": s.waiting}
+		if s.young && !s.oldAsk {
+			a := map[string]any{"can_ask": !s.asked && !s.kept && !s.noGrownUp, "kept": s.kept}
+			if s.asked {
+				a["waiting_since"] = "2026-10-13T23:30:00Z"
+			}
+			if s.kept {
+				a["ask_again_after"] = "2026-10-27T23:30:00Z"
+			}
+			p["ask"] = a
+		}
 		if s.stopped && !s.waiting {
 			p["restart"] = map[string]any{"ref": "teen-progress/1/en/r", "title": "Keeping your progress again",
 				"body": []string{"You stopped it."}, "label": "I want Halpwords to keep my progress again", "hint": "h"}
@@ -71,12 +88,17 @@ func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
 			// Nothing asked: no notice, as the server sends it.
 			vis = map[string]any{"asks": asks}
 		}
-		json.NewEncoder(w).Encode(map[string]any{"family": true,
+		out := map[string]any{"family": true,
 			"child_notice": map[string]any{"ref": "child-link/1/en/c", "title": "Who can see your progress",
 				"body": []string{"This game is now linked to Halpwords.", "Your parent can see it."}},
 			"older_notice": older,
 			"visibility":   vis,
-			"progress":     p})
+			"progress":     p}
+		if s.young {
+			// An 8-12 decides nothing about who sees them.
+			delete(out, "visibility")
+		}
+		json.NewEncoder(w).Encode(out)
 	case strings.HasPrefix(path, "/api/v1/choices/"):
 		s.posts = append(s.posts, strings.TrimPrefix(path, "/api/v1/choices/"))
 		switch path {
@@ -90,6 +112,16 @@ func (s *choicesSite) serve(w http.ResponseWriter, r *http.Request) {
 			s.waiting = true
 		case "/api/v1/choices/progress/cancel":
 			s.waiting = false
+		case "/api/v1/choices/progress/ask":
+			out := map[string]any{"already": s.asked}
+			if s.asked {
+				out["waiting_since"] = "2026-10-13T23:30:00Z"
+			}
+			s.asked = req["confirm"] == true
+			json.NewEncoder(w).Encode(out)
+			return
+		case "/api/v1/choices/progress/ask/cancel":
+			s.asked = false
 		}
 		w.WriteHeader(http.StatusNoContent)
 	case s.stopped:
@@ -303,6 +335,135 @@ func TestChoicesStopAndRestart(t *testing.T) {
 	want := []string{"notice", "agreement", "agreement", "progress/stop", "progress/start", "progress/cancel"}
 	if got := site.posted(); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("posted %v, want %v", got, want)
+	}
+}
+
+// chInfo is the list's window text.
+func chInfo(ctx *game.Context, c *Choices) string {
+	var b strings.Builder
+	for _, l := range c.infoLines(ctx.Font, ctx.Link.Status(), game.ScreenW-96) {
+		b.WriteString(l.s + " ")
+	}
+	return b.String()
+}
+
+func chKinds(c *Choices) []int {
+	var out []int
+	for _, it := range c.items() {
+		out = append(out, it.kind)
+	}
+	return out
+}
+
+// TestChoicesAskGrownUp: a child under 16 asks their grown-up to stop
+// keeping their progress (halpwords-server PLAN §25, 2026-10-13): Y/N
+// first (N asks nothing), then the list says when they asked and offers
+// to take it back; when a grown-up keeps it, the child is told only
+// that. The game keeps syncing. A server from before shows nothing new.
+func TestChoicesAskGrownUp(t *testing.T) {
+	site := &choicesSite{young: true}
+	ctx := choicesContext(t, site)
+	ctx.Link.SawNotice(context.Background(), "child-link/1/en/c")
+	c := NewChoices(ctx).(*Choices)
+	chSettle(t, ctx, c)
+	if got := chKinds(c); fmt.Sprint(got) != fmt.Sprint([]int{chItemNotice, chItemAskStop, chItemBack}) {
+		t.Fatalf("items %v", got)
+	}
+	if info := chInfo(ctx, c); !strings.Contains(info, "you can ask your grown-up") {
+		t.Errorf("info: %q", info)
+	}
+	drawChoices(t, ctx, c)
+
+	c.sel = 1
+	chPress(t, ctx, c, ebiten.KeyEnter)
+	if c.step != chAskStop {
+		t.Fatalf("no Y/N step: %d", c.step)
+	}
+	drawChoices(t, ctx, c)
+	chPress(t, ctx, c, ebiten.KeyN)
+	if c.step != chList || len(site.posted()) != 1 {
+		t.Fatalf("N asked: %d %v", c.step, site.posted())
+	}
+	chPress(t, ctx, c, ebiten.KeyEnter)
+	chPress(t, ctx, c, ebiten.KeyY)
+	chSettle(t, ctx, c)
+	if !strings.Contains(c.msg, "We emailed your grown-up") {
+		t.Errorf("message: %q", c.msg)
+	}
+	// The UTC date, as the website shows it (23:30 UTC is the 14th in
+	// some zones).
+	if info := chInfo(ctx, c); !strings.Contains(info, "You asked your grown-up on 13 October 2026 to stop keeping your progress.") {
+		t.Errorf("waiting info: %q", info)
+	}
+	if st := ctx.Link.Status(); st.Stopped || !st.Linked {
+		t.Errorf("the ask changed the link: %+v", st)
+	}
+	if c.items()[c.sel].kind != chItemTakeBack {
+		t.Fatalf("items after asking %v sel %d", chKinds(c), c.sel)
+	}
+	drawChoices(t, ctx, c)
+	chPress(t, ctx, c, ebiten.KeyEnter)
+	chSettle(t, ctx, c)
+	if site.asked || c.ch.Progress.Ask.CanAsk != true {
+		t.Errorf("after taking back: %+v", c.ch.Progress.Ask)
+	}
+	if want := "notice,progress/ask,progress/ask/cancel"; strings.Join(site.posted(), ",") != want {
+		t.Errorf("posted %v, want %s", site.posted(), want)
+	}
+
+	// A stale screen (asked meanwhile, say from the website) is told
+	// when it asked, not "We emailed".
+	if c.items()[c.sel].kind != chItemAskStop {
+		t.Fatalf("items after taking back %v sel %d", chKinds(c), c.sel)
+	}
+	site.mu.Lock()
+	site.asked = true
+	site.mu.Unlock()
+	chPress(t, ctx, c, ebiten.KeyEnter)
+	chPress(t, ctx, c, ebiten.KeyY)
+	chSettle(t, ctx, c)
+	if c.msg != "You already asked your grown-up on 13 October 2026." {
+		t.Errorf("stale ask: %q", c.msg)
+	}
+	site.mu.Lock()
+	site.asked = false
+	site.mu.Unlock()
+
+	// Kept: told only that, with nothing to ask.
+	site.mu.Lock()
+	site.kept = true
+	site.mu.Unlock()
+	c.load(ctx, "")
+	chSettle(t, ctx, c)
+	if info := chInfo(ctx, c); !strings.Contains(info, "Your grown-up decided to keep your progress. You can talk to them about it. You can ask again after 27 October 2026.") {
+		t.Errorf("kept info: %q", info)
+	}
+	if got := chKinds(c); fmt.Sprint(got) != fmt.Sprint([]int{chItemNotice, chItemBack}) {
+		t.Errorf("items when kept %v", got)
+	}
+	drawChoices(t, ctx, c)
+
+	// Nobody to email: told to talk to their grown-up, nothing to ask.
+	site.mu.Lock()
+	site.kept, site.noGrownUp = false, true
+	site.mu.Unlock()
+	c.load(ctx, "")
+	chSettle(t, ctx, c)
+	if info := chInfo(ctx, c); !strings.Contains(info, "talk to your grown-up about it") {
+		t.Errorf("nobody to ask: %q", info)
+	}
+	if got := chKinds(c); fmt.Sprint(got) != fmt.Sprint([]int{chItemNotice, chItemBack}) {
+		t.Errorf("items with nobody to ask %v", got)
+	}
+
+	// A server from before 2026-10-13 says nothing about asking.
+	old := &choicesSite{young: true, oldAsk: true}
+	octx := choicesContext(t, old)
+	octx.Link.SawNotice(context.Background(), "child-link/1/en/c")
+	oc := NewChoices(octx).(*Choices)
+	chSettle(t, octx, oc)
+	if got := chKinds(oc); fmt.Sprint(got) != fmt.Sprint([]int{chItemNotice, chItemBack}) {
+		t.Errorf("items from an old server %v", got)
 	}
 }
 
