@@ -67,6 +67,10 @@
     let at = 0;
     for (const p of parts) { bytes.set(p, at); at += p.length; }
     const go = new Go();
+    // The server this build talks to (make build-web SERVER=...). Empty is
+    // the game's default; the game ignores an address it doesn't trust.
+    const server = "@SERVER@";
+    if (server) go.env = { HALPWORDS_SERVER: server };
     const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
     document.getElementById("loader").classList.add("done");
     setTimeout(() => { document.getElementById("hint").style.opacity = 0; }, 12000);

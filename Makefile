@@ -20,6 +20,20 @@ RELEASE := $(DIST)/release
 # a "Developer ID Application: ..." identity signs it for everyone.
 MACOS_SIGN_IDENTITY ?= -
 
+# SERVER names the Halpwords server a web build talks to, such as
+# `make build-web SERVER=https://test.halpwords.com`. Empty (the default)
+# is the game's own default, https://halpwords.com. Only the command line
+# sets it: a SERVER in the environment is ignored, so it never slips into
+# a release. It must match SERVER_RE (https, or http to this computer, and
+# only plain URL characters), which also means it goes into the page's
+# script without escaping. internal/serverurl's tests check that every
+# address SERVER_RE takes is one serverurl.Clean takes.
+ifeq ($(origin SERVER),environment)
+SERVER :=
+endif
+SERVER_URL := $(patsubst %/,%,$(strip $(SERVER)))
+SERVER_RE  := ^(https://[A-Za-z0-9.-]+|http://(localhost|127\.0\.0\.1|\[::1\]))(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$$
+
 # The staticcheck release `make vet` runs, fetched by go run.
 STATICCHECK := honnef.co/go/tools/cmd/staticcheck@2026.2.1
 
@@ -92,14 +106,18 @@ build-windows-arm64: winres ## Build for Windows on Arm (works from any OS)
 build-linux: ## Build for Linux (run on Linux: needs cgo and X11/GL dev packages)
 	GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(DIST)/linux-amd64/$(APP) $(PKG)
 
-build-web: icon ## Build the WebAssembly version into dist/web
+build-web: icon ## Build the WebAssembly version into dist/web (SERVER=https://… names its server)
+	@if [ -n '$(SERVER_URL)' ] && ! printf '%s\n' '$(SERVER_URL)' | grep -Eq '$(SERVER_RE)'; then \
+		echo "SERVER must be an https address (or http to localhost) with only plain URL characters, like https://test.halpwords.com"; \
+		exit 1; \
+	fi
 	mkdir -p $(DIST)/web
 	GOOS=js GOARCH=wasm $(GOBUILD) -o $(DIST)/web/$(APP).wasm $(PKG)
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(DIST)/web/
 	cp $(DIST)/icon/favicon.png $(DIST)/icon/halpwords.png $(DIST)/web/
 	sed -e 's/@VERSION@/$(VERSION)/g' -e "s/@WASM_SIZE@/$$(wc -c < $(DIST)/web/$(APP).wasm | tr -d ' ')/g" \
-		build/web/index.html > $(DIST)/web/index.html
-	@echo "Built $(DIST)/web. Try it with: make serve-web"
+		-e 's|@SERVER@|$(SERVER_URL)|g' build/web/index.html > $(DIST)/web/index.html
+	@echo "Built $(DIST)/web, talking to $(or $(SERVER_URL),the default server). Try it with: make serve-web"
 
 # The "We've moved" page for the web game's old address, which hands a
 # player's saves over to the new one. See docs/RELEASING.md.
