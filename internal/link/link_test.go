@@ -1599,6 +1599,32 @@ func TestHelpers(t *testing.T) {
 	}
 }
 
+// Device tokens only go over https, or plain http to this computer.
+func TestServerURLRefusesInsecure(t *testing.T) {
+	for env, want := range map[string]string{
+		"https://staging.halpwords.com": "https://staging.halpwords.com",
+		"http://localhost:8080":         "http://localhost:8080",
+		"http://127.0.0.1:8080":         "http://127.0.0.1:8080",
+		"http://[::1]:8080":             "http://[::1]:8080",
+		"http://halpwords.com":          DefaultServer,
+		"http://staging.example:8080":   DefaultServer,
+		"https://u:p@halpwords.com":     DefaultServer,
+		"ftp://localhost":               DefaultServer,
+		"not a url":                     DefaultServer,
+		"http://[::1":                   DefaultServer,
+	} {
+		t.Setenv("HALPWORDS_SERVER", env)
+		if got := ServerURL(); got != want {
+			t.Errorf("HALPWORDS_SERVER=%q: %q, want %q", env, got, want)
+		}
+	}
+	// A client made under a refused setting talks to the default server.
+	t.Setenv("HALPWORDS_SERVER", "http://remote.example")
+	if c := Open(Options{}); c.server != DefaultServer {
+		t.Errorf("client server %q", c.server)
+	}
+}
+
 func TestTrySave(t *testing.T) {
 	_, c, st, _ := linked(t)
 	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})

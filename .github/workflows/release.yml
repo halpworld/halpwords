@@ -120,8 +120,9 @@ jobs:
         run: |
           notes=""
           if [ -f CHANGELOG.md ]; then
-            # The section for this version, up to the next heading.
-            notes=$(awk -v v="## ${GITHUB_REF_NAME}" '$0 ~ "^"v {on=1; next} /^## / && on {exit} on' CHANGELOG.md)
+            # The section for this version, up to the next heading. The heading
+            # is exactly "## vX.Y.Z", or that and a space and more (a date).
+            notes=$(awk -v v="## ${GITHUB_REF_NAME}" '$0 == v || index($0, v " ") == 1 {on=1; next} /^## / && on {exit} on' CHANGELOG.md)
           fi
           gh release create "$GITHUB_REF_NAME" release/* --title "Halpwords $GITHUB_REF_NAME" --notes "${notes:-Halpwords $GITHUB_REF_NAME}"
 

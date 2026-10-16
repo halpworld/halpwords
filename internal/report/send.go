@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"os"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpwords/internal/serverurl"
 )
 
 // DefaultServer is where reports go unless HALPWORDS_SERVER says
@@ -21,18 +20,7 @@ const DefaultServer = "https://halpwords.com"
 // ServerURL is the Halpwords server: HALPWORDS_SERVER if it is an https
 // address (or http on this computer, for development), else
 // DefaultServer. It has no trailing slash.
-func ServerURL() string {
-	s := strings.TrimRight(strings.TrimSpace(os.Getenv("HALPWORDS_SERVER")), "/")
-	u, err := url.Parse(s)
-	if s == "" || err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return DefaultServer
-	}
-	local := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
-	if u.Scheme != "https" && !(u.Scheme == "http" && local) {
-		return DefaultServer
-	}
-	return s
-}
+func ServerURL() string { return serverurl.FromEnv(DefaultServer) }
 
 // Outcome is what became of a report sent.
 type Outcome int
