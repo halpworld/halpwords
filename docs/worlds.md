@@ -121,12 +121,12 @@ Where the shipped code differs from the design above:
   for byte as it was. No world makes monsters, doors or stairs harder to see
   than today (checked by the balance analyst). Monsters are at least 1.5:1
   against fog, walls and floor in every world, on laps 1 to 3.
-- **Two hash sets, chosen by build tag.** Apple Silicon fuses multiply-add and
-  amd64 and wasm do not, so the golden hashes (dungeon generation, every
-  world's textures and every world's rendered view) come in two sets. The
-  luminance maths uses a literal table and `hypot` is plain Go, so amd64
-  matches wasm. (Follow-up: monster HP and ATK maths is also fused on arm64,
-  so the dungeon hashes could go back to one set once it uses integers.)
+- **Two hash sets for the rendered views, chosen by build tag.** Apple
+  Silicon fuses multiply-add and amd64 and wasm do not, so the golden hashes
+  of every world's rendered view (`internal/raycast`) come in two sets, picked
+  by `fused_test.go` and `unfused_test.go`. The luminance maths uses a literal
+  table and `hypot` is plain Go, so amd64 matches wasm. Dungeon generation
+  and the textures have one set of hashes.
 - **`ThemeFor` now goes floor by floor.** It follows `FloorOrder` instead of a
   new theme every two floors, and from floor 11 returns the lap remix
   (`World(i, lap)`, `Theme.Remix`). `ThemeFor(1)` is still The Crypt.
