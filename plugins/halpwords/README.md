@@ -16,10 +16,11 @@ install it when you open either one.
 | `halpwords:ui-reviewer` | Game screens and server pages: accessibility, clarity, light and dark. |
 | `halpwords:docs-keeper` | Keeping both repos' docs true to the code after a change: commands, paths, settings and names (edits docs only). |
 | `halpwords:test-server-operator` | The Docker test server through `deploy/docker/hw`: health, logs and backups freely; deploys and changes only with the owner's yes. |
+| `halpwords:logic-auditor` | Every QA team: do the code, plans, docs and owner decisions agree, and does the logic hold at the edges (read only). |
 
 Which agents to run for which change is in halpwords-server's
-`docs/agents/review-checklist.md`. A QA team always has a logic and
-consistency auditor as well as these specialists.
+`docs/agents/review-checklist.md`. A QA team always has `halpwords:logic-auditor`
+as well as these specialists.
 
 Agents that look at both repos expect them side by side, as
 `…/halpwords` and `…/halpwords-server`.

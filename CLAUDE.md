@@ -127,8 +127,10 @@ on in `.claude/settings.json`) has agents for this work. Use them as
 - `halpwords:plan-keeper`: PLAN.md notes and milestones.
 - `halpwords:docs-keeper`: docs in both repos after a change.
 - `halpwords:test-server-operator`: the Docker test server.
+- `halpwords:logic-auditor`: code, plans, docs and decisions agree, and
+  the logic holds at the edges.
 
-A QA team always includes a logic and consistency auditor, as well as the
+A QA team always includes `halpwords:logic-auditor`, as well as the
 specialists.
 
 ## Style
