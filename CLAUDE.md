@@ -77,7 +77,7 @@ releases, [docs/RELEASING.md](docs/RELEASING.md).
 Every target is in the [Makefile](Makefile); `make help` lists them.
 
 ```sh
-make check      # make vet + make test: everything CI checks on each push
+make check      # make vet + make test (CI also runs the balance check and the builds)
 make vet        # go vet, staticcheck (pinned), gofmt
 make test       # go test ./...
 make run        # run the game (uses your real save folder; see below)

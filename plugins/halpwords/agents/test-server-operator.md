@@ -62,6 +62,8 @@ Always use `hw`. Never `ssh` to the host yourself, and never run `hw ssh`.
   add|off|remove`, `beta allow|disallow|make-code|revoke-code`,
   `jobs retry`, `billing`, `play-load`, `ai try`, `ai samples`.
 - Anything that sends mail, such as `send-test-email`.
+- `hw mail` (it shows sign-in links while mail stays on the server):
+  only when the owner asks, and never copy a link or code out of it.
 
 **Owner only** (say what to run and why, and let the owner run it):
 

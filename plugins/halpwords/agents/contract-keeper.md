@@ -40,7 +40,7 @@ format, matching, SRS) and §8 (seeds, share codes, score).
 - **One implementation.** List parsing, `Grade`, `Memory`, `Classify`,
   `Difficulty`, seeds, share codes and scores live in the game's packages
   under `pkg/`. The server imports eleven of them and `assets` (check
-  with `grep -rhoE 'halpwords/(pkg/[a-z]+|assets)"' "$server" --include='*.go' | sort -u`). The server imports them and
+  with `grep -rhoE 'halpwords/(pkg/[a-z]+|assets)"' "$server" --include='*.go' | sort -u`) and
   never re-implements them. Flag any server code that parses lists, grades
   answers, schedules Leitner boxes or computes scores by itself.
 - **Shared packages stay pure.** Nothing under `pkg/` may import Ebitengine, `internal/game`, `internal/scene` or
