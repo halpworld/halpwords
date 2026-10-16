@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/halpworld/halpwords/internal/serverurl"
 	"io"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/halpworld/halpwords/internal/serverurl"
 )
 
 // DefaultServer is where reports go unless HALPWORDS_SERVER says
