@@ -1,7 +1,7 @@
 {
   "name": "halpwords",
-  "version": "0.1.0",
-  "description": "Sub-agents for the Halpwords game and server: the game-server contract, languages, children's privacy and safety, LLM features, balance, the plans, and UI.",
+  "version": "0.2.0",
+  "description": "Sub-agents for the Halpwords game and server: the game-server contract, languages, children's privacy and safety, LLM features, balance, the plans, UI, the docs and the test server.",
   "author": {
     "name": "Kenth Fagerlund"
   },

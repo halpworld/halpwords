@@ -14,6 +14,12 @@ install it when you open either one.
 | `halpwords:balance-analyst` | Formulas, stats, scores and rankings, checked with `make balance`. |
 | `halpwords:plan-keeper` | The next task, checking a branch against its task, and keeping PLAN.md and WAVES.md true. |
 | `halpwords:ui-reviewer` | Game screens and server pages: accessibility, clarity, light and dark. |
+| `halpwords:docs-keeper` | Keeping both repos' docs true to the code after a change: commands, paths, settings and names (edits docs only). |
+| `halpwords:test-server-operator` | The Docker test server through `deploy/docker/hw`: health, logs and backups freely; deploys and changes only with the owner's yes. |
+
+Which agents to run for which change is in halpwords-server's
+`docs/agents/review-checklist.md`. A QA team always has a logic and
+consistency auditor as well as these specialists.
 
 Agents that look at both repos expect them side by side, as
 `…/halpwords` and `…/halpwords-server`.
