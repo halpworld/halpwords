@@ -32,12 +32,16 @@ releases, [docs/RELEASING.md](docs/RELEASING.md).
   turned off.
 - **The LLM never grades spelling.** Grading is always local
   (`words.Grade`).
-- **`pkg/` is a contract with the server.** halpwords-server imports
-  `pkg/words`, `compete`, `gameai`, `maps`, `proc`, `puzzle`, `race`,
-  `raid`, `safety`, `settings` and `audiopack`. Changes there must stay
-  compatible with older lists, older games and the server: run
-  `halpwords:contract-keeper` on any change under `pkg/`, to the word list
-  format or to `internal/link`. Nothing under `pkg/` may import Ebitengine
+- **`pkg/` and `assets` are a contract with the server.** halpwords-server
+  imports eleven `pkg/` packages (`audiopack`, `compete`, `gameai`,
+  `maps`, `proc`, `puzzle`, `race`, `raid`, `safety`, `settings`,
+  `words`) and `assets` (the starter lists in `assets.Words` and the
+  font in `assets.UnifontHex`). Check the current list in the server
+  checkout with
+  `grep -rhoE 'halpwords/(pkg/[a-z]+|assets)"' --include='*.go' . | sort -u`.
+  Changes there must stay compatible with older lists, older games and
+  the server: run `halpwords:contract-keeper` on any change under `pkg/`
+  or `assets/`, to the word list format or to `internal/link`. Nothing under `pkg/` may import Ebitengine
   or the game's screens (`pkg/imports_test.go` checks this).
 - **Tests sit next to the code** (`foo.go`, `foo_test.go`). Pure logic
   goes in packages with no Ebitengine dependency, so it can be tested.
