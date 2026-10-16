@@ -10,7 +10,7 @@
     {
       "name": "halpwords",
       "source": "./plugins/halpwords",
-      "description": "Sub-agents for the Halpwords game and server: the game-server contract, languages, children's privacy and safety, LLM features, balance, the plans, and UI."
+      "description": "Sub-agents for the Halpwords game and server: the game-server contract, languages, children's privacy and safety, LLM features, balance, the plans, UI, the docs, the test server and a logic auditor."
     }
   ]
 }
