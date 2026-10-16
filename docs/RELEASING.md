@@ -102,10 +102,11 @@ build: the optional link and AI helper are plain HTTPS calls from the page.
 Write changes under `## Unreleased` as you go. To release, rename that
 heading to the version, exactly as the tag (`## v1.2.3`) and add a new empty
 `## Unreleased` above it. The workflow copies the section whose heading
-starts with the tag into the release notes; if there is none, the release
-gets a plain line. The match is on the start of the heading, so make sure
-no other heading starts with the same text (`## v1.2.30` also matches
-`v1.2.3`). Notes for anything the server relies on
+is exactly the tag (`## v1.2.3`), or the tag, a space and more text
+(`## v1.2.3 - 2026-10-16`) into the release notes; if there is none, the
+release gets a plain line. The match is exact, so `## v1.2.30` and
+`## v1.2.3-rc1` are not taken for `v1.2.3`. Notes for anything the server
+relies on
 (list format, grading, scores, maps, `pkg/` names) are required.
 
 ## One-time setup

@@ -17,7 +17,6 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
-	"os"
 	"regexp"
 	"runtime"
 	"slices"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/internal/profile"
+	"github.com/halpworld/halpwords/internal/serverurl"
 	"github.com/halpworld/halpwords/pkg/audiopack"
 	"github.com/halpworld/halpwords/pkg/settings"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -54,13 +54,11 @@ const (
 // names another (such as a staging server).
 const DefaultServer = "https://halpwords.com"
 
-// ServerURL is the server's address, without a trailing slash.
-func ServerURL() string {
-	if s := strings.TrimSpace(os.Getenv("HALPWORDS_SERVER")); s != "" {
-		return strings.TrimRight(s, "/")
-	}
-	return DefaultServer
-}
+// ServerURL is the server's address, without a trailing slash:
+// HALPWORDS_SERVER if it is an https address (or http on this computer,
+// for development), else DefaultServer. Device tokens never travel
+// unencrypted to another computer.
+func ServerURL() string { return serverurl.FromEnv(DefaultServer) }
 
 // Timings. They are variables so tests can shorten them.
 var (
