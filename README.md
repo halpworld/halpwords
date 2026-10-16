@@ -957,7 +957,6 @@ updates the web version. See [docs/RELEASING.md](docs/RELEASING.md), and
 <summary><b>Project layout</b></summary>
 
 ```text
-```text
 cmd/halpwords/     entry point
 internal/game/     main loop, scene stack, pixel-perfect scaling, the shared Context
 internal/scene/    screens (title, practice, the dungeon crawl, ...)

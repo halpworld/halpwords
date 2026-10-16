@@ -83,7 +83,8 @@ it runs `make test` and `make bundle-mac` (artifact `Halpwords-mac`).
 
 [release.yml](../.github/workflows/release.yml) runs on a tag starting `v`,
 or by hand as a dry run that publishes nothing. Its jobs are `test`, then
-`linux-windows-web` and `macos` (which sign if the secrets below are set),
+`linux-windows-web`, and `macos` (which signs and notarises when the
+secrets below are set; Windows builds are not signed),
 then, for tags only, `publish` (checksums and the GitHub release) and
 `pages` (deploys the web game).
 
@@ -102,8 +103,9 @@ Write changes under `## Unreleased` as you go. To release, rename that
 heading to the version, exactly as the tag (`## v1.2.3`) and add a new empty
 `## Unreleased` above it. The workflow copies the section whose heading
 starts with the tag into the release notes; if there is none, the release
-gets a plain line. Match on the whole tag, so check `v1.2.3` is not also a
-prefix of another heading. Notes for anything the server relies on
+gets a plain line. The match is on the start of the heading, so make sure
+no other heading starts with the same text (`## v1.2.30` also matches
+`v1.2.3`). Notes for anything the server relies on
 (list format, grading, scores, maps, `pkg/` names) are required.
 
 ## One-time setup

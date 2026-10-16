@@ -36,7 +36,7 @@ flowchart TD
 Rules that keep this tidy (from [PLAN.md §3](../PLAN.md)):
 
 - Game logic is plain Go with no Ebitengine import, so it is unit-tested
-  and deterministic from a seed. Only `internal/game`, `internal/scene`,
+  and deterministic from a seed. Only `cmd/halpwords`, `internal/game`, `internal/scene`,
   `internal/gfx` and `internal/input` import Ebitengine (checked with
   `go list -deps`).
 - `pkg/` is a public API that halpwords-server imports. It may not import
