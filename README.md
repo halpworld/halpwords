@@ -929,7 +929,8 @@ folder. Please attach it to a [bug report](https://github.com/halpworld/halpword
 
 ```sh
 make run             # run the game
-make check           # go vet, gofmt check and unit tests
+make test            # unit tests
+make check           # go vet, staticcheck, gofmt check and unit tests (what CI runs)
 make sounds          # write the sound effects and music to dist/sounds as WAV files
 make balance         # play the dungeon with typing bots and print the balance
 make icon            # draw the app icon into dist/icon
@@ -938,32 +939,40 @@ make build-mac       # Apple Silicon (from any OS)
 make build-mac-intel # Intel Macs (from any OS)
 make bundle-mac      # dist/Halpwords.app for every Mac, with its icon (needs macOS)
 make build-windows   # Windows .exe with its icon (from any OS)
+make build-windows-arm64 # the same for Windows on Arm
 make build-linux     # Linux (run on Linux; needs the packages above)
 make build-web       # WebAssembly, in dist/web
 make serve-web       # build the web version and play it at http://localhost:8000
-make release-web     # zip a build for release into dist/release (also -mac, -windows, -linux)
+make build-moved     # the "We've moved" page for the web game's old address
+make release-web     # zip a build for release into dist/release (also release-mac, release-windows, release-linux)
 make help            # list all targets
 ```
 
 Builds are stamped with the version from the latest git tag. Pushing a tag
 such as `v1.0.1` builds every platform, publishes a GitHub release and
-updates the web version. See [docs/RELEASING.md](docs/RELEASING.md).
+updates the web version. See [docs/RELEASING.md](docs/RELEASING.md), and
+[docs/architecture.md](docs/architecture.md) for how the code fits together.
 
 <details>
 <summary><b>Project layout</b></summary>
 
 ```text
 cmd/halpwords/     entry point
-internal/game/     main loop, scene stack, pixel-perfect scaling
+internal/game/     main loop, scene stack, pixel-perfect scaling, the shared Context
 internal/scene/    screens (title, practice, the dungeon crawl, ...)
 internal/dungeon/  floor generation, monsters, bosses, shrines and shops
 internal/rpg/      classes, stats, levels, items and gear (no Ebitengine dependency)
-internal/profile/  settings, word progress and the Hall of Fame, kept between runs
+internal/profile/  settings, word progress, the Hall of Fame and the learners, kept between runs
 internal/save/     save files (local storage on the web)
 internal/raycast/  first-person 3D view
 internal/typing/   text entry, Tab accents, Greek input mode
 internal/combat/   battle formulas and monster trait effects
 internal/llm/      optional AI: providers, keys, budget, Director, generated content (no Ebitengine dependency)
+internal/link/     optional link to a halpwords-server account: sync, assigned lists, Play Together
+internal/report/   the pause menu's reports, queued on disk and sent later
+internal/move/     carries web saves from one address to another
+internal/playtest/ the web game's play-test of a quest
+internal/browser/  opens the website's sign-in page
 internal/clipboard/ pasting from the system clipboard
 internal/audio/    sound effect synth and music composer (no Ebitengine dependency)
 internal/sim/      typing bots that play the dungeon, to check the balance (no Ebitengine dependency)
@@ -976,15 +985,24 @@ pkg/words/         word lists, languages, grading, spaced repetition, mistake ki
 pkg/settings/      per-language settings (grading rules, highlights, timer) a grown-up can lock
 pkg/compete/       Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
 pkg/puzzle/        door and chest word puzzles
-pkg/proc/          procedural pixel art and the app icon
+pkg/proc/          procedural pixel art, the ten worlds and the app icon
 pkg/safety/        family-safe policy and filter for generated text
-assets/            embedded font, starter word lists and riddle bank
-tools/fontsubset/  regenerates the font subset from GNU Unifont
-tools/sfxdump/     writes the sound effects and music as WAV files
+pkg/maps/          the quest and map formats (.hwquest, .hwmap) and their checks
+pkg/race/          the rules of a Race in Play Together
+pkg/raid/          the rules of a Boss Raid
+pkg/gameai/        AI prompts, replies and checks
+pkg/audiopack/     the format of a word list's pronunciation audio
+assets/            embedded font, starter word lists, riddle bank and built-in quest
 tools/balance/     prints the balance tables from the typing bots
+tools/fontsubset/  regenerates the font subset from GNU Unifont
 tools/icon/        writes the app icon as PNG, .icns and .ico
+tools/sfxdump/     writes the sound effects and music as WAV files
+tools/worldsheet/  renders contact sheets of the worlds
 build/             the macOS app's Info.plist and the web page
-docs/media/        README screenshots and GIFs
+web/moved/         the "We've moved" page for the web game's old address
+plugins/halpwords/ Claude Code review agents for contributors
+docs/              architecture, releasing, the worlds; docs/media has README screenshots and GIFs
+.github/workflows/ CI and the release workflow
 ```
 
 </details>

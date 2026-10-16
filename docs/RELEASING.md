@@ -32,6 +32,82 @@ artifacts.
 The version comes from `git describe`, so a build from a tag says `v1.2.3`
 on the title screen, and anything else says where it was built from.
 
+## Building
+
+`make help` lists the targets. Go 1.26 is needed. Everything goes into
+`dist/`, which is not committed.
+
+| Target | What it makes |
+|---|---|
+| `run` | Runs the game from source. |
+| `test`, `vet`, `check` | `go test ./...`; `go vet`, staticcheck and a gofmt check; both. CI runs the same. |
+| `balance`, `sounds`, `icon` | The balance tables; the sounds as WAV files in `dist/sounds`; the icons in `dist/icon` (PNGs, `halpwords.icns`, `halpwords.ico`). |
+| `build` | A binary for this computer in `dist/`. |
+| `build-mac`, `build-mac-intel` | `dist/mac-arm64` and `dist/mac-amd64`, from any OS. |
+| `build-mac-universal` | `dist/mac-universal`, joined with `lipo` (macOS only). |
+| `bundle-mac` | `dist/Halpwords.app`, from `build/macos/Info.plist`, signed (macOS only). |
+| `build-windows`, `build-windows-arm64` | `dist/windows-amd64` and `dist/windows-arm64`, from any OS. They run `winres` first, which adds the icon and version. |
+| `build-linux` | `dist/linux-amd64`. Run it on Linux: it needs the C packages listed in the README. |
+| `build-web` | `dist/web`: `halpwords.wasm`, `wasm_exec.js`, icons and `index.html`. |
+| `serve-web` | `build-web`, then serves `dist/web` at <http://localhost:8000>. |
+| `build-moved` | `dist/moved`: the *We've moved* page (see below). |
+| `release-mac`, `release-windows`, `release-linux`, `release-web` | The archives in `dist/release`. |
+| `clean` | Removes `dist/` and the generated Windows resources. |
+
+`build/web/index.html` is the web page. `build-web` copies it into
+`dist/web` with `@VERSION@` and `@WASM_SIZE@` filled in (the page shows the
+size while it loads). The macOS `Info.plist` has `@VERSION@` too.
+
+The archives are named for the version:
+
+- `Halpwords-<version>-macos.zip`
+- `Halpwords-<version>-windows-amd64.zip` and `-windows-arm64.zip`
+- `Halpwords-<version>-linux-amd64.tar.gz` (with `LICENSE` and the icon)
+- `Halpwords-<version>-web.zip`
+- `SHA256SUMS.txt`, made by the workflow
+
+### Versions
+
+`VERSION` is `git describe --tags --always --dirty`, set into
+`game.Version` with `-ldflags`. `VERSION_NUM` is the leading `x.y.z` of that, for the
+app bundle and `.exe`, or `0.0.0` when there is none. A build
+with no version set says `dev` and the commit it was built from.
+
+### CI and the release workflow
+
+[ci.yml](../.github/workflows/ci.yml) runs on every push and pull request.
+On Linux it runs `make vet`, `make test`, a short balance check
+(`go run ./tools/balance -runs 100 -floors 9`), then builds Linux, macOS,
+Windows and web and keeps them as the artifact `halpwords-builds`. On macOS
+it runs `make test` and `make bundle-mac` (artifact `Halpwords-mac`).
+
+[release.yml](../.github/workflows/release.yml) runs on a tag starting `v`,
+or by hand as a dry run that publishes nothing. Its jobs are `test`, then
+`linux-windows-web`, and `macos` (which signs and notarises when the
+secrets below are set; Windows builds are not signed),
+then, for tags only, `publish` (checksums and the GitHub release) and
+`pages` (deploys the web game).
+
+### The web game
+
+The web game is `dist/web`, plain static files, so any static host works.
+Today it is served from GitHub Pages by the release workflow (Pages source:
+GitHub Actions). The wasm file is about 27 MB, so it is loaded once and
+cached by the browser. Saves live in the browser's local storage, which is
+why the address matters (see below). There is no server code in the web
+build: the optional link and AI helper are plain HTTPS calls from the page.
+
+### The CHANGELOG
+
+Write changes under `## Unreleased` as you go. To release, rename that
+heading to the version, exactly as the tag (`## v1.2.3`) and add a new empty
+`## Unreleased` above it. The workflow copies the section whose heading
+starts with the tag into the release notes; if there is none, the release
+gets a plain line. The match is on the start of the heading, so make sure
+no other heading starts with the same text (`## v1.2.30` also matches
+`v1.2.3`). Notes for anything the server relies on
+(list format, grading, scores, maps, `pkg/` names) are required.
+
 ## One-time setup
 
 ### GitHub Pages
@@ -135,8 +211,8 @@ until step 6.
    settings arrive; that the game asks first when the new address already
    has progress; and that the address bar loses its `#import=…`.
 5. **The code.** On a branch: set `WebURL = PlayURL` in
-   `internal/move/move.go`; change the web game links in `README.md` and at
-   the top of this file to <https://play.halpwords.com/> (`make test` says
+   `internal/move/move.go`; change the web game links in `README.md` and in
+   this file to <https://play.halpwords.com/> (`make test` says
    which are left); copy `docs/cutover/release.yml` over
    `.github/workflows/release.yml` (this needs someone who may change
    workflows); add a CHANGELOG line. Merge.
