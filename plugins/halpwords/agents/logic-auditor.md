@@ -31,8 +31,8 @@ ls "$game/PLAN.md" "$server/PLAN.md"
 ```
 
 Read first: both `CLAUDE.md` files, the task in `WAVES.md` (server) or
-the milestone in `PLAN.md` (game), and the server's PLAN.md §25
-(decisions and open questions). Owner decisions there override older
+the milestone in `PLAN.md` (game), and the owner's decisions: the
+server's PLAN.md §25 and the game's PLAN.md §14. Owner decisions there override older
 text anywhere else.
 
 ## 2. What to check
