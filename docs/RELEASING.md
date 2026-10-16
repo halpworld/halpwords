@@ -48,15 +48,35 @@ on the title screen, and anything else says where it was built from.
 | `bundle-mac` | `dist/Halpwords.app`, from `build/macos/Info.plist`, signed (macOS only). |
 | `build-windows`, `build-windows-arm64` | `dist/windows-amd64` and `dist/windows-arm64`, from any OS. They run `winres` first, which adds the icon and version. |
 | `build-linux` | `dist/linux-amd64`. Run it on Linux: it needs the C packages listed in the README. |
-| `build-web` | `dist/web`: `halpwords.wasm`, `wasm_exec.js`, icons and `index.html`. |
+| `build-web` | `dist/web`: `halpwords.wasm`, `wasm_exec.js`, icons and `index.html`. `SERVER=https://…` names the server it talks to (below). |
 | `serve-web` | `build-web`, then serves `dist/web` at <http://localhost:8000>. |
 | `build-moved` | `dist/moved`: the *We've moved* page (see below). |
 | `release-mac`, `release-windows`, `release-linux`, `release-web` | The archives in `dist/release`. |
 | `clean` | Removes `dist/` and the generated Windows resources. |
 
 `build/web/index.html` is the web page. `build-web` copies it into
-`dist/web` with `@VERSION@` and `@WASM_SIZE@` filled in (the page shows the
-size while it loads). The macOS `Info.plist` has `@VERSION@` too.
+`dist/web` with `@VERSION@`, `@WASM_SIZE@` and `@SERVER@` filled in (the
+page shows the size while it loads). The macOS `Info.plist` has
+`@VERSION@` too.
+
+A web build talks to <https://halpwords.com> unless it is built with
+`SERVER`, like the desktop game unless `HALPWORDS_SERVER` is set. A web
+page has no environment of its own, so `SERVER` is written into the page,
+which hands it to the game as `HALPWORDS_SERVER` before the game starts
+(`go.env` in `wasm_exec.js`):
+
+```sh
+make build-web SERVER=https://test.halpwords.com   # the test server's web game
+make serve-web SERVER=http://localhost:8080        # against a local halpwords-server
+```
+
+The link, reports and everything else that uses `serverurl` then go
+there. `SERVER` must be `https` (or `http` to this computer), with only
+plain URL characters; anything else stops the build. Only the command
+line sets it: a `SERVER` in the environment is ignored, so release builds
+always talk to halpwords.com. halpwords-server's `hw deploy-web` builds
+the test server's web game this way, at <https://play.test.halpwords.com>
+(`deploy/docker/README.md` in that repo).
 
 The archives are named for the version:
 
