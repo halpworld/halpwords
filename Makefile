@@ -24,18 +24,22 @@ MACOS_SIGN_IDENTITY ?= -
 # `make build-web SERVER=https://test.halpwords.com`. Empty (the default)
 # is the game's own default, https://halpwords.com. Only the command line
 # sets it: a SERVER in the environment is ignored, so it never slips into
-# a release. It must match SERVER_RE (https, or http to this computer, and
-# only plain URL characters), which also means it goes into the page's
-# script without escaping. internal/serverurl's tests check that every
-# address SERVER_RE takes is one serverurl.Clean takes.
-ifeq ($(origin SERVER),environment)
+# a release (`environment` and `environment override` both count). It must
+# match SERVER_RE (https, or http to this computer, and only plain URL
+# characters), which also means it goes into the page's script without
+# escaping. internal/serverurl's tests check a sample of
+# addresses SERVER_RE takes (serverurl.Clean takes each) and of ones it
+# refuses.
+ifneq ($(findstring environment,$(origin SERVER)),)
 SERVER :=
 endif
 SERVER_URL := $(patsubst %/,%,$(strip $(SERVER)))
 SERVER_RE  := ^(https://[A-Za-z0-9.-]+|http://(localhost|127\.0\.0\.1|\[::1\]))(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$$
 
-# The staticcheck release `make vet` runs, fetched by go run.
-STATICCHECK := honnef.co/go/tools/cmd/staticcheck@2026.2.1
+# The staticcheck release `make vet` runs. staticcheck 2026.2.1 (v0.8.1) is
+# pinned in tools/staticcheck/go.mod with a newer golang.org/x/tools, which
+# reads Go 1.27.2's export data (the release's own x/tools can't).
+STATICCHECK := go tool -modfile=tools/staticcheck/go.mod staticcheck
 
 .PHONY: help run test vet check sounds balance icon build build-mac build-mac-intel build-mac-universal \
 	bundle-mac winres build-windows build-windows-arm64 build-linux build-web serve-web build-moved \
@@ -52,7 +56,7 @@ test: ## Run unit tests
 
 vet: ## Run go vet and staticcheck, and check formatting
 	go vet ./...
-	go run $(STATICCHECK) ./...
+	$(STATICCHECK) ./...
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "run gofmt -w ." && exit 1)
 
 check: vet test ## Run every check CI runs
@@ -106,8 +110,11 @@ build-windows-arm64: winres ## Build for Windows on Arm (works from any OS)
 build-linux: ## Build for Linux (run on Linux: needs cgo and X11/GL dev packages)
 	GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(DIST)/linux-amd64/$(APP) $(PKG)
 
+# SERVER_URL reaches the recipe through the environment, never through the
+# shell's text, so a quote or $(…) in SERVER can't run anything.
+build-web: export SERVER_URL := $(SERVER_URL)
 build-web: icon ## Build the WebAssembly version into dist/web (SERVER=https://… names its server)
-	@if [ -n '$(SERVER_URL)' ] && ! printf '%s\n' '$(SERVER_URL)' | grep -Eq '$(SERVER_RE)'; then \
+	@if [ -n "$$SERVER_URL" ] && ! printf '%s\n' "$$SERVER_URL" | grep -Eq '$(SERVER_RE)'; then \
 		echo "SERVER must be an https address (or http to localhost) with only plain URL characters, like https://test.halpwords.com"; \
 		exit 1; \
 	fi
@@ -116,8 +123,8 @@ build-web: icon ## Build the WebAssembly version into dist/web (SERVER=https://�
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(DIST)/web/
 	cp $(DIST)/icon/favicon.png $(DIST)/icon/halpwords.png $(DIST)/web/
 	sed -e 's/@VERSION@/$(VERSION)/g' -e "s/@WASM_SIZE@/$$(wc -c < $(DIST)/web/$(APP).wasm | tr -d ' ')/g" \
-		-e 's|@SERVER@|$(SERVER_URL)|g' build/web/index.html > $(DIST)/web/index.html
-	@echo "Built $(DIST)/web, talking to $(or $(SERVER_URL),the default server). Try it with: make serve-web"
+		-e "s|@SERVER@|$$SERVER_URL|g" build/web/index.html > $(DIST)/web/index.html
+	@echo "Built $(DIST)/web, talking to $${SERVER_URL:-the default server}. To try it as built: python3 -m http.server -d $(DIST)/web 8000"
 
 # The "We've moved" page for the web game's old address, which hands a
 # player's saves over to the new one. See docs/RELEASING.md.
