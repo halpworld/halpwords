@@ -31,7 +31,7 @@ MACOS_SIGN_IDENTITY ?= -
 # addresses SERVER_RE takes (serverurl.Clean takes each) and of ones it
 # refuses.
 ifneq ($(findstring environment,$(origin SERVER)),)
-SERVER :=
+override SERVER :=
 endif
 SERVER_URL := $(patsubst %/,%,$(strip $(SERVER)))
 SERVER_RE  := ^(https://[A-Za-z0-9.-]+|http://(localhost|127\.0\.0\.1|\[::1\]))(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$$
