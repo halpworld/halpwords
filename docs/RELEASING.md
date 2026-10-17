@@ -73,8 +73,9 @@ make serve-web SERVER=http://localhost:8080        # against a local halpwords-s
 The link, reports and everything else that uses `serverurl` then go
 there. `SERVER` must be `https` (or `http` to this computer), with only
 plain URL characters; anything else stops the build. Only the command
-line sets it: a `SERVER` in the environment is ignored, so release builds
-always talk to halpwords.com. halpwords-server's `hw deploy-web` builds
+line sets it: a `SERVER` in the environment is ignored. The release
+workflow never passes `SERVER`, so release builds talk to halpwords.com.
+Don't run `make release-web SERVER=…`: it would package a test build. halpwords-server's `hw deploy-web` builds
 the test server's web game this way, at <https://play.test.halpwords.com>
 (`deploy/docker/README.md` in that repo).
 

@@ -28,10 +28,12 @@ func serverRE(t *testing.T) *regexp.Regexp {
 	return nil
 }
 
-// TestBuildWebServer checks that every address the Makefile lets into a
-// web build is one the game accepts (so SERVER never names a server the
-// game would quietly ignore), and that the Makefile refuses anything that
-// could break out of the page's script.
+// TestBuildWebServer checks a sample: each address below that the
+// Makefile lets into a web build is one the game accepts (so SERVER
+// shouldn't name a server the game would quietly ignore), and each
+// address in the second list, which could break out of the page's script,
+// is refused. It can't check every address the regex takes, so keep the
+// regex simple and add a case when it changes.
 func TestBuildWebServer(t *testing.T) {
 	re := serverRE(t)
 	for _, s := range []string{
@@ -92,7 +94,7 @@ func TestWebPageServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(mk), "s|@SERVER@|$(SERVER_URL)|g") {
+	if !strings.Contains(string(mk), "s|@SERVER@|$$SERVER_URL|g") {
 		t.Errorf("the Makefile's build-web doesn't fill in @SERVER@")
 	}
 }
