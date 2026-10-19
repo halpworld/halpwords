@@ -6,8 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -88,9 +90,42 @@ func TestHallOfFameRankings(t *testing.T) {
 	if len(bs) != 1 || bs[0].Scope != "class" || len(bs[0].Entries) != 2 || !bs[0].Entries[1].You {
 		t.Fatalf("French boards: %+v", bs)
 	}
-	if got := boardTitle(bs[0]); !strings.Contains(got, "Class") || !strings.Contains(got, "this week") {
+	if got := boardTitle(bs[0], time.Now()); !strings.Contains(got, "Class") || !strings.Contains(got, "this week") {
 		t.Errorf("title %q", got)
 	}
 	dst := ebiten.NewImage(game.ScreenW, game.ScreenH)
 	h.Draw(dst, ctx)
+}
+
+// A GET /api/v1/ranks answer with two Daily Dungeon boards, for two dates
+// that are each still today somewhere (halpwords-server#82, #155): each
+// is named against the player's own day.
+func TestDailyBoardTitlesByDay(t *testing.T) {
+	data, err := os.ReadFile("testdata/ranks_two_days.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Boards []link.Board `json:"boards"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Boards) != 2 {
+		t.Fatalf("%d boards, want 2", len(got.Boards))
+	}
+	// Just after midnight on the 25th, local time.
+	now := time.Date(2026, 9, 25, 0, 30, 0, 0, time.FixedZone("CEST", 2*3600))
+	for i, want := range []string{"World · Daily Dungeon · yesterday", "World · Daily Dungeon · today"} {
+		if title := boardTitle(got.Boards[i], now); title != want {
+			t.Errorf("board %s: %q, want %q", got.Boards[i].Period, title, want)
+		}
+	}
+	// A day later, the 24th is a date; a day that isn't one is shown as sent.
+	if title := boardTitle(got.Boards[0], now.AddDate(0, 0, 1)); title != "World · Daily Dungeon · 24 Sep" {
+		t.Errorf("two days on: %q", title)
+	}
+	if d := dayName("someday", now); d != "someday" {
+		t.Errorf("not a date: %q", d)
+	}
 }
