@@ -226,6 +226,9 @@ type Profile struct {
 
 	disk   bool
 	folder save.Folder
+	// unsynced is set by SaveMemory, which does not flush to disk, and
+	// cleared by SaveMemoryDurable.
+	unsynced bool
 }
 
 // New returns an empty profile that is never written to disk.
@@ -312,13 +315,20 @@ func (p *Profile) SaveSettings() error { return p.write(settingsFile, p.Settings
 // makes one durable write, SaveMemoryDurable, at the end of a run and on
 // quit, until the writes are debounced (#53 item 5).
 func (p *Profile) SaveMemory() error {
+	p.unsynced = true
 	return p.writeAs(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory}, false)
 }
 
 // SaveMemoryDurable writes the word memory and flushes it to disk. Use it
 // where a power cut would hurt most: the end of a run, and quitting.
+// It does nothing when every write since the last flush was durable.
 func (p *Profile) SaveMemoryDurable() error {
-	return p.write(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory})
+	if !p.unsynced {
+		return nil
+	}
+	err := p.write(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory})
+	p.unsynced = err != nil
+	return err
 }
 
 // SaveFame writes the Hall of Fame.

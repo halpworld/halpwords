@@ -187,3 +187,17 @@ func TestSecondDamageKeepsTheFirstCopy(t *testing.T) {
 		t.Fatalf("copies kept: %v", got)
 	}
 }
+
+func TestSaveMemoryDurableOnlyAfterFastWrites(t *testing.T) {
+	useTempDir(t)
+	p, _ := Load()
+	if p.unsynced {
+		t.Fatal("unsynced at start")
+	}
+	if err := p.SaveMemory(); err != nil || !p.unsynced {
+		t.Fatalf("after SaveMemory: unsynced %v, %v", p.unsynced, err)
+	}
+	if err := p.SaveMemoryDurable(); err != nil || p.unsynced {
+		t.Fatalf("after SaveMemoryDurable: unsynced %v, %v", p.unsynced, err)
+	}
+}

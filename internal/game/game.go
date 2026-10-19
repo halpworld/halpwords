@@ -375,7 +375,7 @@ func prepareMove(l *link.Client) (err error) {
 		}
 	}
 	for _, f := range folders {
-		if p := link.PeekFolder(f); p.Tokens || p.PendingSSO {
+		if p := peekForMove(f); p.Tokens || p.PendingSSO {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -401,6 +401,9 @@ func prepareMove(l *link.Client) (err error) {
 	}
 	return nil
 }
+
+// peekForMove reads what a folder's link holds; a variable for tests.
+var peekForMove = link.PeekFolder
 
 // openForMove opens a folder's link to unlink it; a variable for tests.
 var openForMove = link.Open

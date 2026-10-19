@@ -372,6 +372,7 @@ func questIntro(r *run, setup runSetup) game.Scene {
 func (c *Crawl) finishQuest(ctx *game.Context) {
 	r := c.run
 	r.remember()
+	ctx.EndSession() // flushes the word memory to disk
 	if r.onDisk {
 		save.Remove(saveName)
 		r.onDisk = false

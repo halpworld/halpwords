@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -236,7 +237,7 @@ func TestBeginMoveDoesNotBlockTheGameLoop(t *testing.T) {
 	}
 }
 
-func TestPrepareMovePanicIsAnErrorAndTokensAreGone(t *testing.T) {
+func TestPrepareMovePanicInAnUnlinkGoroutineIsAnErrorAndTokensAreGone(t *testing.T) {
 	ctx, a, b := computerWithLinkedLearner(t)
 	old := openForMove
 	openForMove = func(link.Options) *link.Client { panic("boom") }
@@ -268,5 +269,45 @@ func TestPrepareMoveFailsWhenTokensCannotBeRemoved(t *testing.T) {
 	}
 	if err := <-ctx.BeginMove(); err == nil {
 		t.Fatal("tokens left on disk were not reported")
+	}
+}
+
+// If the calling goroutine panics after launching an unlinking goroutine,
+// prepareMove still waits for that goroutine before it removes the link
+// files and returns, so nothing writes them back afterwards.
+func TestPrepareMovePanicWaitsForUnlinkGoroutines(t *testing.T) {
+	ctx, a, b := computerWithLinkedLearner(t)
+	release := make(chan struct{})
+	var finished atomic.Bool
+	oldOpen, oldPeek := openForMove, peekForMove
+	t.Cleanup(func() { openForMove, peekForMove = oldOpen, oldPeek })
+	openForMove = func(link.Options) *link.Client {
+		<-release
+		finished.Store(true)
+		panic("late")
+	}
+	calls := 0
+	peekForMove = func(f link.Store) link.Peek {
+		calls++
+		switch calls {
+		case 1: // the root
+			return oldPeek(f)
+		case 2: // a learner: launches the blocking goroutine
+			return link.Peek{Tokens: true}
+		}
+		panic("the caller fails after launching")
+	}
+	time.AfterFunc(200*time.Millisecond, func() { close(release) })
+	err := <-ctx.BeginMove()
+	if err == nil {
+		t.Fatal("no error")
+	}
+	if !finished.Load() {
+		t.Fatal("prepareMove returned while an unlinking goroutine was still running")
+	}
+	for _, f := range []save.Folder{a, b} {
+		if _, err := f.Read("link.json"); err == nil {
+			t.Errorf("%s/link.json is left", f)
+		}
 	}
 }
