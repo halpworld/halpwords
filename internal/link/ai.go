@@ -102,6 +102,10 @@ func (c *Client) aiToken(ctx context.Context, gen int, refused string) (string, 
 		c.mu.Unlock()
 		return "", ErrNotLinked
 	}
+	if c.st.Unconfirmed {
+		c.mu.Unlock()
+		return "", ErrUnconfirmed
+	}
 	token, exp := c.st.Access, c.st.AccessExp
 	c.mu.Unlock()
 	if token == "" || token == refused || c.now().Add(refreshEarly).After(exp) {

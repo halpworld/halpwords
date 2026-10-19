@@ -121,25 +121,18 @@ func (c *Client) StartSSO(ctx context.Context, returnTo string) (*SSOCode, error
 	if returnTo != "" {
 		body["return_to"] = returnTo
 	}
-	var out struct {
-		DeviceCode string `json:"device_code"`
-		UserCode   string `json:"user_code"`
-		URL        string `json:"verification_uri"`
-		VerifyURL  string `json:"verification_uri_complete"`
-		ExpiresIn  int64  `json:"expires_in"`
-		Interval   int64  `json:"interval"`
-	}
+	var out deviceStart
 	_, _, err = c.call(ctx, http.MethodPost, "/api/v1/sso/start", "", nil, body, &out)
 	if err = explainSSO(err); err != nil {
 		return nil, err
 	}
-	if out.DeviceCode == "" || out.UserCode == "" || !strings.HasPrefix(out.URL, "http") {
+	if !out.ok() {
 		return nil, errors.New("link: the server sent no code")
 	}
 	code := &SSOCode{DeviceCode: out.DeviceCode, UserCode: out.UserCode, URL: out.URL, VerifyURL: out.VerifyURL,
 		Verifier: verifier, Started: c.now(),
 		Expires: c.now().Add(time.Duration(out.ExpiresIn) * time.Second),
-		Every:   min(max(time.Duration(out.Interval)*time.Second, minPoll), maxPoll)}
+		Every:   pollEvery(out.Interval)}
 	if !strings.HasPrefix(code.VerifyURL, "http") {
 		code.VerifyURL = code.URL
 	}
@@ -253,7 +246,7 @@ func (c *Client) slowSSO(code *SSOCode) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.st.SSO == code {
-		code.Every = min(code.Every+5*time.Second, maxPoll)
+		code.Every = slower(code.Every)
 		c.saveState()
 	}
 }

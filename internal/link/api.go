@@ -91,7 +91,8 @@ func Explain(err error) string {
 		return ""
 	case errors.Is(err, ErrBadCode), errors.Is(err, ErrNotLinkable), errors.Is(err, ErrUnlinked), errors.Is(err, ErrSuspended),
 		errors.Is(err, ErrProgressStopped), errors.Is(err, ErrNotLinked), errors.Is(err, ErrLinked), errors.Is(err, ErrWrongSignIn), errors.Is(err, ErrLocked),
-		errors.Is(err, ErrSSOPending), errors.Is(err, ErrSSOExpired), errors.Is(err, ErrSSORefused), errors.Is(err, ErrSSOOff), errors.Is(err, ErrSSOBusy):
+		errors.Is(err, ErrSSOPending), errors.Is(err, ErrSSOExpired), errors.Is(err, ErrSSORefused), errors.Is(err, ErrSSOOff), errors.Is(err, ErrSSOBusy),
+		errors.Is(err, ErrPairPending), errors.Is(err, ErrPairExpired), errors.Is(err, ErrPairRefused), errors.Is(err, ErrPairOff), errors.Is(err, ErrUnconfirmed):
 		return err.Error()
 	case errors.Is(err, context.DeadlineExceeded):
 		return "the server took too long to answer"
@@ -394,13 +395,20 @@ func (c *Client) authed(ctx context.Context, gen int, method, path string, hdr h
 		c.mu.Unlock()
 		return 0, nil, ErrNotLinked
 	}
+	if c.st.Unconfirmed && (method != http.MethodGet || path != "/api/v1/me" && path != "/api/v1/choices") {
+		// Linked by QR code, and the child hasn't said the learner is
+		// them (and seen the child-link notice): only who it is, and
+		// the notice, may be read. Nothing of the game's is sent.
+		c.mu.Unlock()
+		return 0, nil, ErrUnconfirmed
+	}
 	token, exp := c.st.Access, c.st.AccessExp
 	c.mu.Unlock()
 	if token == "" || c.now().Add(refreshEarly).After(exp) {
 		if err := c.refresh(ctx, gen); err != nil {
 			return 0, nil, err
 		}
-		token = c.AccessToken()
+		token = c.token()
 	}
 	status, h, err := c.call(ctx, method, path, token, hdr, body, out)
 	var e *Error
@@ -408,7 +416,7 @@ func (c *Client) authed(ctx context.Context, gen int, method, path string, hdr h
 		if err := c.refresh(ctx, gen); err != nil {
 			return status, h, err
 		}
-		status, h, err = c.call(ctx, method, path, c.AccessToken(), hdr, body, out)
+		status, h, err = c.call(ctx, method, path, c.token(), hdr, body, out)
 	}
 	return status, h, notLinkable(err)
 }

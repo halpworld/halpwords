@@ -281,6 +281,12 @@ type state struct {
 	MapsGame string          `json:",omitempty"`
 	// SSO is a sign-in with a school account on its way.
 	SSO *SSOCode `json:",omitempty"`
+	// Pair is a link by QR code on its way (pair.go).
+	Pair *PairCode `json:",omitempty"`
+	// Unconfirmed is set from a link by QR code until the child says the
+	// learner it linked to is them (ConfirmPair): nothing syncs until
+	// then.
+	Unconfirmed bool `json:",omitempty"`
 	// Runs are finished scored runs waiting to be sent for the rankings,
 	// and Boards the rankings the learner is on (ranks.go).
 	Runs   []qRun  `json:",omitempty"`
@@ -346,6 +352,10 @@ type Status struct {
 	// some of its features.
 	Outdated bool
 	Lists    int
+	// Unconfirmed is set after a link by QR code until the child says
+	// the learner is them (ConfirmPair) or not (Unlink). Nothing syncs
+	// until then.
+	Unconfirmed bool
 }
 
 // Client is the game's link to the server. It is safe to use from
@@ -436,6 +446,10 @@ type Client struct {
 	// aiOff is set when the server said Halpwords AI is off for this
 	// account, until the next sync reads the learner again.
 	aiOff bool
+
+	// pairOff: the server can't link by QR code (ErrPairOff). It is
+	// asked again after a restart, so a server upgrade is picked up.
+	pairOff bool
 
 	// audioRunning: audio packs are downloading in the background
 	// (audio.go); packFails are the lists whose pack failed.
@@ -541,11 +555,23 @@ func (c *Client) DeviceID() string {
 }
 
 // AccessToken is the device's access token, or "" when the game isn't
-// linked. It may have run out; the link refreshes it at its next sync.
+// linked, or was linked by QR code and the child hasn't confirmed who to
+// yet (ConfirmPair). It may have run out; the link refreshes it at its
+// next sync.
 func (c *Client) AccessToken() string {
 	if c == nil {
 		return ""
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.st.Unconfirmed {
+		return ""
+	}
+	return c.st.Access
+}
+
+// token is the access token as it is, for the link's own requests.
+func (c *Client) token() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.st.Access
@@ -572,6 +598,8 @@ func (c *Client) Status() Status {
 		Stopped:   c.st.Stopped && c.st.linked(),
 		Note:      c.note,
 		Lists:     len(c.st.Lists),
+
+		Unconfirmed: c.st.Unconfirmed && c.st.linked(),
 	}
 	if m := c.st.Me; m != nil {
 		s.Learner = m.Learner.DisplayName
@@ -825,7 +853,7 @@ func (c *Client) saveState() error {
 	if c.o.Store == nil {
 		return nil
 	}
-	if !c.st.linked() && c.st.NextSeq <= 1 && c.st.SSO == nil {
+	if !c.st.linked() && c.st.NextSeq <= 1 && c.st.SSO == nil && c.st.Pair == nil {
 		return c.o.Store.Remove(stateFile)
 	}
 	data, err := json.MarshalIndent(c.st, "", "  ")

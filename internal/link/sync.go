@@ -146,6 +146,10 @@ func (c *Client) Sync(ctx context.Context) error {
 		c.mu.Unlock()
 		return ErrNotLinked
 	}
+	if c.st.Unconfirmed {
+		c.mu.Unlock()
+		return ErrUnconfirmed // pair.go
+	}
 	gen := c.gen
 	c.busy = true
 	c.mu.Unlock()
@@ -527,7 +531,7 @@ func (c *Client) Close() {
 	stop, stopped := c.stop, c.stopped
 	c.stop = nil
 	play := c.play
-	linked, pending := c.st.linked(), c.q.len()
+	linked, pending := c.st.linked() && !c.st.Unconfirmed, c.q.len()
 	c.mu.Unlock()
 	if stop != nil {
 		close(stop)
