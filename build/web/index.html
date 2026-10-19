@@ -42,6 +42,11 @@
 <div id="hint">Click the game if the keys don't answer · F11 full screen · F3 sound · @VERSION@</div>
 <script src="wasm_exec.js"></script>
 <script>
+// A page brought back from the back/forward cache (Back, then Forward)
+// starts again from scratch: its frozen sound would play distorted
+// (#103). The game saved when the page was hidden (pagehide, #49), and
+// the reload saves again before it goes, so nothing is lost.
+window.addEventListener("pageshow", e => { if (e.persisted) location.reload(); });
 (async () => {
   const fill = document.getElementById("fill"), status = document.getElementById("status");
   // The size of the game before compression, filled in by the build, so
