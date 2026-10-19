@@ -273,3 +273,50 @@ func TestWriteLeavesNoTempFiles(t *testing.T) {
 		t.Fatalf("names %v", names)
 	}
 }
+
+func TestQuarantineAtTheRootInMemory(t *testing.T) {
+	UseMemory()
+	t.Cleanup(func() { memMu.Lock(); memory = nil; memMu.Unlock() })
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 6; i++ {
+		// Same second every time: the clash check must see the earlier copies.
+		if _, err := Root.quarantine("learners.json", []byte{byte('a' + i)}, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	left, _ := Root.List("")
+	if len(left) != KeepBad {
+		t.Fatalf("kept %v, want %d", left, KeepBad)
+	}
+	if names, _ := Folder("profiles/x").List(""); len(names) != 0 {
+		t.Fatalf("folder has %v", names)
+	}
+}
+
+func TestQuarantineKeepsTheCopyJustWrittenWhenTheClockIsBehind(t *testing.T) {
+	useTempDir(t)
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < KeepBad; i++ {
+		Root.quarantine("a.json", []byte("old"), at.Add(time.Duration(i)*time.Hour))
+	}
+	n, err := Root.quarantine("a.json", []byte("new"), at.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, err := Read(n); err != nil || string(d) != "new" {
+		t.Fatalf("the new copy is gone: %v", err)
+	}
+	if left, _ := Root.List(""); len(left) != KeepBad {
+		t.Fatalf("kept %v", left)
+	}
+}
+
+func TestWriteFastWrites(t *testing.T) {
+	useTempDir(t)
+	if err := Root.WriteFast("m.json", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := Read("m.json"); err != nil || string(d) != "x" {
+		t.Fatalf("%q %v", d, err)
+	}
+}

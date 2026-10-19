@@ -182,9 +182,6 @@ func (in *Incoming) Apply(st Store) error {
 			}
 		}
 	}
-	if err := in.removeLearners(st); err != nil {
-		return err
-	}
 	names := make([]string, 0, len(in.Files))
 	for name := range in.Files {
 		names = append(names, name)
@@ -195,6 +192,8 @@ func (in *Incoming) Apply(st Store) error {
 			return err
 		}
 	}
+	// Best effort, and last: the progress is in place whatever happens here.
+	in.removeLearners(st)
 	return in.Discard(st)
 }
 
@@ -202,8 +201,15 @@ func (in *Incoming) Apply(st Store) error {
 // in the incoming progress, with the files that do not move (ai.json, damaged
 // files, crash reports), so nothing is left that a rebuild from the
 // folders could bring back as an empty learner holding AI keys. Only
-// profiles/<id> folders are touched.
-func (in *Incoming) removeLearners(st Store) error {
+// profiles/<id> folders are touched. It is best effort: it reports the first
+// error but carries on, and Apply ignores it, so a file a virus scanner holds
+// can't leave a half-applied import.
+func (in *Incoming) removeLearners(st Store) (first error) {
+	note := func(err error) {
+		if err != nil && !errors.Is(err, fs.ErrNotExist) && first == nil {
+			first = err
+		}
+	}
 	keep := map[string]bool{}
 	for name := range in.Files {
 		if id, ok := profileID(name); ok {
@@ -223,20 +229,16 @@ func (in *Incoming) removeLearners(st Store) error {
 	gone := map[string]bool{}
 	for _, name := range all {
 		if id, ok := profileID(name); ok && !keep[id] {
-			if err := st.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return err
-			}
+			note(st.Remove(name))
 			gone[id] = true
 		}
 	}
 	if fr, ok := st.(folderRemover); ok {
 		for id := range gone {
-			if err := fr.RemoveFolder("profiles/" + id); err != nil {
-				return err
-			}
+			note(fr.RemoveFolder("profiles/" + id))
 		}
 	}
-	return nil
+	return first
 }
 
 // profileID returns the id of the learner whose folder holds the file name,

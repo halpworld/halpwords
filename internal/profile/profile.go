@@ -284,7 +284,11 @@ func (p *Profile) MemoryFor(code string) *words.Memory {
 	return m
 }
 
-func (p *Profile) write(name string, v any) error {
+func (p *Profile) write(name string, v any) error { return p.writeAs(name, v, true) }
+
+// writeAs writes v as file name; durable says whether to flush it to disk
+// (save.Folder.Write) or not (WriteFast).
+func (p *Profile) writeAs(name string, v any, durable bool) error {
 	if !p.disk {
 		return nil
 	}
@@ -292,15 +296,21 @@ func (p *Profile) write(name string, v any) error {
 	if err != nil {
 		return err
 	}
+	if !durable {
+		return p.folder.WriteFast(name, data)
+	}
 	return p.folder.Write(name, data)
 }
 
 // SaveSettings writes the settings.
 func (p *Profile) SaveSettings() error { return p.write(settingsFile, p.Settings) }
 
-// SaveMemory writes what the player knows of their words.
+// SaveMemory writes what the player knows of their words. It runs on every
+// answer, so it is not flushed to disk (an fsync costs a frame or more):
+// a power cut can lose the last answers. That stays so until the writes are
+// debounced (#53 item 5).
 func (p *Profile) SaveMemory() error {
-	return p.write(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory})
+	return p.writeAs(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory}, false)
 }
 
 // SaveFame writes the Hall of Fame.

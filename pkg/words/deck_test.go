@@ -223,3 +223,16 @@ func TestMissedIgnoresOutOfRangeIDs(t *testing.T) {
 		t.Fatalf("Review = %d", d.Review())
 	}
 }
+
+func TestMarkIgnoresOutOfRangeIDs(t *testing.T) {
+	d := NewDeck(testEntries(3), rand.New(rand.NewPCG(1, 2)))
+	d.Mark(9, false)
+	d.Mark(-1, false)
+	if d.Review() != 0 || len(d.review) != 0 {
+		t.Fatalf("review = %v", d.review)
+	}
+	d.Mark(1, false)
+	if !slices.Equal(d.Missed(), []int{1}) {
+		t.Fatalf("Missed = %v", d.Missed())
+	}
+}

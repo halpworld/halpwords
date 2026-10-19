@@ -406,3 +406,19 @@ func TestApplyKeepsLearnerListedWithoutFiles(t *testing.T) {
 		t.Error("a listed learner's own files were removed")
 	}
 }
+
+// failingFolders is a store whose folder removal always fails.
+type failingFolders struct{ memStore }
+
+func (failingFolders) RemoveFolder(string) error { return fs.ErrPermission }
+
+func TestApplyIgnoresFailedFolderCleanup(t *testing.T) {
+	st := failingFolders{memStore{"profiles/old/ai.json": []byte("k")}}
+	in := &Incoming{ID: "x", Files: map[string][]byte{"profiles/new/p.json": []byte("n")}}
+	if err := in.Apply(st); err != nil {
+		t.Fatalf("a failed cleanup failed the import: %v", err)
+	}
+	if string(st.memStore["profiles/new/p.json"]) != "n" {
+		t.Fatal("incoming not written")
+	}
+}

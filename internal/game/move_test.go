@@ -212,6 +212,9 @@ func TestBeginMoveDoesNotBlockTheGameLoop(t *testing.T) {
 	if d := time.Since(start); d > time.Second {
 		t.Fatalf("BeginMove took %v on a slow network", d)
 	}
+	if ctx.Link != nil {
+		t.Error("the old link is still reachable from the context")
+	}
 	select {
 	case <-done:
 		t.Fatal("finished before the server answered")
@@ -219,7 +222,10 @@ func TestBeginMoveDoesNotBlockTheGameLoop(t *testing.T) {
 	}
 	once.Do(func() { close(release) })
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
 	case <-time.After(20 * time.Second):
 		t.Fatal("never finished")
 	}

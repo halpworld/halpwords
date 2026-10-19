@@ -66,7 +66,7 @@ type importing struct {
 	bg   *ebiten.Image // drawn on first use
 	st   move.Store
 	in   *move.Incoming
-	done <-chan struct{}
+	done <-chan error
 }
 
 func newImporting(ctx *game.Context, st move.Store, in *move.Incoming) *importing {
@@ -75,8 +75,15 @@ func newImporting(ctx *game.Context, st move.Store, in *move.Incoming) *importin
 
 func (m *importing) Update(ctx *game.Context) error {
 	select {
-	case <-m.done:
-		applyMove(ctx, m.st, m.in)
+	case err := <-m.done:
+		if err != nil {
+			// The old link's tokens may be left: don't put the new progress
+			// on top of them. The game starts over on what is there.
+			ctx.Notify("Couldn't bring your progress")
+			ctx.ReloadSaves()
+		} else {
+			applyMove(ctx, m.st, m.in)
+		}
 		ctx.Replace(NewTitle(ctx))
 	default:
 	}

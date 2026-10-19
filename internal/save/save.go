@@ -150,12 +150,25 @@ func (f Folder) Read(name string) ([]byte, error) {
 
 // Write replaces the named file. On the desktop it writes a temporary
 // file first, so a crash part way through never leaves half a save.
-func (f Folder) Write(name string, data []byte) error {
+//
+// The write is durable: the file is flushed to disk before the rename, so a
+// power cut leaves the old file or the new one. That costs about 10 ms on
+// an SSD, more on a hard disk; use WriteFast for what is written often.
+func (f Folder) Write(name string, data []byte) error { return f.write(name, data, true) }
+
+// WriteFast is Write without the flush to disk: still a temporary file and
+// a rename, so a crash never leaves half a file, but a power cut can lose
+// the newest write or leave an empty file. It is for what is written on
+// every answer (word memory) until the writes are debounced (#53 item 5).
+// Settings, saves, learners.json and the link's files use Write.
+func (f Folder) WriteFast(name string, data []byte) error { return f.write(name, data, false) }
+
+func (f Folder) write(name string, data []byte, durable bool) error {
 	name = f.name(name)
 	memMu.Lock()
 	defer memMu.Unlock()
 	if memory == nil {
-		return diskWrite(name, data)
+		return diskWrite(name, data, durable)
 	}
 	memory[name] = append([]byte(nil), data...)
 	return nil
@@ -229,11 +242,17 @@ func (f Folder) quarantine(name string, data []byte, at time.Time) (string, erro
 	for _, o := range ours {
 		copies = append(copies, o.name)
 	}
-	for len(copies) > KeepBad {
-		if err := f.Remove(dir + copies[0]); err != nil {
+	// Trim the oldest, but never the copy just written, even when the
+	// clock is behind and it sorts first.
+	for i := 0; len(copies) > KeepBad && i < len(copies); {
+		if copies[i] == bad {
+			i++
+			continue
+		}
+		if err := f.Remove(dir + copies[i]); err != nil {
 			return dir + bad, err
 		}
-		copies = copies[1:]
+		copies = append(copies[:i], copies[i+1:]...)
 	}
 	return dir + bad, nil
 }
@@ -279,7 +298,7 @@ func (f Folder) List(dir string) ([]string, error) {
 	}
 	var names []string
 	for name := range memory {
-		if path.Dir(name) == dir {
+		if d := path.Dir(name); d == dir || (d == "." && dir == "") {
 			names = append(names, path.Base(name))
 		}
 	}
@@ -341,7 +360,14 @@ func (f Folder) RemoveAll() error {
 		}
 	}
 	if dir, err := f.Dir(); err == nil && f != Root {
-		return os.RemoveAll(dir) // the empty folders left
+		// The empty folders left. A virus scanner or indexer can hold one
+		// open for a moment on Windows; an empty folder that stays is not a
+		// failure, only files that remain are.
+		if err := os.RemoveAll(dir); err != nil {
+			if left, _ := f.All(); len(left) > 0 {
+				return err
+			}
+		}
 	}
 	return nil
 }

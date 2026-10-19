@@ -46,7 +46,7 @@ func diskModTime(name string) time.Time {
 
 // diskWrite replaces the named file. It writes a temporary file first, so a
 // crash part way through never leaves half a save.
-func diskWrite(name string, data []byte) error {
+func diskWrite(name string, data []byte, durable bool) error {
 	root, err := diskDir()
 	if err != nil {
 		return err
@@ -66,9 +66,11 @@ func diskWrite(name string, data []byte) error {
 	}
 	// Flush to disk before the rename, so after a power cut the file is
 	// the old one or the new one, never an empty one.
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
+	if durable {
+		if err := tmp.Sync(); err != nil {
+			tmp.Close()
+			return err
+		}
 	}
 	if err := tmp.Close(); err != nil {
 		return err
@@ -76,7 +78,9 @@ func diskWrite(name string, data []byte) error {
 	if err := os.Rename(tmp.Name(), filepath.Join(dir, path.Base(name))); err != nil {
 		return err
 	}
-	syncDir(dir)
+	if durable {
+		syncDir(dir)
+	}
 	return nil
 }
 
@@ -93,7 +97,7 @@ func syncDir(dir string) {
 // diskWritePrivate replaces the named file with one only the user can read, for
 // secrets such as API keys.
 func diskWritePrivate(name string, data []byte) error {
-	if err := diskWrite(name, data); err != nil {
+	if err := diskWrite(name, data, true); err != nil {
 		return err
 	}
 	dir, err := diskDir()

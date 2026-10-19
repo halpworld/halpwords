@@ -197,6 +197,9 @@ func (d *Deck) isRecent(i, n int) bool {
 
 // Mark records whether word i (from Next) was answered well enough.
 func (d *Deck) Mark(i int, ok bool) {
+	if i < 0 || i >= len(d.entries) {
+		return
+	}
 	for k, r := range d.review {
 		if r == i {
 			if ok {
