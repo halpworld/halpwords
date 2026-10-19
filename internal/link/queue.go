@@ -307,7 +307,9 @@ func (c *Client) writeQueue(try bool) error {
 		if try {
 			return errBusy
 		}
-		c.qMu.Lock() // the other write ends; then the queue is copied again
+		// Wait for the other write to end, then copy the queue again.
+		c.qMu.Lock()
+		//lint:ignore SA2001 the empty section is the wait
 		c.qMu.Unlock()
 	}
 	q := queue{
