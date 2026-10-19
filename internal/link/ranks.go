@@ -39,7 +39,10 @@ func (c *Client) Run(r compete.Run, listHash string) {
 		c.mu.Unlock()
 		return
 	}
-	c.st.Runs = append(c.st.Runs, qRun{Code: r.Share.Code(), Tally: r.Tally, Secs: r.Secs, ListHash: listHash, At: c.now()})
+	c.st.Runs = append(c.st.Runs, qRun{Code: r.Share.Code(), Tally: r.Tally, Secs: r.Secs, ListHash: listHash,
+		// Without the monotonic reading, so time asleep counts towards
+		// compete.DailySendWindow, as it does on the server.
+		At: c.now().Round(0)})
 	if n := len(c.st.Runs); n > maxRuns {
 		c.st.Runs = slices.Clone(c.st.Runs[n-maxRuns:])
 	}
@@ -62,7 +65,7 @@ func (c *Client) Run(r compete.Run, listHash string) {
 const codeDailyLate = "daily_late"
 
 // LateNote is the note (Status.Note) after a Daily run was dropped for being too late.
-const LateNote = "A Daily run was sent too late to count on the board."
+const LateNote = "Your Daily run reached the board too late to count. Your XP is safe!"
 
 // daily reports whether r is a Daily Dungeon run.
 func (r qRun) daily() bool {
@@ -77,27 +80,41 @@ func (r qRun) late(now time.Time) bool {
 	return r.daily() && compete.DailyTooLate(r.At, now)
 }
 
-// DailyWaiting reports whether the Daily Dungeon run with share code code
-// still waits to be sent, in time to count, while the game is linked and
-// the learner is on a board: the result screen then asks the child to go
-// online. It says nothing for a game that isn't linked or a learner with
-// no boards (rankings off).
-func (c *Client) DailyWaiting(code string) bool {
+// onDailyBoard reports whether the learner is on a Daily Dungeon board,
+// as the server last said. c.mu is held.
+func (c *Client) onDailyBoard() bool {
+	return slices.ContainsFunc(c.st.Boards, func(b Board) bool { return b.Kind == "daily" })
+}
+
+// DailyLeft reports how long the Daily Dungeon run with share code code
+// has left to reach the server and count (compete.DailySendWindow), and
+// whether it still waits to be sent, in time, while the game is linked,
+// syncing normally and the learner is on a Daily board: the result
+// screen then asks the child to go online. It says nothing for a game
+// that isn't linked, a paused account, a learner on no Daily board
+// (rankings off), or while a sync is under way.
+func (c *Client) DailyLeft(code string) (time.Duration, bool) {
 	if c == nil {
-		return false
+		return 0, false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.st.linked() || c.st.Stopped || len(c.st.Boards) == 0 {
-		return false
+	if !c.st.linked() || c.st.Stopped || c.suspended || c.busy || !c.onDailyBoard() {
+		return 0, false
 	}
 	now := c.now()
 	for _, r := range c.st.Runs {
 		if r.Code == code && r.daily() && !r.late(now) {
-			return true
+			return compete.DailySendWindow - now.Sub(r.At), true
 		}
 	}
-	return false
+	return 0, false
+}
+
+// DailyWaiting reports whether DailyLeft would warn about code.
+func (c *Client) DailyWaiting(code string) bool {
+	_, ok := c.DailyLeft(code)
+	return ok
 }
 
 // dailyWaits reports whether a Daily run waits in time to be sent, so
@@ -145,7 +162,7 @@ func ageSecs(at, now time.Time) int64 {
 // rankings off), is dropped; anything else stops until the next sync.
 // A Daily run past compete.DailySendWindow is dropped without being sent,
 // and one the server calls too late (daily_late) is dropped too; either
-// way the player gets LateNote. Only the board loses it: the run's XP and
+// way a learner on a Daily board gets LateNote. Only the board loses it: the run's XP and
 // word practice were kept when it ended. syncMu is held.
 func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 	for {
@@ -159,9 +176,10 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 			return nil
 		}
 		r := c.st.Runs[0]
-		if r.late(c.now()) {
+		now := c.now()
+		if r.late(now) {
 			c.st.Runs = c.st.Runs[1:]
-			c.st.LateDaily = true
+			c.st.LateDaily = c.st.LateDaily || c.onDailyBoard()
 			c.saveState()
 			c.mu.Unlock()
 			continue
@@ -169,7 +187,7 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 		c.mu.Unlock()
 
 		t := r.Tally
-		body := wireRun{ShareCode: r.Code, Secs: r.Secs, ListHash: r.ListHash, PlayedAt: r.At.UTC(), AgeS: ageSecs(r.At, c.now()),
+		body := wireRun{ShareCode: r.Code, Secs: r.Secs, ListHash: r.ListHash, PlayedAt: r.At.UTC(), AgeS: ageSecs(r.At, now),
 			Tally: wireTally{Damage: t.Damage, Perfect: t.Perfect, BestCombo: t.BestCombo, Bosses: t.Bosses,
 				Chests: t.Chests, Misses: t.Misses}}
 		_, _, err := c.authed(ctx, gen, http.MethodPost, "/api/v1/runs", nil, body, nil)
@@ -187,7 +205,7 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 		if len(c.st.Runs) > 0 && c.st.Runs[0] == r {
 			c.st.Runs = c.st.Runs[1:]
 		}
-		if e != nil && e.Code == codeDailyLate {
+		if e != nil && e.Code == codeDailyLate && c.onDailyBoard() {
 			c.st.LateDaily = true
 		}
 		c.saveState()

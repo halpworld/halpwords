@@ -64,7 +64,7 @@ func NewTitle(ctx *game.Context) game.Scene {
 		ctx.Notify("A grown-up linked this game. Open Account to finish.")
 	} else if ctx.Link.Status().Note == link.LateNote {
 		// A Daily run was dropped for being sent too late (Q127).
-		ctx.Notify(link.LateNote)
+		ctx.NotifyFor(link.LateNote, 5*60) // long enough to read
 		ctx.Link.ClearNote()
 	}
 	return t

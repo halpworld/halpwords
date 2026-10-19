@@ -49,7 +49,8 @@ const (
 // played_at) the server must receive it for it to count on the board
 // (owner decision Q127, 2026-10-19). A later Daily run is refused for the
 // board; the game keeps its own progress and stops sending it. Hardcore
-// runs have no window. The server also allows its usual clock skew.
+// runs have no window. The server measures it by the game's age_s when
+// sent, else by played_at.
 const DailySendWindow = 15 * time.Minute
 
 // DailyTooLate reports whether a Daily Dungeon run that ended at playedAt

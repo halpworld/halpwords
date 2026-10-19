@@ -681,12 +681,17 @@ if the server receives it within `compete.DailySendWindow` (15 minutes)
 of its `played_at` (`compete.DailyTooLate`, shared with halpwords-server,
 which answers 422 `daily_late`). Each run is sent with `age_s`, the whole seconds since it ended on the device clock, so the server judges the window by its own clock minus `age_s` and a wrong device clock cancels out. The game asks for a sync as soon as a
 Daily run is queued and, while one waits, never backs off longer than
-`link.SyncEvery`. If a linked learner on a board still has the run
-waiting two seconds after game over, the screen says "Go online in the
-next 15 minutes, / or it won't count on the board." A Daily run past the
+`link.SyncEvery`. Runs are the first thing a sync sends after the events.
+If a linked learner on a Daily board still has the run waiting two
+seconds after game over (checked once a second, not while a sync is under
+way or the account is paused), the screen says "Go online in 12 min so
+this / Daily run counts on the board!" with the minutes actually left
+(rounded up, at least 1). The run's end is kept as wall time, so time
+asleep counts. A Daily run past the
 window is dropped from the queue unsent, or when the server answers
-`daily_late`; the next title screen (and Account) says "A Daily run was
-sent too late to count on the board." Only the board submission is lost:
+`daily_late`; for a learner on a Daily board, the next title screen (for
+five seconds) and Account say "Your Daily run reached the board too late
+to count. Your XP is safe!" Only the board submission is lost:
 XP, word practice, the score and the Hall of Fame place stay. Hardcore
 runs are unchanged.
 

@@ -236,3 +236,71 @@ func TestRunAge(t *testing.T) {
 		}
 	}
 }
+
+// TestDailyLeft: the time left counts down; a paused account, a sync
+// under way or a learner on no Daily board gets no warning, and a late
+// run on no Daily board is dropped without a note.
+func TestDailyLeft(t *testing.T) {
+	f, c, _, clk := linked(t)
+	c.soon = func() {}
+	onBoard(t, f, c)
+	run := dailyRun(clk)
+	code := run.Share.Code()
+	c.Run(run, "0123456789abcdef")
+	clk.add(3 * time.Minute)
+	if left, ok := c.DailyLeft(code); !ok || left != 12*time.Minute {
+		t.Errorf("DailyLeft = %v, %v; want 12m, true", left, ok)
+	}
+	for _, set := range []func(bool){
+		func(v bool) { c.suspended = v },
+		func(v bool) { c.busy = v },
+	} {
+		c.mu.Lock()
+		set(true)
+		c.mu.Unlock()
+		if c.DailyWaiting(code) {
+			t.Error("warned while paused or syncing")
+		}
+		c.mu.Lock()
+		set(false)
+		c.mu.Unlock()
+	}
+
+	// Only a Hardcore board: no warning, and no note when it is dropped.
+	f.mu.Lock()
+	f.boards = []any{map[string]any{"scope": "class", "kind": "hardcore", "lang": "fr", "season": "week",
+		"period": "2026-W39", "entries": []any{}}}
+	f.mu.Unlock()
+	c.mu.Lock()
+	c.st.Boards = []Board{{Scope: "class", Kind: "hardcore"}}
+	c.mu.Unlock()
+	if c.DailyWaiting(code) {
+		t.Error("warned with no Daily board")
+	}
+	clk.add(compete.DailySendWindow)
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	c.mu.Lock()
+	n := len(c.st.Runs)
+	c.mu.Unlock()
+	if n != 0 || c.Status().Note != "" {
+		t.Errorf("%d runs left, note %q", n, c.Status().Note)
+	}
+}
+
+// TestRunTimeHasNoMonotonicReading: the end of a run is kept as wall
+// time, so time the computer slept counts towards the window.
+func TestRunTimeHasNoMonotonicReading(t *testing.T) {
+	_, c, _, clk := linked(t)
+	c.soon = func() {}
+	run := dailyRun(clk)
+	c.now = time.Now // carries a monotonic reading
+	c.Run(run, "0123456789abcdef")
+	c.mu.Lock()
+	at := c.st.Runs[0].At
+	c.mu.Unlock()
+	if at != at.Round(0) {
+		t.Errorf("At %v keeps a monotonic reading", at)
+	}
+}
