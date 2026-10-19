@@ -129,3 +129,12 @@ func TestREADMEExample(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestLenientCountsDecomposedAnswersInNFC(t *testing.T) {
+	// 60 letters typed as base + combining acute fit; 61 do not.
+	fits := strings.Repeat("e\u0301", MaxAnswerRunes)
+	l, probs := ParseLenient(strings.NewReader("dog = "+fits+"\ncat = "+fits+"e\u0301\n"), "t")
+	if len(l.Entries) != 1 || l.Entries[0].Prompt != "dog" || len(probs) != 1 {
+		t.Fatalf("entries %v, problems %v", l.Entries, probs)
+	}
+}

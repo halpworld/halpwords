@@ -63,7 +63,7 @@ func (d *Deck) Review() int { return len(d.Missed()) }
 func (d *Deck) Missed() []int {
 	out := make([]int, 0, len(d.review))
 	for i := len(d.review) - 1; i >= 0; i-- {
-		if id := d.review[i]; d.skip == nil || !d.skip[id] {
+		if id := d.review[i]; id >= 0 && id < len(d.entries) && (d.skip == nil || !d.skip[id]) {
 			out = append(out, id)
 		}
 	}

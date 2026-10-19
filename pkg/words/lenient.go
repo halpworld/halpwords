@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Problem is a line of a word list that ParseLenient skipped.
@@ -114,7 +116,7 @@ func ParseLenient(r io.Reader, source string) (*List, []Problem) {
 		case len(e.Answers) == 0:
 			skip(n, line, "nothing after the '='. Write it as: english = answer")
 			continue
-		case slices.ContainsFunc(e.Answers, func(a string) bool { return utf8.RuneCountInString(a) > MaxAnswerRunes }):
+		case slices.ContainsFunc(e.Answers, func(a string) bool { return utf8.RuneCountInString(norm.NFC.String(a)) > MaxAnswerRunes }):
 			skip(n, line, fmt.Sprintf("an answer is longer than %d letters, which is too long to type", MaxAnswerRunes))
 			continue
 		}
