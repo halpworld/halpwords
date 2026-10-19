@@ -89,6 +89,7 @@ every package below, and also `assets`.
 | `audio` | The sound effect synth, the music composer, per-world ambience. It only makes samples. | no |
 | `llm` | The AI service (see below). | no |
 | `link` | The client for halpwords-server (see below). | no |
+| `qr` | The QR code encoder for the link screen: byte mode, level M, versions 1–10. | no |
 | `report` | The pause menu's reports, queued on disk and sent to `POST /api/v1/reports`. | no |
 | `move` | Carries a web player's saves from one address to another. | no |
 | `playtest` | The web game's play-test of a quest fetched from its own website. | no |

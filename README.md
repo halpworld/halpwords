@@ -562,12 +562,22 @@ cent, often much less.
 
 A parent or teacher with an account on the Halpwords website can link the
 game to it, to see the player's progress and give them word lists. Choose
-**Account** on the title screen, then *Link to a grown-up's account*, and
-type the code the website shows. The Account screen says who can see the
-progress and when the game last synced; *Sync now* sends everything at once,
-and *Unlink* stops it (your progress stays, and assigned lists become your
-own). A learner linked with a pairing code is not locked on a shared
-computer, so anyone there can pick them in *Switch learner*.
+**Account** on the title screen, then *Link to a grown-up's account*. The
+game shows a QR code and an 8-character code. It asks the website for them
+only when the screen opens, and each works once, for 15 minutes. A grown-up
+scans the QR code with their phone, or goes to `/link` on the website and
+types the code, then presses *Link* next to the child. Press T to type a
+code from the website instead; with an older server the game goes straight
+there. Once linked, the game asks "Is this you?": Y yes, N unlinks, Esc
+later. It then shows who can see the progress. Nothing is sent until the
+child says yes. Esc keeps the link held, and Account shows *Finish linking*
+until they answer.
+
+The Account screen says who can see the progress and when the game last
+synced; *Sync now* sends everything at once, and *Unlink* stops it (your
+progress stays, and assigned lists become your own). A learner linked with
+a pairing code or QR code is not locked on a shared computer, so anyone
+there can pick them in *Switch learner*.
 
 Linked games sync every few minutes and when you quit. Assigned lists appear
 in **Word Lists** marked ◆, read-only. Settings a grown-up set are locked in
@@ -969,6 +979,7 @@ internal/typing/   text entry, Tab accents, Greek input mode
 internal/combat/   battle formulas and monster trait effects
 internal/llm/      optional AI: providers, keys, budget, Director, generated content (no Ebitengine dependency)
 internal/link/     optional link to a halpwords-server account: sync, assigned lists, Play Together
+internal/qr/       QR code encoder for the link screen (no Ebitengine dependency)
 internal/report/   the pause menu's reports, queued on disk and sent later
 internal/move/     carries web saves from one address to another
 internal/playtest/ the web game's play-test of a quest
