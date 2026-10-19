@@ -119,10 +119,14 @@ func (c *Client) link(ctx context.Context, s SignIn, seq int) error {
 
 // signedIn keeps the tokens of a new sign-in made the way way. c.mu is
 // held.
-func (c *Client) signedIn(t tokens, way string) {
+func (c *Client) signedIn(t tokens, way string) { c.signedInHeld(t, way, false) }
+
+// signedInHeld is signedIn, with the link held until the child confirms
+// it (Unconfirmed, pair.go) from the first save of link.json on.
+func (c *Client) signedInHeld(t tokens, way string, unconfirmed bool) {
 	c.releasePending()
 	c.gen++
-	c.st = state{NextSeq: c.st.NextSeq, Kept: c.st.Kept, LinkedAt: c.now(), Way: way}
+	c.st = state{NextSeq: c.st.NextSeq, Kept: c.st.Kept, LinkedAt: c.now(), Way: way, Unconfirmed: unconfirmed}
 	c.q = queue{}
 	c.dirty = true
 	// Used even if it can't be saved: the code is spent, and the game
@@ -145,6 +149,12 @@ func (c *Client) Sync(ctx context.Context) error {
 	if !c.st.linked() {
 		c.mu.Unlock()
 		return ErrNotLinked
+	}
+	if c.st.Unconfirmed {
+		// Shown on the Account screen until the child says who they are.
+		c.err = ErrUnconfirmed // pair.go
+		c.mu.Unlock()
+		return ErrUnconfirmed
 	}
 	gen := c.gen
 	c.busy = true
@@ -527,7 +537,7 @@ func (c *Client) Close() {
 	stop, stopped := c.stop, c.stopped
 	c.stop = nil
 	play := c.play
-	linked, pending := c.st.linked(), c.q.len()
+	linked, pending := c.st.linked() && !c.st.Unconfirmed, c.q.len()
 	c.mu.Unlock()
 	if stop != nil {
 		close(stop)

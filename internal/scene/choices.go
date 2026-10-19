@@ -394,6 +394,11 @@ func (c *Choices) updatePage(ctx *game.Context) {
 			c.step = chList
 		}
 	case chChild:
+		if input.Confirm() {
+			// "I've read it" lets a link by QR code sync; Esc keeps it
+			// held (account_qr.go).
+			noticeSeen(ctx)
+		}
 		switch {
 		case input.Confirm():
 			// Enter is "I've read it": recorded on the server, in the

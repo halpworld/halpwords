@@ -1108,6 +1108,35 @@ works again. A server without My choices answers 404: the menu item is
 hidden. Not done: an under-16 "ask your grown-up" button (the website
 has none yet), and the screen is English only like the rest of the game.
 
+*Now (#106, halpwords-server#153 part 3, done):* **Linking by QR code.**
+Account → *Link to a grown-up's account* asks the server for a code
+(`POST /api/v1/link/start`, PKCE S256) only when the screen opens, and
+shows it as a QR code (`internal/qr`: standard library only, byte mode,
+level M, versions 1–10, all 8 masks; 4–6 px a module with a 4-module
+quiet zone, only for an address on the server's own host and port, https
+when the server is) beside `ABCD-EFGH`, "or go to …/link" (the server's
+own `/link` when the address isn't on its host) and a countdown. It polls
+`/api/v1/link/token` only while the screen is open (interval, slow_down
++5 s, Retry-After, backoff on 5xx), forgets the code when the child
+leaves, and goes on with the code in `link.json` after a reload only
+when the screen opens again. A code that runs out is renewed by itself 3
+times, then Enter gets a new one; refused says so with Enter for a new
+code, not_linkable and suspended with only Esc and T, and a start the
+server couldn't answer with Enter (or R) to try again. A busy server
+(429 on start) goes straight to the typed code, saying so; the next visit
+tries a QR code again. A code that ran
+out isn't kept in `link.json`. T types a grown-up's code (the old flow);
+an older server (any 404 or 405 on start) goes straight there for the
+session. Once a grown-up approves, the link is held (`Unconfirmed` in
+`link.json`): the game asks "Linked to {name}. Is this you?" (from
+`GET /api/v1/me`), then shows the child-link notice, and only then
+syncs. Until then the link sends nothing of the game's: only `GET /me`
+and `GET /choices` are allowed, no sync, no AI token, no upload on
+quit. N unlinks and keeps everything here. Esc on "Is this you?" or on
+the notice keeps the link held: the status line and the title screen say
+to open Account, and Account shows *Finish linking*. Recorded session:
+`internal/link/testdata/session-link-qr.json`.
+
 ## 11. Cross-platform build and distribution
 
 | Target | How |

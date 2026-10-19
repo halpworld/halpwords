@@ -23,9 +23,11 @@ import (
 type acMode int
 
 const (
-	acBrowse acMode = iota
-	acCode          // typing a pairing code
-	acUnlink        // confirming an unlink
+	acBrowse  acMode = iota
+	acCode           // typing a pairing code
+	acUnlink         // confirming an unlink
+	acQR             // showing a QR code to link by (account_qr.go)
+	acConfirm        // "Is this you?" after a link by QR code
 )
 
 // acItem is an entry in the Account screen's menu.
@@ -38,9 +40,10 @@ const (
 	acBack
 	acSchool
 	acChoices
+	acFinish // "Is this you?" again, after Esc on it (account_qr.go)
 )
 
-var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school", "My choices"}
+var acLabels = [...]string{"Link to a grown-up's account", "Sync now", "Unlink", "Back", "Sign in at school", "My choices", "Finish linking"}
 
 // school reports whether the game signed in at school, with a login card,
 // the class code or a school account: it signs out rather than unlinks
@@ -78,6 +81,11 @@ type Account struct {
 	dueWait int
 	// linked is "Linked!", said again on the notice it opens.
 	linked string
+	// pair is the link by QR code on the screen (account_qr.go).
+	pair *acPair
+	// later: the child chose Esc on "Is this you?". The link stays held
+	// and Finish linking asks again.
+	later bool
 }
 
 // choicesPause is how long the Account screen waits for a key before it
@@ -90,6 +98,10 @@ func NewAccount(ctx *game.Context) game.Scene {
 }
 
 func (a *Account) items(ctx *game.Context) []acItem {
+	if ctx.Link.Status().Unconfirmed {
+		// Held: nothing syncs until the child says who they are.
+		return []acItem{acFinish, acUnlinkItem, acBack}
+	}
 	if ctx.Link.Linked() {
 		var items []acItem
 		if !ctx.Link.Status().Stopped {
@@ -122,6 +134,19 @@ func (a *Account) Update(ctx *game.Context) error {
 		return nil
 	}
 	st := ctx.Link.Status()
+	switch {
+	case a.mode == acQR:
+		a.updatePair(ctx)
+		return nil
+	case a.mode == acConfirm:
+		a.updateConfirm(ctx)
+		return nil
+	case st.Unconfirmed && !st.Signing && !a.later:
+		// Linked by QR code, and the child hasn't said who they are:
+		// that comes first, before My choices and any sync.
+		a.openConfirm(ctx)
+		return nil
+	}
 	if ch := a.checkChoices(ctx, st); ch != nil {
 		ctx.Replace(ch)
 		return nil
@@ -196,9 +221,11 @@ func (a *Account) Update(ctx *game.Context) error {
 				return nil
 			}
 			ctx.Sound.Play(audio.Select)
-			a.code = a.code[:0]
-			a.mode = acCode
-			a.say("", pal.Steel)
+			a.openPair(ctx)
+		case acFinish:
+			ctx.Sound.Play(audio.Select)
+			a.later = false
+			a.openConfirm(ctx)
 		case acSync:
 			ctx.Sound.Play(audio.Select)
 			st := ctx.Link.Status()
@@ -403,7 +430,12 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 		f.DrawShadow(dst, fit(f, s, w-32, 1), tx, ty, 1, c)
 		ty += 18
 	}
-	if st.Linked {
+	if st.Unconfirmed {
+		line("A grown-up linked this game to their account.", pal.Yellow)
+		line("Nothing is sent until you say it's you.", pal.Ice)
+		line("Choose Finish linking to check who it's linked to.", pal.Ice)
+		line("The game plays the same meanwhile.", pal.Steel)
+	} else if st.Linked {
 		name := st.Learner
 		if name == "" {
 			name = "a learner"
@@ -471,9 +503,16 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 			f.DrawCentered(dst, l, cx, game.ScreenH-44-(len(lines)-1-i)*18, 1, a.msgCol)
 		}
 	}
-	f.DrawShadow(dst, "↑/↓ choose   Enter select   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+	if a.mode == acBrowse {
+		// Each dialog draws its own keys.
+		f.DrawShadow(dst, "↑/↓ choose   Enter select   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
+	}
 
 	switch a.mode {
+	case acQR:
+		a.drawPair(dst, ctx)
+	case acConfirm:
+		a.drawConfirm(dst, ctx)
 	case acCode:
 		dx, dy := dialog(dst, ctx, "LINK THIS GAME", 420, 170)
 		f.DrawShadow(dst, "Type the code from the website:", dx, dy, 1, pal.Ice)

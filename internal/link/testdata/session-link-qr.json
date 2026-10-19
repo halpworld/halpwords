@@ -1,0 +1,51 @@
+{
+  "comment": "A recorded link by QR code (halpwords-server#153): the game starts, polls before the grown-up approves, polls too soon, and takes its tokens. Replayed against the game's client by internal/link/pair_test.go and validated against the server's schemas by halpwords-server's internal/api/schema_test.go. The code_challenge is the S256 of the code_verifier. Every secret here is made up.",
+  "exchanges": [
+    {
+      "name": "start",
+      "method": "POST",
+      "path": "/api/v1/link/start",
+      "request": {"code_challenge": "Sjgj3RsoM1cFRvzTRlJbAUCekLTVbU3Vi0ROXlMz4yE"},
+      "status": 200,
+      "response": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "user_code": "MKT4-HX7R",
+        "verification_uri": "https://halpwords.com/link",
+        "verification_uri_complete": "https://halpwords.com/link?c=MKT4HX7R",
+        "expires_in": 900,
+        "interval": 5
+      }
+    },
+    {
+      "name": "pending",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {"device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG", "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY", "name": "Halpwords on Windows"},
+      "status": 400,
+      "response": {"error": {"code": "authorization_pending", "message": "Waiting for a grown-up to approve this game."}}
+    },
+    {
+      "name": "slow_down",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {"device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG", "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY", "name": "Halpwords on Windows"},
+      "status": 400,
+      "response": {"error": {"code": "slow_down", "message": "Polling too often: wait longer between polls."}}
+    },
+    {
+      "name": "tokens",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {"device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG", "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY", "name": "Halpwords on Windows"},
+      "status": 200,
+      "response": {
+        "device_id": "dev_01JQRCODE0000000000000000",
+        "token_type": "Bearer",
+        "access_token": "hwd_fakeAccessTokenForTheRecordedSession0001",
+        "expires_in": 3600,
+        "refresh_token": "hwr_fakeRefreshTokenForTheRecordedSession001",
+        "refresh_expires_in": 7776000
+      }
+    }
+  ]
+}
