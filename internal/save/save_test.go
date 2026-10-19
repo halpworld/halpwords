@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -203,5 +204,72 @@ func TestRemoveAllDoesNotFollowSymlinks(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outside, "keep.txt")); err != nil {
 		t.Errorf("file outside was removed: %v", err)
+	}
+}
+
+func TestQuarantineKeepsCopiesAndCapsThem(t *testing.T) {
+	useTempDir(t)
+	Write("memory.json.bad", []byte("legacy"))
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	var names []string
+	for i := 0; i < 5; i++ {
+		// Two in the same second get different names.
+		n, err := Root.quarantine("memory.json", []byte{byte('a' + i)}, at.Add(time.Duration(i/2)*time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, n)
+	}
+	for i, n := range names {
+		for _, m := range names[i+1:] {
+			if n == m {
+				t.Fatalf("name %q used twice", n)
+			}
+		}
+	}
+	left, _ := List("")
+	if len(left) != KeepBad {
+		t.Fatalf("kept %v, want %d", left, KeepBad)
+	}
+	// The newest are the ones kept: c, d, e.
+	for i, want := range []string{"c", "d", "e"} {
+		var got string
+		for _, n := range names {
+			if d, err := Read(n); err == nil && string(d) == want {
+				got = n
+			}
+		}
+		if got == "" {
+			t.Errorf("copy %d (%s) was removed, left %v", i, want, left)
+		}
+	}
+	if _, err := Read("memory.json.bad"); err == nil {
+		t.Error("the oldest, legacy copy was not removed")
+	}
+}
+
+func TestQuarantineInAFolder(t *testing.T) {
+	useTempDir(t)
+	f := Folder("profiles/x")
+	if _, err := f.Quarantine("memory.json", []byte("bad")); err != nil {
+		t.Fatal(err)
+	}
+	if names, _ := f.List(""); len(names) != 1 || !strings.HasSuffix(names[0], ".bad") {
+		t.Fatalf("names %v", names)
+	}
+	if names, _ := Root.List(""); len(names) != 0 {
+		t.Fatalf("root has %v", names)
+	}
+}
+
+func TestWriteLeavesNoTempFiles(t *testing.T) {
+	useTempDir(t)
+	for i := 0; i < 3; i++ {
+		if err := Write("a/b.json", []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if names, _ := List("a"); len(names) != 1 || names[0] != "b.json" {
+		t.Fatalf("names %v", names)
 	}
 }

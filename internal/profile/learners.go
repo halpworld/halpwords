@@ -45,7 +45,7 @@ const (
 // their folder.
 func shared(name string) bool {
 	switch {
-	case name == learnersFile, name == learnersFile+".bad",
+	case name == learnersFile, strings.HasPrefix(name, learnersFile+".") && strings.HasSuffix(name, ".bad"),
 		strings.HasPrefix(name, ProfilesDir+"/"),
 		name == "ai.json", name == "ai-spend.json", strings.HasPrefix(name, "ai/"),
 		name == "crash.txt", strings.HasPrefix(name, "reports/"):
@@ -92,7 +92,7 @@ func (l *Learner) Folder() save.Folder { return save.Folder(ProfilesDir + "/" + 
 // against anyone who can copy learners.json: 3 of 9 pictures are only a few
 // hundred combinations, so the hash can be guessed offline in moments, and
 // the wrong-tries counter is in the same file. That is accepted (#62); the
-// README says so. Copies of learners.json kept to one side (learners.json.bad)
+// README says so. Copies of learners.json kept to one side (learners.json.<time>.bad)
 // hold the same hashes. Don't present the lock as more than that in the game.
 type Lock struct {
 	Kind string // "card" or "pictures"
@@ -190,7 +190,7 @@ func OpenLearners(root save.Folder) (*Learners, error) {
 	switch {
 	case err == nil:
 		if err := json.Unmarshal(data, ls); err != nil {
-			root.Write(learnersFile+".bad", data)
+			root.Quarantine(learnersFile, data)
 			ls.List, ls.Current = nil, ""
 			if err := ls.rebuild(); err != nil {
 				return nil, err

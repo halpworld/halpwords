@@ -64,10 +64,30 @@ func diskWrite(name string, data []byte) error {
 		tmp.Close()
 		return err
 	}
+	// Flush to disk before the rename, so after a power cut the file is
+	// the old one or the new one, never an empty one.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), filepath.Join(dir, path.Base(name)))
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, path.Base(name))); err != nil {
+		return err
+	}
+	syncDir(dir)
+	return nil
+}
+
+// syncDir flushes a folder's entries, so a rename in it survives a power
+// cut. Where the system can't (Windows), or refuses, the write is still
+// good: the file itself was synced.
+func syncDir(dir string) {
+	if d, err := os.Open(dir); err == nil {
+		d.Sync()
+		d.Close()
+	}
 }
 
 // diskWritePrivate replaces the named file with one only the user can read, for

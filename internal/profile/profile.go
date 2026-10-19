@@ -233,7 +233,7 @@ func New() *Profile { return &Profile{Memory: map[string]*words.Memory{}} }
 
 // Load reads the profile from the save package's current folder: the
 // learner playing. Missing files are empty. A damaged file is kept to one
-// side, with ".bad" after its name, and described in the errors; the rest
+// side, as name.<time>.bad (the newest few are kept), and described in the errors; the rest
 // of the profile still loads.
 func Load() (*Profile, []error) { return LoadFrom(save.Current()) }
 
@@ -252,7 +252,7 @@ func LoadFrom(f save.Folder) (*Profile, []error) {
 			if err = json.Unmarshal(data, v); err == nil {
 				return
 			}
-			f.Write(name+".bad", data)
+			f.Quarantine(name, data)
 		}
 		errs = append(errs, err)
 	}

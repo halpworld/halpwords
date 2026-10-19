@@ -9,6 +9,7 @@ package save
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -182,6 +183,81 @@ func (f Folder) Remove(name string) error {
 	return nil
 }
 
+// KeepBad is how many damaged copies of one file Quarantine keeps.
+const KeepBad = 3
+
+// Quarantine keeps a damaged file's contents to one side, as
+// "<name>.<UTC time>.bad", so a second damage never overwrites the first
+// copy. It keeps the newest KeepBad copies of that file (the older
+// "<name>.bad" of earlier versions counts as the oldest) and removes the
+// rest. It returns the name it wrote.
+func (f Folder) Quarantine(name string, data []byte) (string, error) {
+	return f.quarantine(name, data, time.Now().UTC())
+}
+
+func (f Folder) quarantine(name string, data []byte, at time.Time) (string, error) {
+	dir, base := path.Split(name)
+	stamp := at.Format("20060102T150405Z")
+	existing, err := f.List(dir)
+	if err != nil {
+		return "", err
+	}
+	have := map[string]bool{}
+	for _, n := range existing {
+		have[n] = true
+	}
+	bad := base + "." + stamp + ".bad"
+	for i := 2; have[bad]; i++ {
+		bad = fmt.Sprintf("%s.%s-%d.bad", base, stamp, i)
+	}
+	if err := f.Write(dir+bad, data); err != nil {
+		return "", err
+	}
+	have[bad] = true
+	var copies []string // oldest first: the old fixed name, then by time
+	if have[base+".bad"] {
+		copies = append(copies, base+".bad")
+	}
+	type stamped struct{ name, key string }
+	var ours []stamped
+	for n := range have {
+		if k, ok := badKey(base, n); ok {
+			ours = append(ours, stamped{n, k})
+		}
+	}
+	sort.Slice(ours, func(i, j int) bool { return ours[i].key < ours[j].key })
+	for _, o := range ours {
+		copies = append(copies, o.name)
+	}
+	for len(copies) > KeepBad {
+		if err := f.Remove(dir + copies[0]); err != nil {
+			return dir + bad, err
+		}
+		copies = copies[1:]
+	}
+	return dir + bad, nil
+}
+
+// badKey reports whether n is a copy Quarantine made of the file base,
+// "<base>.<stamp>[-k].bad", and a key that sorts copies oldest first.
+func badKey(base, n string) (string, bool) {
+	mid, ok := strings.CutPrefix(n, base+".")
+	if !ok {
+		return "", false
+	}
+	mid, ok = strings.CutSuffix(mid, ".bad")
+	if !ok || len(mid) < 16 || mid[8] != 'T' || mid[15] != 'Z' {
+		return "", false
+	}
+	k := 1
+	if rest := mid[16:]; rest != "" {
+		if _, err := fmt.Sscanf(rest, "-%d", &k); err != nil {
+			return "", false
+		}
+	}
+	return fmt.Sprintf("%s%09d", mid[:16], k), true
+}
+
 // ModTime returns when the named file was last written. It is the zero
 // time for a file that is not there, in a web browser (local storage
 // keeps no times) and while files are kept in memory.
@@ -195,7 +271,7 @@ func (f Folder) ModTime(name string) time.Time {
 // List returns the names of the files in the folder dir, sorted. A folder
 // that is not there is empty.
 func (f Folder) List(dir string) ([]string, error) {
-	dir = f.name(strings.TrimSuffix(dir, "/"))
+	dir = strings.TrimSuffix(f.name(strings.TrimSuffix(dir, "/")), "/")
 	memMu.Lock()
 	defer memMu.Unlock()
 	if memory == nil {
