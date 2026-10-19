@@ -11,6 +11,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/browser"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 )
@@ -213,5 +214,19 @@ func TestSignInSSOErrorTextClears(t *testing.T) {
 	s.showSSO(ctx, ctx.Link.PendingSSO())
 	if s.msg == "Old error." {
 		t.Fatal("old error shown with a new code")
+	}
+}
+
+// The sign-in code and the line under it don't touch, and both are inside
+// the window (#82).
+func TestSSOCodeLayout(t *testing.T) {
+	if end := ssoCodeY + ssoCodeScale*gfx.LineHeight; end+4 > ssoNoteY {
+		t.Errorf("the code ends at %d, too close to the line under it at %d", end, ssoNoteY)
+	}
+	if end := ssoNoteY + gfx.LineHeight; end+8 > ssoWindowH {
+		t.Errorf("the line under the code ends at %d, outside the window of %d", end, ssoWindowH)
+	}
+	if bottom := 56 + ssoWindowH; bottom > game.ScreenH-44 {
+		t.Errorf("the window ends at %d, over the message at %d", bottom, game.ScreenH-44)
 	}
 }

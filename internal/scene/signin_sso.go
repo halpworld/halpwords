@@ -160,16 +160,26 @@ func (s *SignIn) polled(ctx *game.Context, err error) {
 	}
 }
 
+// Where drawSSO puts the code and the line under it, from the window's
+// top: the code (three times the line height) ends above the line, with a
+// gap (#82), and the line ends inside the window.
+const (
+	ssoCodeY     = 100
+	ssoCodeScale = 3
+	ssoNoteY     = 156
+	ssoWindowH   = 184
+)
+
 // drawSSO draws the code and the address, and returns the key hint.
 func (s *SignIn) drawSSO(dst *ebiten.Image, ctx *game.Context, x, y, w int) string {
 	f := ctx.Font
 	cx := game.ScreenW / 2
-	gfx.Window(dst, x, y, w, 170)
+	gfx.Window(dst, x, y, w, ssoWindowH)
 	f.DrawShadow(dst, "Sign in with your school account at:", x+20, y+16, 1, pal.Ice)
 	addr := strings.TrimPrefix(strings.TrimPrefix(s.sso.URL, "https://"), "http://")
 	f.DrawCentered(dst, fit(f, addr, w-40, 2), cx, y+40, 2, pal.White)
 	f.DrawShadow(dst, "and type this code:", x+20, y+80, 1, pal.Ice)
-	f.DrawCentered(dst, s.sso.UserCode, cx, y+104, 3, pal.Yellow)
-	f.DrawShadow(dst, "The code runs out after a few minutes.", x+20, y+146, 1, pal.Steel)
+	f.DrawCentered(dst, s.sso.UserCode, cx, y+ssoCodeY, ssoCodeScale, pal.Yellow)
+	f.DrawShadow(dst, "The code runs out after a few minutes.", x+20, y+ssoNoteY, 1, pal.Steel)
 	return "Enter open the page again   Esc back"
 }
