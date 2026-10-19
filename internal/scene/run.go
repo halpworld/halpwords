@@ -140,10 +140,10 @@ func dailyDay(t time.Time) string { return t.Format(time.DateOnly) }
 
 // ranked reports whether a run finished at t may be sent for the
 // rankings. A Daily Dungeon counts only if it is finished on its own day,
-// the player's local date. The server takes a Daily whose date is still
-// today somewhere in the world and refuses any other (implausible_run,
-// halpwords-server#82), so one finished on its local day is taken while
-// the clock is right. A day that is not a date, as in an old save, never
+// the player's local date. The server takes a Daily only if its date was
+// still today somewhere when it was played (played_at), and refuses any
+// other (implausible_run, halpwords-server#82), so one finished on its
+// local day is taken while the clock is right. A day that is not a date, as in an old save, never
 // ranks.
 func (r *run) ranked(t time.Time) bool {
 	if r.mode != compete.Daily {
