@@ -81,7 +81,7 @@ func (c *Client) parkForUnlink() (keepFiles bool) {
 	q := c.q
 	err := c.park()
 	if err != nil && c.o.Store != nil && q.len() > 0 {
-		c.o.Store.Remove(queueFile)
+		c.removeQueueFile()
 		if err = c.writeParked(); err != nil {
 			// Put back what was removed (there is room for it). If
 			// that fails too, the events are only in the parked events
@@ -89,7 +89,7 @@ func (c *Client) parkForUnlink() (keepFiles bool) {
 			// stays as it is (pending).
 			data, merr := json.Marshal(q)
 			if merr == nil {
-				merr = c.o.Store.Write(queueFile, data)
+				merr = c.writeQueueFile(data)
 			}
 			_ = merr
 		}
@@ -113,7 +113,7 @@ func (c *Client) retryParked() (wrote bool, err error) {
 		// The queue file goes before the state is written unlinked: a
 		// game that stops in between must not start unlinked with the
 		// old queue.
-		c.o.Store.Remove(queueFile)
+		c.removeQueueFile()
 		if !c.st.linked() {
 			c.saveState()
 		}
@@ -136,7 +136,7 @@ func (c *Client) releasePending() {
 	if _, err := c.retryParked(); err == nil && !c.unlinkPending {
 		return
 	}
-	c.o.Store.Remove(queueFile)
+	c.removeQueueFile()
 	c.unlinkPending = false
 }
 

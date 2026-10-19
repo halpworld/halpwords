@@ -258,7 +258,7 @@ func (c *Client) dropStopped() {
 	c.st.Runs = nil
 	c.dirty = false
 	if c.o.Store != nil {
-		if err := c.o.Store.Remove(queueFile); err != nil {
+		if err := c.removeQueueFile(); err != nil {
 			c.dirty = true // Save tries again
 		}
 	}
@@ -593,17 +593,32 @@ func (c *Client) Unlink() {
 	linked := c.st.linked()
 	c.unlink(false)
 	play := c.play
+	if linked {
+		c.background(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), unlinkTimeout)
+			defer cancel()
+			c.tellUnlinked(ctx, access, refresh, exp)
+		})
+	}
 	c.mu.Unlock()
 	play.Leave()
-	if !linked {
+}
+
+// background runs f on its own goroutine, telling the server something
+// (an unlink). c.mu is held: Close ends c.life under c.mu before it waits
+// for c.bg, so a run counted here (bg.Add) is always counted before that
+// Wait starts, never while it waits (#82). One started after Close has
+// begun waiting isn't counted: it still runs, best effort, but nothing
+// waits for it.
+func (c *Client) background(f func()) {
+	if c.life.Err() != nil {
+		go f()
 		return
 	}
 	c.bg.Add(1)
 	go func() {
 		defer c.bg.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), unlinkTimeout)
-		defer cancel()
-		c.tellUnlinked(ctx, access, refresh, exp)
+		f()
 	}()
 }
 
@@ -633,17 +648,20 @@ func (c *Client) tellUnlinked(ctx context.Context, access, refresh string, exp t
 // revoke tells the server, in the background and best effort, to unlink
 // the device whose tokens t are, for tokens the game got but won't keep
 // (a sign-in the player gave up on while the answer was on its way). It
-// uses the existing POST /api/v1/unlink, as Unlink does.
+// uses the existing POST /api/v1/unlink, as Unlink does. c.mu is held
+// (background).
 func (c *Client) revoke(t tokens) {
 	exp := c.now().Add(time.Duration(t.ExpiresIn) * time.Second)
-	c.bg.Add(1)
-	go func() {
-		defer c.bg.Done()
+	c.background(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), unlinkTimeout)
 		defer cancel()
 		c.tellUnlinked(ctx, t.AccessToken, t.RefreshToken, exp)
-	}()
+	})
 }
+
+// lostNote is the note after lost: the link was lost, not undone by a
+// grown-up, and the game can be linked again.
+const lostNote = "The link to the account was lost. Your progress is still here: link again to sync."
 
 // lost unlinks the game because the server no longer takes its tokens.
 // The events not sent are kept for the learner (park), not forgotten.
@@ -658,7 +676,9 @@ func (c *Client) lost(gen int) {
 	// They must not be lost when they can't be written now (full local
 	// storage): see parkForUnlink.
 	c.unlink(c.parkForUnlink())
-	c.note = "This game was unlinked. Your progress is still here."
+	// Not unlinked by a grown-up: the server refused the tokens (a lost
+	// refresh, say), so say the link was lost (#84).
+	c.note = lostNote
 	play := c.play
 	c.mu.Unlock()
 	// As Unlink does: a game that isn't linked has no room to be in.
@@ -688,7 +708,7 @@ func (c *Client) unlink(keepFiles bool) {
 		c.stateUnsaved = false
 	}
 	if c.o.Store != nil && !keepFiles {
-		c.o.Store.Remove(queueFile)
+		c.removeQueueFile()
 	}
 	c.memories, c.packFails = map[string]*fetched{}, nil
 	c.err, c.failures, c.note, c.suspended = nil, 0, "", false

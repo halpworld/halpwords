@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/halpworld/halpwords/internal/profile"
@@ -413,6 +414,17 @@ type Client struct {
 	sleep   func(time.Duration) // between retries; nil waits for real (stopping with the context); tests make it instant
 
 	bg sync.WaitGroup // telling the server about an unlink
+
+	// qMu serialises writing and removing the queue file (#80). It is
+	// taken after c.mu, never before: writeQueue takes it under c.mu with
+	// its copy of the queue, then lets c.mu go while it writes. So a
+	// change made under c.mu after that copy (an unlink removing the file)
+	// reaches the disk after the write, never before it.
+	qMu sync.Mutex
+	// qFailed is the gen, plus one, of a queue write that failed when
+	// c.mu couldn't be taken again (TrySave): the next writeQueue marks
+	// the queue dirty if the gen is the same. Zero is none.
+	qFailed atomic.Int64
 
 	// life ends when the client is closed: the background sign-in and
 	// syncs stop with it, so none writes the learner's folder after it.

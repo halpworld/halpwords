@@ -644,7 +644,7 @@ func TestUnlinkNoteIsNeutral(t *testing.T) {
 	gen := c.gen
 	c.mu.Unlock()
 	c.lost(gen)
-	if got := c.Status().Note; got != "This game was unlinked. Your progress is still here." {
+	if got := c.Status().Note; got != "The link to the account was lost. Your progress is still here: link again to sync." {
 		t.Errorf("note %q", got)
 	}
 	if got := ErrUnlinked.Error(); strings.Contains(got, "website") {
