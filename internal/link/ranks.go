@@ -71,7 +71,8 @@ func (r qRun) daily() bool {
 }
 
 // late reports whether r is a Daily Dungeon run past
-// compete.DailySendWindow at now: the server would refuse it.
+// compete.DailySendWindow at now: the server would refuse it. Both times
+// are the device's clock, as age_s is, so a wrong clock cancels out.
 func (r qRun) late(now time.Time) bool {
 	return r.daily() && compete.DailyTooLate(r.At, now)
 }
@@ -126,6 +127,17 @@ type wireRun struct {
 	Secs      int       `json:"secs"`
 	ListHash  string    `json:"list_hash"`
 	PlayedAt  time.Time `json:"played_at"`
+	// AgeS is how long ago the run ended, in whole seconds on the
+	// device's own clock (now - PlayedAt, at least 0), so a device clock
+	// that is wrong doesn't make a Daily run late (Q127): the server
+	// takes its own now - AgeS as the time the run ended.
+	AgeS int64 `json:"age_s"`
+}
+
+// ageSecs is how long ago, in whole seconds on the device clock, a run
+// that ended at at is at now; never below 0.
+func ageSecs(at, now time.Time) int64 {
+	return max(0, int64(now.Sub(at)/time.Second))
 }
 
 // uploadRuns sends the finished runs, oldest first. A run the server
@@ -157,7 +169,7 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 		c.mu.Unlock()
 
 		t := r.Tally
-		body := wireRun{ShareCode: r.Code, Secs: r.Secs, ListHash: r.ListHash, PlayedAt: r.At.UTC(),
+		body := wireRun{ShareCode: r.Code, Secs: r.Secs, ListHash: r.ListHash, PlayedAt: r.At.UTC(), AgeS: ageSecs(r.At, c.now()),
 			Tally: wireTally{Damage: t.Damage, Perfect: t.Perfect, BestCombo: t.BestCombo, Bosses: t.Bosses,
 				Chests: t.Chests, Misses: t.Misses}}
 		_, _, err := c.authed(ctx, gen, http.MethodPost, "/api/v1/runs", nil, body, nil)

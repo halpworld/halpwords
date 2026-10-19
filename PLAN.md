@@ -679,7 +679,7 @@ minutes. So we can warn that they need to go online if they want this to
 be submitted or they might lose it". A Daily run counts on the board only
 if the server receives it within `compete.DailySendWindow` (15 minutes)
 of its `played_at` (`compete.DailyTooLate`, shared with halpwords-server,
-which answers 422 `daily_late`). The game asks for a sync as soon as a
+which answers 422 `daily_late`). Each run is sent with `age_s`, the whole seconds since it ended on the device clock, so the server judges the window by its own clock minus `age_s` and a wrong device clock cancels out. The game asks for a sync as soon as a
 Daily run is queued and, while one waits, never backs off longer than
 `link.SyncEvery`. If a linked learner on a board still has the run
 waiting two seconds after game over, the screen says "Go online in the

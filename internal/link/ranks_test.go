@@ -157,6 +157,10 @@ func TestDailySendWindow(t *testing.T) {
 	if len(runs) != 1 || runs[0]["share_code"] != hardcore.Share.Code() {
 		t.Fatalf("runs sent: %v", runs)
 	}
+	// age_s is the device-clock time since the run ended (1 s here).
+	if runs[0]["age_s"] != float64(1) {
+		t.Errorf("age_s = %v, want 1", runs[0]["age_s"])
+	}
 	if n := c.Status().Note; n != LateNote {
 		t.Fatalf("note %q", n)
 	}
@@ -216,5 +220,19 @@ func TestDailyLateFromServer(t *testing.T) {
 	}
 	if s := c.Status().Note; s != "" {
 		t.Errorf("note after implausible_run %q", s)
+	}
+}
+
+// TestRunAge: age_s is whole seconds on the device clock and never
+// negative, so a device clock set back can't send a run from the future.
+func TestRunAge(t *testing.T) {
+	end := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		after time.Duration
+		want  int64
+	}{{0, 0}, {999 * time.Millisecond, 0}, {90 * time.Second, 90}, {compete.DailySendWindow, 900}, {-time.Hour, 0}} {
+		if got := ageSecs(end, end.Add(c.after)); got != c.want {
+			t.Errorf("ageSecs after %v = %d, want %d", c.after, got, c.want)
+		}
 	}
 }
