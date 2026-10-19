@@ -23,9 +23,11 @@ import (
 type acMode int
 
 const (
-	acBrowse acMode = iota
-	acCode          // typing a pairing code
-	acUnlink        // confirming an unlink
+	acBrowse  acMode = iota
+	acCode           // typing a pairing code
+	acUnlink         // confirming an unlink
+	acQR             // showing a QR code to link by (account_qr.go)
+	acConfirm        // "Is this you?" after a link by QR code
 )
 
 // acItem is an entry in the Account screen's menu.
@@ -78,6 +80,8 @@ type Account struct {
 	dueWait int
 	// linked is "Linked!", said again on the notice it opens.
 	linked string
+	// pair is the link by QR code on the screen (account_qr.go).
+	pair *acPair
 }
 
 // choicesPause is how long the Account screen waits for a key before it
@@ -122,6 +126,19 @@ func (a *Account) Update(ctx *game.Context) error {
 		return nil
 	}
 	st := ctx.Link.Status()
+	switch {
+	case a.mode == acQR:
+		a.updatePair(ctx)
+		return nil
+	case a.mode == acConfirm:
+		a.updateConfirm(ctx)
+		return nil
+	case st.Unconfirmed && !st.Signing:
+		// Linked by QR code, and the child hasn't said who they are:
+		// that comes first, before My choices and any sync.
+		a.openConfirm(ctx)
+		return nil
+	}
 	if ch := a.checkChoices(ctx, st); ch != nil {
 		ctx.Replace(ch)
 		return nil
@@ -196,9 +213,7 @@ func (a *Account) Update(ctx *game.Context) error {
 				return nil
 			}
 			ctx.Sound.Play(audio.Select)
-			a.code = a.code[:0]
-			a.mode = acCode
-			a.say("", pal.Steel)
+			a.openPair(ctx)
 		case acSync:
 			ctx.Sound.Play(audio.Select)
 			st := ctx.Link.Status()
@@ -474,6 +489,10 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawShadow(dst, "↑/↓ choose   Enter select   Esc back", 8, game.ScreenH-20, 1, pal.Ash)
 
 	switch a.mode {
+	case acQR:
+		a.drawPair(dst, ctx)
+	case acConfirm:
+		a.drawConfirm(dst, ctx)
 	case acCode:
 		dx, dy := dialog(dst, ctx, "LINK THIS GAME", 420, 170)
 		f.DrawShadow(dst, "Type the code from the website:", dx, dy, 1, pal.Ice)
