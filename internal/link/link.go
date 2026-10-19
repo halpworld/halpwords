@@ -506,6 +506,9 @@ func Open(o Options) *Client {
 		if data, err := o.Store.Read(parkedFile); err == nil {
 			json.Unmarshal(data, &c.parked)
 		}
+		if c.dropExpiredPair() { // pair.go
+			c.saveState()
+		}
 		expired := c.expireParked()
 		if c.dropQueued() || expired {
 			c.writeParked()
@@ -853,6 +856,7 @@ func (c *Client) saveState() error {
 	if c.o.Store == nil {
 		return nil
 	}
+	c.dropExpiredPair() // pair.go
 	if !c.st.linked() && c.st.NextSeq <= 1 && c.st.SSO == nil && c.st.Pair == nil {
 		return c.o.Store.Remove(stateFile)
 	}

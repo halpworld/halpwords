@@ -209,8 +209,12 @@ func TestCapacity(t *testing.T) {
 		}
 		for _, n := range []int{want[v-1] + 1, want[v]} {
 			c, err := Encode(bytes.Repeat([]byte{'a'}, n))
-			if err != nil || c.Version() != v || c.Size() != 17+4*v {
-				t.Errorf("%d bytes: version %d (size %d), %v; want %d", n, c.Version(), c.Size(), err, v)
+			if err != nil {
+				t.Errorf("%d bytes: %v; want version %d", n, err, v)
+				continue
+			}
+			if c.Version() != v || c.Size() != 17+4*v {
+				t.Errorf("%d bytes: version %d (size %d), want %d", n, c.Version(), c.Size(), v)
 			}
 		}
 	}
@@ -227,8 +231,12 @@ func TestCapacity(t *testing.T) {
 func TestLinkAddress(t *testing.T) {
 	for _, s := range []string{"https://halpwords.com/link?c=ABCDEFGH", "https://test.halpwords.com/link?c=ABCDEFGH"} {
 		c, err := Encode([]byte(s))
-		if err != nil || c.Version() > 3 {
-			t.Errorf("%s: %v, version %d", s, err, c.Version())
+		if err != nil {
+			t.Errorf("%s: %v", s, err)
+			continue
+		}
+		if c.Version() > 3 {
+			t.Errorf("%s: version %d, want at most 3", s, c.Version())
 		}
 	}
 }

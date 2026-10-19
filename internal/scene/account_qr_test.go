@@ -2,6 +2,7 @@ package scene
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -238,14 +239,32 @@ func TestLinkQRConfirm(t *testing.T) {
 		t.Fatalf("name %q, %+v", a.pair.name, ctx.Link.Status())
 	}
 	drawAccount(ctx, a)
-	// Esc doesn't answer the question.
+	// Esc is "later": back to Account, the link still held, and Finish
+	// linking asks again.
 	acPress(t, ctx, a, ebiten.KeyEscape)
-	if a.mode != acConfirm {
-		t.Fatal("Esc left the question")
+	if a.mode != acBrowse || !ctx.Link.Status().Unconfirmed {
+		t.Fatalf("mode %d, %+v", a.mode, ctx.Link.Status())
 	}
+	if it := a.items(ctx); it[0] != acFinish {
+		t.Fatalf("items %v", it)
+	}
+	for range 30 {
+		a.Update(ctx)
+		ctx.Tick++
+	}
+	drawAccount(ctx, a)
+	if a.mode != acBrowse {
+		t.Fatal("asked again by itself after Esc")
+	}
+	acPress(t, ctx, a, ebiten.KeyEnter)
+	acUntil(t, ctx, a, "Is this you? from Finish linking", func() bool { return a.mode == acConfirm && a.pair.named })
 	// Leaving the screen and coming back asks again.
 	a = NewAccount(ctx).(*Account)
 	acUntil(t, ctx, a, "Is this you? again", func() bool { return a.mode == acConfirm && a.pair.named })
+	// The title screen says so, with Account chosen.
+	if ti := NewTitle(ctx).(*Title); ti.items[ti.sel] != titleAccount {
+		t.Errorf("title chose %d", ti.items[ti.sel])
+	}
 
 	next := ctx.TestScenes(a)
 	acPress(t, ctx, a, ebiten.KeyY)
@@ -303,8 +322,32 @@ func TestLinkQRNotMe(t *testing.T) {
 	}
 }
 
+// TestLinkQRNoticeEsc: Esc on the child-link notice isn't "I've read
+// it": the link stays held and nothing syncs.
+func TestLinkQRNoticeEsc(t *testing.T) {
+	site := &qrSite{approved: true}
+	ctx := qrContext(t, site)
+	a := openLink(t, ctx)
+	acUntil(t, ctx, a, "Is this you?", func() bool { return a.mode == acConfirm && a.pair.named })
+	next := ctx.TestScenes(a)
+	acPress(t, ctx, a, ebiten.KeyY)
+	var c *Choices
+	acUntil(t, ctx, a, "the notice", func() bool {
+		if s, ok := next().(*Choices); ok {
+			c = s
+		}
+		return c != nil
+	})
+	chPress(t, ctx, c, ebiten.KeyEscape)
+	time.Sleep(50 * time.Millisecond)
+	if !ctx.Link.Status().Unconfirmed || site.count("GET /api/v1/lists") != 0 {
+		t.Fatalf("Esc on the notice confirmed the link: %+v, %v", ctx.Link.Status(), site.sent())
+	}
+}
+
 // TestLinkQROver: a code the server says can't be used (the grown-up
-// who approved it was removed) says so, and Enter gets a new code.
+// who approved it was removed) says so, with no new code, since one
+// wouldn't help; a refused code gets a new one with Enter.
 func TestLinkQROver(t *testing.T) {
 	site := &qrSite{over: "not_linkable"}
 	ctx := qrContext(t, site)
@@ -313,14 +356,33 @@ func TestLinkQROver(t *testing.T) {
 	if !strings.Contains(a.pair.over, "can't be linked") || a.pair.code != nil || ctx.Link.PendingPair() != nil {
 		t.Fatalf("over %q, %+v", a.pair.over, a.pair.code)
 	}
+	if a.pair.end != pairBack {
+		t.Errorf("not_linkable offers %d", a.pair.end)
+	}
+	drawAccount(ctx, a)
+	acPress(t, ctx, a, ebiten.KeyEnter)
+	if a.pair.starting != nil || site.count("POST /api/v1/link/start") != 1 {
+		t.Fatal("Enter started a new code after not_linkable")
+	}
+
+	// Refused: Enter gets a new code.
+	site.mu.Lock()
+	site.over = "access_denied"
+	site.mu.Unlock()
+	acPress(t, ctx, a, ebiten.KeyEscape)
+	acPress(t, ctx, a, ebiten.KeyEnter)
+	acUntil(t, ctx, a, "refused", func() bool { return a.pair.over != "" })
+	if !strings.Contains(a.pair.over, "isn't the right game") || a.pair.end != pairNew {
+		t.Fatalf("refused: %q, %d", a.pair.over, a.pair.end)
+	}
 	drawAccount(ctx, a)
 	site.mu.Lock()
 	site.over = ""
 	site.mu.Unlock()
 	acPress(t, ctx, a, ebiten.KeyEnter)
 	acUntil(t, ctx, a, "a new code", func() bool { return a.pair.code != nil })
-	if n := site.count("POST /api/v1/link/start"); n != 2 {
-		t.Errorf("%d starts, want 2", n)
+	if n := site.count("POST /api/v1/link/start"); n != 3 {
+		t.Errorf("%d starts, want 3", n)
 	}
 	// T types a code instead, and forgets the QR code.
 	acPress(t, ctx, a, ebiten.KeyT)
@@ -344,5 +406,38 @@ func TestQRScale(t *testing.T) {
 	}
 	if countdown(14*time.Minute+59*time.Second+500*time.Millisecond) != "14:59" || countdown(-time.Second) != "0:00" {
 		t.Error("countdown")
+	}
+}
+
+// TestLinkQRStartFails: what a start the server couldn't answer says,
+// and that Enter or R tries again; T always types a code.
+func TestLinkQRStartFails(t *testing.T) {
+	ctx := qrContext(t, &qrSite{})
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{link.ErrSSOBusy, "The server is busy. Press Enter to try again in a moment."},
+		{&link.Error{Status: 429, Code: "rate_limited"}, "The server is busy."},
+		{&link.Error{Status: 400, Code: "invalid_request"}, ""},
+		{&link.Error{Status: 503}, "Can't reach the server."},
+		{errors.New("dial tcp: refused"), "Can't reach the server."},
+	} {
+		a := NewAccount(ctx).(*Account)
+		a.mode, a.pair = acQR, &acPair{}
+		a.started(ctx, pairStarted{err: c.err})
+		if a.pair.end != pairRetry || !strings.HasPrefix(a.pair.over, c.want) {
+			t.Errorf("%v: %q, %d", c.err, a.pair.over, a.pair.end)
+		}
+		if c.want == "" && strings.Contains(a.pair.over, "reach") {
+			t.Errorf("%v: %q", c.err, a.pair.over)
+		}
+		drawAccount(ctx, a)
+	}
+	// A resumed code waits before its first poll.
+	p := &acPair{}
+	p.show(&link.PairCode{UserCode: "MKT4-HX7R", Every: 5 * time.Second, Expires: time.Now().Add(time.Minute)}, 100)
+	if p.nextPoll <= 100 {
+		t.Errorf("first poll at tick %d", p.nextPoll)
 	}
 }

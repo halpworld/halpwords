@@ -57,6 +57,12 @@ func NewTitle(ctx *game.Context) game.Scene {
 	}
 	t.saved, t.hasSave = saveSummary()
 	t.build(ctx)
+	if ctx.Link.Status().Unconfirmed {
+		// A link by QR code waits for the child to say it's them
+		// (account_qr.go): Account is where they do.
+		t.sel = slices.Index(t.items, titleAccount)
+		ctx.Notify("A grown-up linked this game. Open Account to finish.")
+	}
 	return t
 }
 

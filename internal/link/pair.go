@@ -31,7 +31,7 @@ var (
 	ErrPairOff = errors.New("this server can't link by QR code: type a code instead")
 	// ErrUnconfirmed is a sync of a game linked by QR code before the
 	// child said the learner is them (ConfirmPair).
-	ErrUnconfirmed = errors.New("check who this game is linked to first")
+	ErrUnconfirmed = errors.New("a grown-up linked this game: open Account to finish linking")
 )
 
 // The pair flow's own error code: 404 link_off.
@@ -55,14 +55,16 @@ type PairCode struct {
 	// move.Exportable), is never logged or shown, and the copies the
 	// game hands out leave it out.
 	Verifier string `json:"code_verifier,omitempty"`
-	// ScanURL is what the QR code holds: VerifyURL when it is an http or
-	// https address on the server the game links to, else "" (the screen
+	// ScanURL is what the QR code holds: VerifyURL when it is an address
+	// on the server the game links to (sameHost), else "" (the screen
 	// then shows only the code and URL). Only in the copies handed out.
 	ScanURL string `json:"-"`
 }
 
 // public is a copy of the code for the screens: without the verifier,
-// with ScanURL.
+// with ScanURL, and with URL only when it is on the server's host (else
+// the server's own /link page, so the screen never sends a grown-up
+// anywhere else).
 func (p *PairCode) public(server string) *PairCode {
 	cp := *p
 	cp.Verifier = ""
@@ -70,21 +72,39 @@ func (p *PairCode) public(server string) *PairCode {
 	if sameHost(p.VerifyURL, server) {
 		cp.ScanURL = p.VerifyURL
 	}
+	if !sameHost(p.URL, server) {
+		cp.URL = ""
+		if s, err := url.Parse(server); err == nil && s.Host != "" {
+			cp.URL = (&url.URL{Scheme: s.Scheme, Host: s.Host, Path: "/link"}).String()
+		}
+	}
 	return &cp
 }
 
 // sameHost reports whether addr is an http or https address on server's
-// host: the QR code never sends a grown-up anywhere else.
+// host and port, and https when the server is: the QR code never sends
+// a grown-up anywhere else.
 func sameHost(addr, server string) bool {
 	a, err := url.Parse(addr)
 	if err != nil || a.Scheme != "https" && a.Scheme != "http" || a.User != nil || a.Host == "" {
 		return false
 	}
 	s, err := url.Parse(server)
-	if err != nil || s.Hostname() == "" {
+	if err != nil || s.Hostname() == "" || s.Scheme == "https" && a.Scheme != "https" {
 		return false
 	}
-	return strings.EqualFold(a.Hostname(), s.Hostname())
+	return strings.EqualFold(a.Hostname(), s.Hostname()) && port(a) == port(s)
+}
+
+// port is u's port, or its scheme's.
+func port(u *url.URL) string {
+	switch p := u.Port(); {
+	case p != "":
+		return p
+	case strings.EqualFold(u.Scheme, "https"):
+		return "443"
+	}
+	return "80"
 }
 
 // deviceStart is the server's answer to the start of a device flow
@@ -156,9 +176,14 @@ func (c *Client) StartPair(ctx context.Context) (*PairCode, error) {
 		Every: pollEvery(out.Interval)}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if ctx.Err() != nil || c.st.linked() {
+	switch {
+	case c.st.linked():
+		return nil, ErrLinked // linked another way meanwhile
+	case ctx.Err() != nil:
 		// Cancelled (Esc) while the answer was on its way: nobody can
-		// approve a code the game never showed.
+		// approve a code the game never showed. Pass a ctx that is only
+		// cancelled, not timed: each request has its own timeout, and an
+		// answer that comes in time is kept.
 		return nil, ErrPairExpired
 	}
 	c.st.Pair = code
@@ -174,10 +199,23 @@ func (c *Client) PendingPair() *PairCode {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.st.Pair == nil || c.st.linked() || !c.now().Before(c.st.Pair.Expires) {
+	if c.dropExpiredPair() {
+		c.saveState()
+	}
+	if c.st.Pair == nil || c.st.linked() {
 		return nil
 	}
 	return c.st.Pair.public(c.server)
+}
+
+// dropExpiredPair forgets a code that has run out, so link.json doesn't
+// keep it, and reports whether it did. c.mu is held.
+func (c *Client) dropExpiredPair() bool {
+	if c.st.Pair == nil || c.now().Before(c.st.Pair.Expires) {
+		return false
+	}
+	c.st.Pair = nil
+	return true
 }
 
 // CancelPair forgets the link by QR code on its way.
@@ -340,6 +378,10 @@ func (c *Client) ConfirmPair() bool {
 		return false
 	}
 	c.st.Unconfirmed = false
+	if errors.Is(c.err, ErrUnconfirmed) {
+		c.err = nil
+	}
 	c.stateUnsaved = c.saveState() != nil
+	c.changes++
 	return true
 }

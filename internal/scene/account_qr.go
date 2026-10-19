@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -25,6 +26,15 @@ import (
 // child leaves it. Once a grown-up has approved it, the game asks "Is
 // this you?" and shows the child-link notice before anything syncs.
 
+// pairEnd is what a code that ended lets the child do.
+type pairEnd int
+
+const (
+	pairRetry pairEnd = iota + 1 // Enter tries again (the server couldn't answer)
+	pairNew                      // Enter gets a new code
+	pairBack                     // only back, or type a code
+)
+
 // acPair is the Account screen's link by QR code, from the code to "Is
 // this you?".
 type acPair struct {
@@ -35,13 +45,13 @@ type acPair struct {
 	qr       *qr.Code // nil when there is nothing to scan
 	polling  chan error
 	nextPoll uint64
-	failed   int // polls in a row the server couldn't answer
-	renewed  int // codes started by themselves after one ran out
-	// over says why the code ended (Enter gets a new one); offline that
-	// the start couldn't reach the server (Enter types a code instead).
-	over    string
-	offline bool
-	note    string // a poll the server couldn't answer: it goes on
+	failed   int    // polls in a row the server couldn't answer
+	renewed  int    // codes started by themselves after one ran out
+	fresh    uint64 // "Here's a new code." shows until this tick
+	// over says why there is no code, and end what the child can do.
+	over string
+	end  pairEnd
+	note string // a poll the server couldn't answer: it goes on
 
 	// "Is this you?"
 	asking   chan nameResult
@@ -65,6 +75,9 @@ type nameResult struct {
 // runs out (3 x 15 minutes), before it waits for Enter.
 const pairRenewals = 3
 
+// freshTicks is how long "Here's a new code." shows: 3 seconds.
+const freshTicks = 180
+
 // openPair opens the QR screen: it goes on with a code still on its way
 // (a web game that reloaded), or asks for a new one.
 func (a *Account) openPair(ctx *game.Context) {
@@ -72,16 +85,17 @@ func (a *Account) openPair(ctx *game.Context) {
 	a.say("", pal.Steel)
 	if p := ctx.Link.PendingPair(); p != nil {
 		a.pair.show(p, ctx.Tick)
-		a.pair.nextPoll = ctx.Tick // ask at once
 		return
 	}
 	a.pair.start(ctx)
 }
 
-// start asks the server for a code, in the background.
+// start asks the server for a code, in the background. Its ctx is only
+// cancelled (the child left), never timed: each request has its own
+// timeout, and an answer that comes in time is kept.
 func (p *acPair) start(ctx *game.Context) {
-	p.code, p.qr, p.over, p.offline, p.note, p.failed = nil, nil, "", false, "", 0
-	bg, cancel := context.WithTimeout(context.Background(), askTimeout)
+	p.code, p.qr, p.over, p.end, p.note, p.failed = nil, nil, "", 0, "", 0
+	bg, cancel := context.WithCancel(context.Background())
 	out := make(chan pairStarted, 1)
 	p.stop, p.starting = cancel, out
 	go func(lc *link.Client) {
@@ -91,13 +105,19 @@ func (p *acPair) start(ctx *game.Context) {
 	}(ctx.Link)
 }
 
-// show takes a code to show.
+// show takes a code to show; the first poll is after the interval.
 func (p *acPair) show(code *link.PairCode, tick uint64) {
 	p.code, p.qr = code, nil
 	if code.ScanURL != "" {
 		p.qr, _ = qr.Encode([]byte(code.ScanURL))
 	}
 	p.nextPoll = tick + ticks(jitter(code.Every))
+}
+
+// ended shows why there is no code.
+func (p *acPair) ended(msg string, end pairEnd) {
+	p.code, p.qr, p.note, p.fresh = nil, nil, "", 0
+	p.over, p.end = msg, end
 }
 
 // leavePair gives up the code: the start on its way keeps nothing, a
@@ -132,20 +152,21 @@ func (a *Account) updatePair(ctx *game.Context) {
 	if a.mode != acQR {
 		return
 	}
+	retry := input.Confirm() || typed(ctx, 'r', ebiten.KeyR)
 	switch {
 	case input.Back():
 		ctx.Sound.Play(audio.Back)
 		a.leavePair(ctx)
 		a.mode = acBrowse
 		return
-	case typed(ctx, 't', ebiten.KeyT) || p.offline && input.Confirm():
+	case typed(ctx, 't', ebiten.KeyT):
 		// Type a grown-up's code: today's typed link.
 		ctx.Sound.Play(audio.Select)
 		a.leavePair(ctx)
 		a.code = a.code[:0]
 		a.mode = acCode
 		return
-	case p.starting == nil && (p.over != "" && input.Confirm() || p.offline && typed(ctx, 'r', ebiten.KeyR)):
+	case p.starting == nil && (p.end == pairRetry && retry || p.end == pairNew && input.Confirm()):
 		ctx.Sound.Play(audio.Select)
 		p.renewed = 0
 		p.start(ctx)
@@ -162,9 +183,9 @@ func (a *Account) updatePair(ctx *game.Context) {
 		out := make(chan error, 1)
 		p.polling = out
 		go func(lc *link.Client) {
-			bg, cancel := context.WithTimeout(context.Background(), askTimeout)
-			defer cancel()
-			out <- lc.PollPair(bg)
+			// Not timed beyond each request's own timeout: tokens that
+			// come back are kept, or revoked if the child left.
+			out <- lc.PollPair(context.Background())
 		}(ctx.Link)
 	}
 }
@@ -172,9 +193,13 @@ func (a *Account) updatePair(ctx *game.Context) {
 // started takes the server's answer to the start.
 func (a *Account) started(ctx *game.Context, r pairStarted) {
 	p := a.pair
+	var e *link.Error
 	switch {
 	case r.err == nil:
 		p.show(r.code, ctx.Tick)
+		if p.renewed > 0 {
+			p.fresh = ctx.Tick + freshTicks
+		}
 	case errors.Is(r.err, link.ErrPairOff):
 		// An older server: today's typed code, with nothing to explain.
 		a.pair = nil
@@ -185,12 +210,13 @@ func (a *Account) started(ctx *game.Context, r pairStarted) {
 		a.mode = acBrowse
 	default:
 		ctx.Sound.Play(audio.Wrong)
-		p.offline = true
-		var e *link.Error
-		if errors.As(r.err, &e) && e.RetryAfter > 0 {
-			p.over = upperFirst(link.Explain(r.err)) + "."
-		} else {
-			p.over = "Can't reach the server."
+		switch {
+		case errors.Is(r.err, link.ErrSSOBusy) || errors.As(r.err, &e) && e.Status == 429:
+			p.ended("The server is busy. Press Enter to try again in a moment.", pairRetry)
+		case errors.As(r.err, &e) && e.Status < 500:
+			p.ended(upperFirst(link.Explain(r.err))+".", pairRetry)
+		default:
+			p.ended("Can't reach the server.", pairRetry)
 		}
 	}
 }
@@ -226,10 +252,18 @@ func (a *Account) polled(ctx *game.Context, err error) {
 		}
 		p.nextPoll = ctx.Tick + ticks(jitter(wait))
 	default:
-		// Refused, not linkable, suspended: the code is over.
 		ctx.Sound.Play(audio.Wrong)
-		p.code, p.qr, p.note = nil, nil, ""
-		p.over = upperFirst(link.Explain(err)) + "."
+		switch {
+		case errors.Is(err, link.ErrPairRefused):
+			p.ended("Your grown-up said this isn't the right game. Ask them to try again.", pairNew)
+		case errors.Is(err, link.ErrSuspended):
+			// A new code wouldn't help.
+			p.ended("This account is paused. Ask your grown-up.", pairBack)
+		case errors.Is(err, link.ErrNotLinkable):
+			p.ended(upperFirst(link.Explain(err))+".", pairBack)
+		default:
+			p.ended(upperFirst(link.Explain(err))+".", pairNew)
+		}
 	}
 }
 
@@ -243,20 +277,14 @@ func (a *Account) pairExpired(ctx *game.Context) {
 		p.start(ctx)
 		return
 	}
-	p.code, p.qr, p.note = nil, nil, ""
-	p.over = "That code has run out."
+	p.ended("That code has run out.", pairNew)
 }
 
 // openConfirm asks the child whether the learner a grown-up linked the
 // game to is them. Nothing syncs until they say yes.
 func (a *Account) openConfirm(ctx *game.Context) {
-	if a.pair == nil {
-		a.pair = &acPair{}
-	}
-	a.mode = acConfirm
-	p := a.pair
-	p.code, p.qr, p.over, p.note = nil, nil, "", ""
-	p.askName(ctx)
+	a.mode, a.pair = acConfirm, &acPair{}
+	a.pair.askName(ctx)
 }
 
 func (p *acPair) askName(ctx *game.Context) {
@@ -268,6 +296,19 @@ func (p *acPair) askName(ctx *game.Context) {
 		defer cancel()
 		name, err := lc.PairedLearner(bg)
 		out <- nameResult{name: name, err: err}
+	}(ctx.Link)
+}
+
+// askChoices fetches My choices after yes, for the child-link notice.
+func (p *acPair) askChoices(ctx *game.Context) {
+	p.note = ""
+	out := make(chan chResult, 1)
+	p.checking = out
+	go func(lc *link.Client) {
+		bg, cancel := context.WithTimeout(context.Background(), askTimeout)
+		defer cancel()
+		ch, err := lc.Choices(bg)
+		out <- chResult{ch: ch, err: err}
 	}(ctx.Link)
 }
 
@@ -291,14 +332,13 @@ func (a *Account) updateConfirm(ctx *game.Context) {
 		case r := <-p.checking:
 			p.checking = nil
 			a.confirmed(ctx, r)
+			if a.mode != acConfirm {
+				return
+			}
 		default:
 		}
-		return
 	}
-	if p.asking != nil {
-		return
-	}
-	// Esc does nothing: the question needs a yes or a no.
+	waiting := p.asking != nil || p.checking != nil
 	switch {
 	case typedNo(ctx):
 		// Not them: unlinked, nothing sent, everything kept here.
@@ -306,32 +346,29 @@ func (a *Account) updateConfirm(ctx *game.Context) {
 		ctx.Link.Unlink()
 		a.pair, a.mode, a.sel = nil, acBrowse, 0
 		a.say("Unlinked. Nothing was sent. Your progress is still here.", pal.Lime)
+	case input.Back():
+		// Later: the link stays held, and Account asks again.
+		ctx.Sound.Play(audio.Back)
+		a.pair, a.mode, a.sel, a.later = nil, acBrowse, 0, true
+	case waiting:
 	case p.nameErr && input.Confirm():
 		ctx.Sound.Play(audio.Select)
 		p.askName(ctx)
-	case p.named && typedYes(ctx):
+	case p.named && (typedYes(ctx) || p.note != "" && input.Confirm()):
 		ctx.Sound.Play(audio.Select)
-		p.note = ""
-		out := make(chan chResult, 1)
-		p.checking = out
-		go func(lc *link.Client) {
-			bg, cancel := context.WithTimeout(context.Background(), askTimeout)
-			defer cancel()
-			ch, err := lc.Choices(bg)
-			out <- chResult{ch: ch, err: err}
-		}(ctx.Link)
+		p.askChoices(ctx)
 	}
 }
 
 // confirmed takes My choices after the child said yes: the child-link
-// notice, when due, shows before the first sync (it confirms the link,
-// noticeSeen); else the link is confirmed now and syncs.
+// notice, when due, shows before the first sync (Enter on it confirms
+// the link, noticeSeen); else the link is confirmed now and syncs.
 func (a *Account) confirmed(ctx *game.Context, r chResult) {
 	p := a.pair
 	if r.err != nil && !errors.Is(r.err, link.ErrNoChoices) {
 		// The notice can't be fetched: nothing syncs yet. Y tries again.
 		ctx.Sound.Play(audio.Wrong)
-		p.note = upperFirst(link.Explain(r.err)) + "."
+		p.note = upperFirst(link.Explain(r.err)) + ". Press Y to try again."
 		return
 	}
 	ctx.Sound.Play(audio.Perfect)
@@ -351,8 +388,9 @@ func (a *Account) confirmed(ctx *game.Context, r chResult) {
 	a.say(a.linked, pal.Lime)
 }
 
-// noticeSeen is the child past the child-link notice (or there was none
-// to show): a link by QR code the child said yes to starts syncing.
+// noticeSeen is the child past the child-link notice with "I've read
+// it" (or there was none to show): a link by QR code the child said yes
+// to starts syncing.
 func noticeSeen(ctx *game.Context) {
 	if ctx.Link.ConfirmPair() {
 		ctx.Link.SyncNow()
@@ -400,6 +438,28 @@ func countdown(left time.Duration) string {
 	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
+// wrap2 wraps s to width in at most two lines; a longer one is cut
+// short.
+func wrap2(f *gfx.Font, s string, width int) []string {
+	lines := wrapHard(f, s, width)
+	if len(lines) > 2 {
+		lines = []string{lines[0], strings.Join(lines[1:], " ")}
+	}
+	if len(lines) > 0 {
+		lines[len(lines)-1] = fit(f, lines[len(lines)-1], width, 1)
+	}
+	return lines
+}
+
+// drawLines draws lines from y, and returns the y after them.
+func drawLines(dst *ebiten.Image, f *gfx.Font, lines []string, x, y int, c color.Color) int {
+	for _, l := range lines {
+		f.DrawShadow(dst, l, x, y, 1, c)
+		y += 18
+	}
+	return y
+}
+
 // drawPair draws the QR screen, with its key hint.
 func (a *Account) drawPair(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
@@ -409,16 +469,14 @@ func (a *Account) drawPair(dst *ebiten.Image, ctx *game.Context) {
 	right := game.ScreenW/2 + w/2 - 20
 	hint := "T type a grown-up's code   Esc back"
 	switch {
-	case p.offline:
-		f.DrawShadow(dst, p.over, dx, dy, 1, pal.Rose)
-		f.DrawShadow(dst, "You can type a code from the website instead.", dx, dy+24, 1, pal.Ice)
-		hint = "Enter type a code   R try again   Esc back"
 	case p.over != "":
-		for i, l := range wrap(f, p.over, right-dx) {
-			f.DrawShadow(dst, l, dx, dy+i*18, 1, pal.Rose)
+		drawLines(dst, f, wrap2(f, p.over, right-dx), dx, dy, pal.Yellow)
+		switch p.end {
+		case pairRetry:
+			hint = "Enter try again   T type a grown-up's code   Esc back"
+		case pairNew:
+			hint = "Enter new code   T type a grown-up's code   Esc back"
 		}
-		f.DrawShadow(dst, "Press Enter for a new code.", dx, dy+60, 1, pal.Ice)
-		hint = "Enter new code   T type a grown-up's code   Esc back"
 	case p.code == nil:
 		f.DrawShadow(dst, "Getting a code…", dx, dy, 1, pal.Ice)
 	default:
@@ -429,54 +487,63 @@ func (a *Account) drawPair(dst *ebiten.Image, ctx *game.Context) {
 			}
 		}
 		tw := right - tx
-		y := dy
-		f.DrawShadow(dst, fit(f, "Ask a grown-up to scan this", tw, 1), tx, y, 1, pal.Yellow)
-		f.DrawShadow(dst, fit(f, "with their phone's camera,", tw, 1), tx, y+18, 1, pal.Ice)
+		y := drawLines(dst, f, []string{fit(f, "Ask a grown-up to scan this", tw, 1)}, tx, dy, pal.Yellow)
 		addr := strings.TrimPrefix(strings.TrimPrefix(p.code.URL, "https://"), "http://")
-		f.DrawShadow(dst, fit(f, "or go to "+addr, tw, 1), tx, y+36, 1, pal.Ice)
-		f.DrawShadow(dst, fit(f, "and type this code:", tw, 1), tx, y+54, 1, pal.Ice)
-		f.DrawShadow(dst, p.code.UserCode, tx, y+78, 3, pal.White)
+		y = drawLines(dst, f, append([]string{fit(f, "with their phone's camera,", tw, 1)},
+			wrap2(f, "or go to "+addr, tw)...), tx, y, pal.Ice)
+		y = drawLines(dst, f, []string{fit(f, "and type this code:", tw, 1)}, tx, y, pal.Ice)
+		f.DrawShadow(dst, p.code.UserCode, tx, y+6, 3, pal.White)
+		y += 6 + 3*gfx.LineHeight + 6
+		switch {
+		case p.note != "":
+			y = drawLines(dst, f, wrap2(f, p.note, tw), tx, y, pal.Tan)
+		case ctx.Tick < p.fresh:
+			y = drawLines(dst, f, []string{fit(f, "Here's a new code.", tw, 1)}, tx, y, pal.Lime)
+		default:
+			y = drawLines(dst, f, []string{fit(f, "Waiting for a grown-up to scan…", tw, 1)}, tx, y, pal.Ice)
+		}
 		left := time.Until(p.code.Expires)
 		c := pal.Steel
 		if left < time.Minute {
 			c = pal.Tan
 		}
-		f.DrawShadow(dst, "The code works for "+countdown(left), tx, y+130, 1, c)
-		if p.note != "" {
-			for i, l := range wrap(f, p.note, tw) {
-				f.DrawShadow(dst, l, tx, y+154+i*18, 1, pal.Tan)
-			}
-		}
+		f.DrawShadow(dst, fit(f, "The code works for "+countdown(left), tw, 1), tx, y, 1, c)
 	}
-	f.DrawShadow(dst, hint, dx, dy+h-48-24, 1, pal.Ash)
+	f.DrawShadow(dst, hint, dx, dy+h-48-24, 1, pal.Steel)
 }
 
 // drawConfirm draws "Is this you?".
 func (a *Account) drawConfirm(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	p := a.pair
-	const w = 480
-	dx, dy := dialog(dst, ctx, "IS THIS YOU?", w, 190)
+	const w, h = 480, 210
+	dx, dy := dialog(dst, ctx, "NEW LINK", w, h)
+	tw := w - 40
+	hint := "Y yes, that's me   N no, it isn't me   Esc later"
 	switch {
 	case p.asking != nil:
-		f.DrawShadow(dst, "A grown-up linked this game. Checking who to…", dx, dy, 1, pal.Ice)
+		drawLines(dst, f, wrap2(f, "A grown-up linked this game. Checking who to…", tw), dx, dy, pal.Ice)
+		hint = "N no, unlink   Esc later"
 	case p.nameErr:
-		f.DrawShadow(dst, "A grown-up linked this game, but the game", dx, dy, 1, pal.Ice)
-		f.DrawShadow(dst, "couldn't check who to. Nothing was sent.", dx, dy+18, 1, pal.Ice)
-		f.DrawShadow(dst, "Enter try again   N unlink", dx, dy+100, 1, pal.Ash)
+		drawLines(dst, f, wrap2(f, "A grown-up linked this game, but the game couldn't check who to. Nothing was sent.", tw),
+			dx, dy, pal.Yellow)
+		hint = "Enter try again   N no, unlink   Esc later"
 	default:
-		name := p.name
-		if name == "" {
-			name = "a learner with no name"
+		who := "Linked, but no name was set."
+		if p.name != "" {
+			who = "Linked to " + p.name + "."
 		}
-		f.DrawShadow(dst, fit(f, "Linked to "+name+".", w-40, 1), dx, dy, 1, pal.White)
-		f.DrawShadow(dst, "Is this you?", dx, dy+22, 2, pal.Yellow)
-		f.DrawShadow(dst, "Nothing is sent until you say yes.", dx, dy+56, 1, pal.Steel)
-		if p.checking != nil {
-			f.DrawShadow(dst, "Linking…", dx, dy+76, 1, pal.Ice)
-		} else if p.note != "" {
-			f.DrawShadow(dst, fit(f, p.note, w-40, 1), dx, dy+76, 1, pal.Tan)
+		y := drawLines(dst, f, wrap2(f, who, tw), dx, dy, pal.White)
+		f.DrawShadow(dst, "Is this you?", dx, y+4, 2, pal.Yellow)
+		y += 4 + 2*gfx.LineHeight + 6
+		y = drawLines(dst, f, []string{"Nothing is sent until you say yes."}, dx, y, pal.Steel)
+		switch {
+		case p.checking != nil:
+			drawLines(dst, f, []string{"Linking…"}, dx, y, pal.Ice)
+			hint = "N no, it isn't me   Esc later"
+		case p.note != "":
+			drawLines(dst, f, wrap2(f, p.note, tw), dx, y, pal.Yellow)
 		}
-		f.DrawShadow(dst, "Y yes, that's me   N no, unlink", dx, dy+100, 1, pal.Ash)
 	}
+	f.DrawShadow(dst, hint, dx, dy+h-48-24, 1, pal.Steel)
 }

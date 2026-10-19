@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/halpworld/halpwords/pkg/compete"
 )
 
 // session is a recorded exchange file (testdata/session-link-qr.json):
@@ -101,7 +103,9 @@ func TestPairRecordedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if code.UserCode != "MKT4-HX7R" || code.Every != 5*time.Second || !code.Expires.Equal(clk.now().Add(15*time.Minute)) ||
-		code.URL != "https://halpwords.com/link" || code.Verifier != "" {
+		code.URL != srv.URL+"/link" || code.Verifier != "" {
+		// The address shown is the server's own /link page: the
+		// recorded one is on another host than this test server.
 		t.Fatalf("code %+v", code)
 	}
 	if code.ScanURL != "" {
@@ -407,6 +411,11 @@ func TestSameHost(t *testing.T) {
 		{"javascript:alert(1)", "https://halpwords.com", false},
 		{"", "https://halpwords.com", false},
 		{"https://halpwords.com/link", "", false},
+		{"http://halpwords.com/link?c=X", "https://halpwords.com", false},
+		{"https://halpwords.com:8443/link?c=X", "https://halpwords.com", false},
+		{"https://halpwords.com:443/link?c=X", "https://halpwords.com", true},
+		{"https://localhost:8080/link?c=X", "http://localhost:8080", true},
+		{"http://localhost:9090/link?c=X", "http://localhost:8080", false},
 	} {
 		if got := sameHost(tc.addr, tc.server); got != tc.want {
 			t.Errorf("sameHost(%q, %q) = %v", tc.addr, tc.server, got)
@@ -529,5 +538,81 @@ func TestPairHeldFromFirstSave(t *testing.T) {
 	}
 	if linked == 0 {
 		t.Fatal("link.json never written with the tokens")
+	}
+}
+
+// TestPairHeldAfterRestart: the hold is in link.json, so a restart keeps
+// it. While held, nothing of the game's goes out: no sync, no ranked
+// runs, no play ticket, no token for reports; the status says to open
+// Account.
+func TestPairHeldAfterRestart(t *testing.T) {
+	f, c, st, clk, url := pairSetup(t)
+	ctx := context.Background()
+	if _, err := c.StartPair(ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.approved = true
+	f.mu.Unlock()
+	if err := c.PollPair(ctx); err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+
+	c2 := Open(Options{Store: st, Server: url, Now: clk.now})
+	c2.sleep = func(time.Duration) {}
+	defer c2.Close()
+	if !c2.Status().Unconfirmed || !c2.Linked() {
+		t.Fatal("the hold is lost after a restart")
+	}
+	c2.Run(compete.Run{Share: compete.Share{Lang: "fr", Seed: 7, Floor: 2, Score: 12}, Secs: 100}, "0123456789abcdef")
+	if err := c2.Sync(ctx); !errors.Is(err, ErrUnconfirmed) {
+		t.Fatalf("sync after a restart: %v", err)
+	}
+	if s := c2.Status(); !errors.Is(s.Err, ErrUnconfirmed) || !strings.Contains(Explain(s.Err), "open Account") {
+		t.Errorf("status err %v", s.Err)
+	}
+	if ok, err := c2.Play().session(ctx, 0); ok || !errors.Is(err, ErrUnconfirmed) {
+		t.Errorf("play ticket while held: %v, %v", ok, err)
+	}
+	if c2.AccessToken() != "" {
+		t.Error("a token for reports while held")
+	}
+	f.mu.Lock()
+	for _, p := range f.paths {
+		switch p {
+		case "POST /api/v1/link/start", "POST /api/v1/link/token":
+		default:
+			t.Errorf("sent %s while held", p)
+		}
+	}
+	f.mu.Unlock()
+	if !c2.ConfirmPair() || c2.Status().Err != nil {
+		t.Error("the status still says to open Account")
+	}
+}
+
+// TestPairExpiredDropped: a code that ran out isn't kept in link.json,
+// after a restart either.
+func TestPairExpiredDropped(t *testing.T) {
+	_, c, st, clk, url := pairSetup(t)
+	code, err := c.StartPair(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code.URL != url+"/link" {
+		t.Errorf("address %q, want the server's own /link page", code.URL)
+	}
+	if !st.has(stateFile) {
+		t.Fatal("the code isn't kept for a reload")
+	}
+	clk.add(16 * time.Minute)
+	c2 := Open(Options{Store: st, Server: url, Now: clk.now})
+	defer c2.Close()
+	if st.has(stateFile) {
+		t.Error("link.json keeps a code that ran out, after a restart")
+	}
+	if c.PendingPair() != nil || st.has(stateFile) {
+		t.Error("link.json keeps a code that ran out")
 	}
 }

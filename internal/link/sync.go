@@ -151,8 +151,10 @@ func (c *Client) Sync(ctx context.Context) error {
 		return ErrNotLinked
 	}
 	if c.st.Unconfirmed {
+		// Shown on the Account screen until the child says who they are.
+		c.err = ErrUnconfirmed // pair.go
 		c.mu.Unlock()
-		return ErrUnconfirmed // pair.go
+		return ErrUnconfirmed
 	}
 	gen := c.gen
 	c.busy = true
