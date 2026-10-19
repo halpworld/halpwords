@@ -941,6 +941,9 @@ func pictureImage(i int) *ebiten.Image {
 	return pictureImages[i]
 }
 
+// signInTop is where the sign-in screen's window starts, under the title.
+const signInTop = 56
+
 // Draw implements game.Scene.
 func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
@@ -952,7 +955,7 @@ func (s *SignIn) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 	f.DrawCentered(dst, fit(f, title, game.ScreenW-40, 3), cx, 8, 3, pal.Yellow)
 	const x, w = 60, game.ScreenW - 120
-	y := 56
+	y := signInTop
 	hint := "Enter next   Esc back"
 	switch s.step {
 	case siSSO:

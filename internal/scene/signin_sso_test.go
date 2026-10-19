@@ -226,7 +226,7 @@ func TestSSOCodeLayout(t *testing.T) {
 	if end := ssoNoteY + gfx.LineHeight; end+8 > ssoWindowH {
 		t.Errorf("the line under the code ends at %d, outside the window of %d", end, ssoWindowH)
 	}
-	if bottom := 56 + ssoWindowH; bottom > game.ScreenH-44 {
+	if bottom := signInTop + ssoWindowH; bottom > game.ScreenH-44 {
 		t.Errorf("the window ends at %d, over the message at %d", bottom, game.ScreenH-44)
 	}
 }

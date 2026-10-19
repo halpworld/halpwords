@@ -2,6 +2,8 @@ package link
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -31,11 +33,10 @@ func (s *slowQueueStore) Write(name string, data []byte) error {
 	return s.memStore.Write(name, data)
 }
 
-// A save writing the queue while the game is unlinked doesn't leave the
-// old learner's queue on disk after the unlink removed it (#80).
-func TestQueueNotWrittenAfterUnlink(t *testing.T) {
+// linkedOn links a client that keeps its files in st.
+func linkedOn(t *testing.T, st Store) *Client {
+	t.Helper()
 	f := newFake(t)
-	st := &slowQueueStore{memStore: newMemStore(), entered: make(chan struct{}), release: make(chan struct{})}
 	clk := &clock{t: time.Date(2026, 9, 26, 14, 5, 9, 0, time.UTC)}
 	c := Open(Options{Store: st, Server: f.srv.URL, OwnDir: "words", Now: clk.now})
 	t.Cleanup(c.Close)
@@ -47,6 +48,14 @@ func TestQueueNotWrittenAfterUnlink(t *testing.T) {
 	if err := c.Sync(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	return c
+}
+
+// A save writing the queue while the game is unlinked doesn't leave the
+// old learner's queue on disk after the unlink removed it (#80).
+func TestQueueNotWrittenAfterUnlink(t *testing.T) {
+	st := &slowQueueStore{memStore: newMemStore(), entered: make(chan struct{}), release: make(chan struct{})}
+	c := linkedOn(t, st)
 	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
 	st.mu.Lock()
 	st.armed = true
@@ -123,5 +132,100 @@ func TestUnlinkRevokeDuringClose(t *testing.T) {
 			c.mu.Unlock()
 		}()
 		wg.Wait()
+	}
+}
+
+// A save that finds another queue write on its way waits for it without
+// holding c.mu, so the game loop isn't held up meanwhile.
+func TestSaveWaitsForWriteWithoutLock(t *testing.T) {
+	st := &slowQueueStore{memStore: newMemStore(), entered: make(chan struct{}), release: make(chan struct{})}
+	c := linkedOn(t, st)
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	st.mu.Lock()
+	st.armed = true
+	st.mu.Unlock()
+	first := make(chan error, 1)
+	go func() { first <- c.Save() }()
+	<-st.entered
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Correct}) // dirty again
+	second := make(chan error, 1)
+	go func() { second <- c.Save() }()
+	time.Sleep(50 * time.Millisecond) // the second save waits for the first
+	free := make(chan struct{})
+	go func() { c.Status(); close(free) }()
+	select {
+	case <-free:
+	case <-time.After(2 * time.Second):
+		close(st.release)
+		t.Fatal("c.mu was held while a queue write was on its way")
+	}
+	close(st.release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-second; err != nil {
+		t.Fatal(err)
+	}
+	data, err := st.Read(queueFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var q queue
+	if err := json.Unmarshal(data, &q); err != nil {
+		t.Fatal(err)
+	}
+	n := len(q.Answers)
+	for _, tt := range q.Totals {
+		n += tt.Answers
+	}
+	if n != 2 {
+		t.Errorf("the queue file holds %d answers, want both", n)
+	}
+}
+
+// failQueueStore fails writes of the queue file while fail is set, calling
+// during first.
+type failQueueStore struct {
+	*memStore
+	mu     sync.Mutex
+	fail   bool
+	during func()
+}
+
+func (s *failQueueStore) Write(name string, data []byte) error {
+	s.mu.Lock()
+	fail, during := s.fail && name == queueFile, s.during
+	s.mu.Unlock()
+	if fail {
+		if during != nil {
+			during()
+		}
+		return errors.New("disk full")
+	}
+	return s.memStore.Write(name, data)
+}
+
+// A TrySave whose write fails while c.mu is taken still leaves the queue
+// to be written at the next save.
+func TestTrySaveFailedWriteStaysDirty(t *testing.T) {
+	st := &failQueueStore{memStore: newMemStore()}
+	c := linkedOn(t, st)
+	c.Answer("fr", own, "practice", words.Answer{Tier: words.Perfect})
+	st.mu.Lock()
+	st.fail = true
+	st.during = func() { c.mu.Lock() } // the game loop takes it meanwhile
+	st.mu.Unlock()
+	if err := c.TrySave(); err == nil {
+		t.Fatal("the failed write wasn't reported")
+	}
+	c.mu.Unlock()
+	st.mu.Lock()
+	st.fail, st.during = false, nil
+	st.mu.Unlock()
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if !st.has(queueFile) {
+		t.Error("the queue wasn't written at the next save")
 	}
 }

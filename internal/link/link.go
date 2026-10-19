@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/halpworld/halpwords/internal/profile"
@@ -420,6 +421,10 @@ type Client struct {
 	// change made under c.mu after that copy (an unlink removing the file)
 	// reaches the disk after the write, never before it.
 	qMu sync.Mutex
+	// qFailed is the gen, plus one, of a queue write that failed when
+	// c.mu couldn't be taken again (TrySave): the next writeQueue marks
+	// the queue dirty if the gen is the same. Zero is none.
+	qFailed atomic.Int64
 
 	// life ends when the client is closed: the background sign-in and
 	// syncs stop with it, so none writes the learner's folder after it.

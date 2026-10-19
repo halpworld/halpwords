@@ -277,29 +277,38 @@ func (c *Client) fold() {
 func (c *Client) saveQueue() error { return c.writeQueue(false) }
 
 // writeQueue writes the queue if it changed. With try, it gives up rather
-// than wait for the lock. The file is written without c.mu, but under qMu,
+// than wait for a lock. The file is written without c.mu, but under qMu,
 // taken before c.mu is let go: whatever changes the file under c.mu after
 // the copy here (removeQueueFile, writeQueueFile) waits for the write, so
-// an unlink can't be followed by a write of the old queue (#80).
+// an unlink can't be followed by a write of the old queue (#80). It never
+// waits for qMu while holding c.mu: when another write is on its way, it
+// lets c.mu go, waits for that write, and looks at the queue again, so
+// the game loop isn't held up by a slow disk.
 func (c *Client) writeQueue(try bool) error {
-	if try {
-		if !c.mu.TryLock() {
-			return errBusy
+	for {
+		if try {
+			if !c.mu.TryLock() {
+				return errBusy
+			}
+		} else {
+			c.mu.Lock()
 		}
-	} else {
-		c.mu.Lock()
-	}
-	if !c.dirty || c.o.Store == nil {
-		c.mu.Unlock()
-		return nil
-	}
-	if try {
-		if !c.qMu.TryLock() {
+		if v := c.qFailed.Swap(0); v != 0 && int(v-1) == c.gen {
+			c.dirty = true // a write that failed without the lock (try)
+		}
+		if !c.dirty || c.o.Store == nil {
 			c.mu.Unlock()
+			return nil
+		}
+		if c.qMu.TryLock() {
+			break
+		}
+		c.mu.Unlock()
+		if try {
 			return errBusy
 		}
-	} else {
-		c.qMu.Lock()
+		c.qMu.Lock() // the other write ends; then the queue is copied again
+		c.qMu.Unlock()
 	}
 	q := queue{
 		Answers:  append([]qAnswer(nil), c.q.Answers...),
@@ -321,15 +330,17 @@ func (c *Client) writeQueue(try bool) error {
 	}
 	c.qMu.Unlock() // before c.mu again: qMu is never held waiting for c.mu
 	if err != nil {
+		// Tried again at the next save, unless the link was undone
+		// meanwhile (the gen changed). Without the lock (try), the next
+		// writeQueue sets dirty from qFailed.
 		if try && !c.mu.TryLock() {
+			c.qFailed.Store(int64(gen) + 1)
 			return err
 		}
 		if !try {
 			c.mu.Lock()
 		}
 		if c.gen == gen {
-			// Tried again at the next save; a queue of a link since
-			// undone is not.
 			c.dirty = true
 		}
 		c.mu.Unlock()
