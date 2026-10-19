@@ -208,12 +208,14 @@ func (c *Client) syncAll(ctx context.Context, gen int) error {
 	// The rest don't depend on each other: one that fails (a bad list,
 	// an endpoint with a problem) doesn't hold back the others, which
 	// would leave finished runs unsent until the server refuses them as
-	// stale. The first error is reported. Rankings come late, so a
-	// server without them never holds back the rest, and audio packs
+	// stale. The first error is reported. Finished runs go first: a
+	// Daily run counts only within compete.DailySendWindow (Q127), and a
+	// server without rankings refuses them at once. The boards come late,
+	// so a server without them never holds back the rest, and audio packs
 	// last of all: they are the biggest downloads.
 	var first error
 	for _, stage := range []func(context.Context, int) error{
-		c.syncLists, c.syncQuests, c.syncMaps, c.syncMemory, c.uploadRuns, c.syncRanks, c.syncAudio,
+		c.uploadRuns, c.syncLists, c.syncQuests, c.syncMaps, c.syncMemory, c.syncRanks, c.syncAudio,
 	} {
 		err := stage(ctx, gen)
 		if err == nil {
@@ -498,6 +500,11 @@ func (c *Client) wait() time.Duration {
 	d := SyncEvery
 	for i := 0; i < c.failures && d < maxBackoff; i++ {
 		d *= 2
+	}
+	if c.dailyWaits() {
+		// A Daily run counts only within compete.DailySendWindow
+		// (Q127): keep trying at the usual pace while one waits.
+		return SyncEvery
 	}
 	return min(d, maxBackoff)
 }

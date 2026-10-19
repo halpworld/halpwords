@@ -26,6 +26,26 @@ const (
 	unrankedFloor = "Not ranked online: clear a floor first"
 )
 
+// The warning while a sent Daily Dungeon run still waits to reach the
+// server: it counts only within compete.DailySendWindow (Q127).
+// sendLateText gives its first line for the minutes left.
+const sendLate2 = "Daily run counts on the board!"
+
+func sendLateText(left time.Duration) string {
+	m := int((left + time.Minute - 1) / time.Minute) // rounded up
+	return fmt.Sprintf("Go online in %d min so this", max(1, m))
+}
+
+// sendLateAfter is how long the result screen waits for a Daily run to
+// be sent before it warns, in ticks: an online game sends it at once.
+// It then checks once a second.
+const sendLateAfter = 2 * 60
+
+// dailyLeft reports how long the Daily run with share code code has left
+// to be sent, and whether it still waits (link.Client.DailyLeft); tests
+// replace it.
+var dailyLeft = func(ctx *game.Context, code string) (time.Duration, bool) { return ctx.Link.DailyLeft(code) }
+
 // maxName is the longest name the Hall of Fame keeps.
 const maxName = 12
 
@@ -49,6 +69,14 @@ type GameOver struct {
 	unranked bool
 	// unrankedNote says why, on the screen.
 	unrankedNote string
+	// sentDaily is set for a Daily run sent for the rankings; ticks counts
+	// the screen's updates, and sendLate is set while the run still waits
+	// to be sent after sendLateAfter (the go-online warning), with left
+	// the time it has.
+	sentDaily bool
+	ticks     int
+	sendLate  bool
+	left      time.Duration
 
 	place   int    // where the run would go in the Hall of Fame, or 0
 	name    []rune // the name being typed for the Hall of Fame
@@ -92,6 +120,7 @@ func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
 		// Sent for the rankings when the game is linked; the server
 		// ranks it only if a grown-up put the learner on a board.
 		sendRun(ctx, run, compete.ListHash(r.deck.Entries()))
+		g.sentDaily = share.Daily
 	}
 	key := compete.TableKey(r.mode, r.lang.Code)
 	g.best = ctx.Profile.Fame.Best(key)
@@ -172,6 +201,11 @@ func (g *GameOver) OnClose(ctx *game.Context) {
 
 // Update implements game.Scene.
 func (g *GameOver) Update(ctx *game.Context) error {
+	if g.sentDaily {
+		if g.ticks++; g.ticks >= sendLateAfter && (g.ticks-sendLateAfter)%60 == 0 {
+			g.left, g.sendLate = dailyLeft(ctx, g.code)
+		}
+	}
 	if g.place > 0 && !g.entered {
 		for _, r := range ctx.Input.Chars {
 			if (unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' || r == '-' || r == '\'') && len(g.name) < maxName {
@@ -270,7 +304,13 @@ func (g *GameOver) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 	f.DrawCentered(dst, "Share code for your friends:", rcx, y+118, 1, pal.Tan)
 	f.DrawCentered(dst, g.code, rcx, y+136, f.FitScale(g.code, rw-20, 2), pal.White)
-	f.DrawCentered(dst, "Check codes in the Hall of Fame.", rcx, y+172, 1, pal.Ash)
+	switch {
+	case g.sendLate:
+		f.DrawCentered(dst, sendLateText(g.left), rcx, y+156, 1, pal.Yellow)
+		f.DrawCentered(dst, sendLate2, rcx, y+172, 1, pal.Yellow)
+	default:
+		f.DrawCentered(dst, "Check codes in the Hall of Fame.", rcx, y+172, 1, pal.Ash)
+	}
 	if g.unranked {
 		f.DrawCentered(dst, g.unrankedNote, rcx, y+152, 1, pal.Yellow)
 	}

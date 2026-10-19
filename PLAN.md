@@ -672,6 +672,29 @@ clear a floor first"; the server keeps none, from any game version (old
 games still send them). The run keeps its score, share code and local
 Hall of Fame place.
 
+*Now (owner decisions 2026-10-19, Q127, done):* decision (owner): "lets
+not allow this delayed submission. It should be submitted as soon as its
+done, if you are late then no go. Maybe a small grace perioid for some
+minutes. So we can warn that they need to go online if they want this to
+be submitted or they might lose it". A Daily run counts on the board only
+if the server receives it within `compete.DailySendWindow` (15 minutes)
+of its `played_at` (`compete.DailyTooLate`, shared with halpwords-server,
+which answers 422 `daily_late`). Each run is sent with `age_s`, the whole seconds since it ended on the device clock, so the server judges the window by its own clock minus `age_s` and a wrong device clock cancels out. The game asks for a sync as soon as a
+Daily run is queued and, while one waits, never backs off longer than
+`link.SyncEvery`. Runs are the first thing a sync sends after the events.
+If a linked learner on a Daily board still has the run waiting two
+seconds after game over (checked once a second, not while a sync is under
+way or the account is paused), the screen says "Go online in 12 min so
+this / Daily run counts on the board!" with the minutes actually left
+(rounded up, at least 1). The run's end is kept as wall time, so time
+asleep counts. A Daily run past the
+window is dropped from the queue unsent, or when the server answers
+`daily_late`; for a learner on a Daily board, the next title screen (for
+five seconds) and Account say "Your Daily run reached the board too late
+to count. Your XP is safe!" Only the board submission is lost:
+XP, word practice, the score and the Hall of Fame place stay. Hardcore
+runs are unchanged.
+
 *Now (M5, done):* `internal/compete` (now `pkg/compete`) (no Ebitengine dependency) holds the
 score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
 `halloffame.json`.

@@ -291,6 +291,10 @@ type state struct {
 	// and Boards the rankings the learner is on (ranks.go).
 	Runs   []qRun  `json:",omitempty"`
 	Boards []Board `json:",omitempty"`
+	// LateDaily is set when a Daily run was dropped for being sent too
+	// late (Q127), until the player has seen LateNote (ClearNote). It is
+	// kept so the note outlives a restart.
+	LateDaily bool `json:",omitempty"`
 	// Kept are the lists that stopped being assigned and were kept as the
 	// player's own: the own file name, by the list's server id (moveOut).
 	// Like NextSeq, it outlives the link.
@@ -422,6 +426,9 @@ type Client struct {
 	stop    chan struct{}
 	stopped chan struct{}
 	sleep   func(time.Duration) // between retries; nil waits for real (stopping with the context); tests make it instant
+	// soon asks for a sync soon, for a Daily run (Run); nil is SyncNow.
+	// Tests replace it to sync when they choose.
+	soon func()
 
 	bg sync.WaitGroup // telling the server about an unlink
 
@@ -604,6 +611,9 @@ func (c *Client) Status() Status {
 
 		Unconfirmed: c.st.Unconfirmed && c.st.linked(),
 	}
+	if s.Note == "" && c.st.LateDaily {
+		s.Note = LateNote
+	}
 	if m := c.st.Me; m != nil {
 		s.Learner = m.Learner.DisplayName
 		s.SeenBy = slices.Clone(m.SeenBy)
@@ -616,6 +626,10 @@ func (c *Client) Status() Status {
 func (c *Client) ClearNote() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.note == "" && c.st.LateDaily {
+		c.st.LateDaily = false
+		c.saveState()
+	}
 	c.note = ""
 }
 

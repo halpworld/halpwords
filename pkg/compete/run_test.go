@@ -3,6 +3,7 @@ package compete
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -67,5 +68,20 @@ func TestRanked(t *testing.T) {
 	daily := Share{Lang: "fr", Daily: true, Month: 9, Day: 22, Floor: 1, Score: 1000}
 	if daily.Ranked() {
 		t.Fatal("a Daily Dungeon on floor 1 is ranked")
+	}
+}
+
+func TestDailySendWindow(t *testing.T) {
+	if DailySendWindow != 15*time.Minute {
+		t.Fatalf("DailySendWindow = %v, the owner chose 15 minutes", DailySendWindow)
+	}
+	end := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		after time.Duration
+		late  bool
+	}{{0, false}, {14 * time.Minute, false}, {DailySendWindow, false}, {DailySendWindow + time.Second, true}, {time.Hour, true}} {
+		if got := DailyTooLate(end, end.Add(c.after)); got != c.late {
+			t.Errorf("DailyTooLate after %v = %v, want %v", c.after, got, c.late)
+		}
 	}
 }

@@ -171,7 +171,10 @@ func (c *Context) toggleFullscreen() {
 }
 
 // Notify shows a short message in the top corner for a moment.
-func (c *Context) Notify(msg string) { c.notice, c.noticeT = msg, 90 }
+func (c *Context) Notify(msg string) { c.NotifyFor(msg, 90) }
+
+// NotifyFor shows a message as Notify does, for ticks updates.
+func (c *Context) NotifyFor(msg string, ticks int) { c.notice, c.noticeT = msg, ticks }
 
 // Push shows s on top of the current scene.
 func (c *Context) Push(s Scene) {

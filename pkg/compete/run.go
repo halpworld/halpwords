@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -43,6 +44,20 @@ const (
 	MaxFloor = 10_000
 	MaxSecs  = 7 * 24 * 60 * 60
 )
+
+// DailySendWindow is how soon after a Daily Dungeon run ends (its
+// played_at) the server must receive it for it to count on the board
+// (owner decision Q127, 2026-10-19). A later Daily run is refused for the
+// board; the game keeps its own progress and stops sending it. Hardcore
+// runs have no window. The server measures it by the game's age_s when
+// sent, else by played_at.
+const DailySendWindow = 15 * time.Minute
+
+// DailyTooLate reports whether a Daily Dungeon run that ended at playedAt
+// is past DailySendWindow at now, so it would no longer count.
+func DailyTooLate(playedAt, now time.Time) bool {
+	return now.Sub(playedAt) > DailySendWindow
+}
 
 // Plausibility: the least time the game takes for a floor (walking to
 // the stairs, at least six cells at 150 ms) and for a typed word (the

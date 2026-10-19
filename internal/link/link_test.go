@@ -147,6 +147,7 @@ type fake struct {
 	// answer; nil answers 404, as a server with rankings off.
 	runs      []map[string]any
 	runStatus int
+	runCode   string // the error code with runStatus; "" is implausible_run
 	boards    []any
 
 	// stopped answers 403 not_linkable, reason progress_stopped, to all
@@ -433,7 +434,11 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		f.runs = append(f.runs, run)
 		if f.runStatus != 0 {
-			writeErr(w, f.runStatus, "implausible_run")
+			code := f.runCode
+			if code == "" {
+				code = "implausible_run"
+			}
+			writeErr(w, f.runStatus, code)
 			return
 		}
 		writeJSON(w, 201, map[string]any{"id": "run_1", "stored": true})

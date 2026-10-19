@@ -140,7 +140,8 @@ func TestQA3ListsErrorStillUploadsRun(t *testing.T) {
 }
 
 // A 401 that the refresh can't cure, on a stage after the first, stops
-// every stage after it (and runs are kept, not dropped).
+// every stage after it. Finished runs go first (Q127), so the run was
+// already sent.
 func TestQA3UnauthorizedInLaterStageStopsTheRest(t *testing.T) {
 	f, c, _, _ := linked(t)
 	f.mu.Lock()
@@ -153,8 +154,11 @@ func TestQA3UnauthorizedInLaterStageStopsTheRest(t *testing.T) {
 	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
 		t.Fatalf("sync: %v", err)
 	}
-	if f.count("/api/v1/memory") != mem || f.count("/api/v1/ranks") != ranks || f.count("/api/v1/runs") != runs {
+	if f.count("/api/v1/memory") != mem || f.count("/api/v1/ranks") != ranks {
 		t.Error("stages went on after a 401")
+	}
+	if f.count("/api/v1/runs") != runs+1 {
+		t.Error("the run was not sent before the other stages")
 	}
 }
 

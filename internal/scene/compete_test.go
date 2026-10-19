@@ -7,11 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
 	"github.com/halpworld/halpwords/internal/save"
+	"github.com/halpworld/halpwords/internal/unifont"
 	"github.com/halpworld/halpwords/pkg/compete"
 	"github.com/halpworld/halpwords/pkg/puzzle"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -467,5 +473,94 @@ func TestEnvSeedIsMaskedToSeedBits(t *testing.T) {
 	back, err := compete.SeedFromCode(r.seedCode())
 	if err != nil || back != r.seed {
 		t.Fatalf("seed code %q gives %#x (%v), want %#x", r.seedCode(), back, err, r.seed)
+	}
+}
+
+// A sent Daily run that still waits to reach the server after a moment
+// asks the child to go online within the minutes left of
+// compete.DailySendWindow (Q127), checking once a second; a sent one, a
+// Hardcore run or an unlinked game says nothing new.
+func TestDailySendLateWarning(t *testing.T) {
+	ctx := testContext(t)
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.Font = gfx.NewFont(face)
+	fr, _ := words.Lookup("fr")
+	oldSend, oldNow, oldLeft := sendRun, runNow, dailyLeft
+	t.Cleanup(func() { sendRun, runNow, dailyLeft = oldSend, oldNow, oldLeft })
+	sendRun = func(*game.Context, compete.Run, string) {}
+	runNow = func() time.Time { return time.Date(2026, time.September, 24, 9, 0, 0, 0, time.Local) }
+	waiting, left := true, 11*time.Minute+30*time.Second
+	var asked []string
+	dailyLeft = func(_ *game.Context, code string) (time.Duration, bool) {
+		asked = append(asked, code)
+		return left, waiting
+	}
+
+	end := func(setup runSetup) *GameOver {
+		r := newRun(ctx, fr, rpg.Knight, setup)
+		r.sound = &game.Sound{Muted: true}
+		r.depth = 3
+		g := newGameOver(ctx, r, true)
+		g.place, g.entered = 0, false // past the name prompt
+		return g
+	}
+	tick := func(g *GameOver, n int) {
+		for range n {
+			g.Update(ctx)
+		}
+	}
+	g := end(dailySetup(ctx, fr))
+	tick(g, sendLateAfter-1)
+	if g.sendLate || len(asked) != 0 {
+		t.Fatal("warned before the game had a chance to send the run")
+	}
+	tick(g, 1)
+	if !g.sendLate || len(asked) != 1 || asked[0] != g.code {
+		t.Fatalf("no warning while the run waits (asked %v)", asked)
+	}
+	if s := sendLateText(g.left); s != "Go online in 12 min so this" {
+		t.Errorf("first line %q", s)
+	}
+	g.Draw(ebiten.NewImage(game.ScreenW, game.ScreenH), ctx)
+	tick(g, 59)
+	if len(asked) != 1 {
+		t.Errorf("asked %d times within a second", len(asked))
+	}
+	waiting = false // sent, or the game isn't linked or has no Daily board
+	tick(g, 1)
+	if g.sendLate || len(asked) != 2 {
+		t.Error("still warned once the run was sent")
+	}
+
+	asked = nil
+	h := end(runSetup{mode: compete.Hardcore, seed: 4242, seeded: true})
+	waiting = true
+	tick(h, sendLateAfter+1)
+	if h.sendLate || len(asked) != 0 {
+		t.Error("warned for a Hardcore run")
+	}
+
+	for d, want := range map[time.Duration]string{
+		compete.DailySendWindow: "Go online in 15 min so this",
+		61 * time.Second:        "Go online in 2 min so this",
+		time.Minute:             "Go online in 1 min so this",
+		time.Second:             "Go online in 1 min so this",
+		0:                       "Go online in 1 min so this",
+	} {
+		if s := sendLateText(d); s != want {
+			t.Errorf("sendLateText(%v) = %q, want %q", d, s, want)
+		}
+	}
+	for _, s := range []string{sendLateText(compete.DailySendWindow), sendLate2} {
+		if w := ctx.Font.Width(s, 1); w > 314-20 {
+			t.Errorf("%q is %dpx wide, room for %d", s, w, 314-20)
+		}
+	}
+	// The late note fits the notice in the top corner.
+	if w := ctx.Font.Width(link.LateNote, 1); w > game.ScreenW-40 {
+		t.Errorf("LateNote is %dpx wide, room for %d", w, game.ScreenW-40)
 	}
 }
