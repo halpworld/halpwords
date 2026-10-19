@@ -234,8 +234,9 @@ the user's folder itself.
 | `link.json` | learner | The link's tokens (private). |
 | `link-queue.json`, `link-parked.json` | learner | Events waiting to be sent, and events kept for the same learner to link again. |
 
-A damaged file is kept beside the original with `.bad` added to its name,
-and the game starts empty for that file. The first start of a game from
+A damaged file is kept beside the original as `name.<UTC time>.bad` (the
+newest 3 copies of each file are kept), and the game starts empty for that
+file. The first start of a game from
 before learners moved its files into the first learner's folder.
 
 When the web game moves address, `move.Exportable` decides what travels:

@@ -181,3 +181,49 @@ func TestMoveSendsQueuedEventsBeforeUnlinking(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// BeginMove returns at once, even when the server is slow, and closes its
+// channel only when the folders are unlinked: the game loop stays alive
+// while it waits.
+func TestBeginMoveDoesNotBlockTheGameLoop(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		<-release // a slow network
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/token":
+			w.Write([]byte(`{"device_id":"d1","token_type":"Bearer","access_token":"a2","expires_in":900,"refresh_token":"r2","refresh_expires_in":99999}`))
+		case "/api/v1/events":
+			w.Write([]byte(`{"last_seq":1,"stored":1,"duplicates":0,"refused":[]}`))
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+	defer once.Do(func() { close(release) })
+	ctx, a, _ := computerWithLinkedLearner(t)
+	t.Setenv("HALPWORDS_SERVER", srv.URL)
+	a.Write("link-queue.json", []byte(`{"Answers":[{"Seq":1,"At":"2026-09-26T14:05:09+02:00","Lang":"fr","ListID":"lst","ListVersion":1,"Word":"dog = le chien","Mode":"practice","Tier":4}]}`))
+
+	start := time.Now()
+	done := ctx.BeginMove()
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("BeginMove took %v on a slow network", d)
+	}
+	select {
+	case <-done:
+		t.Fatal("finished before the server answered")
+	case <-time.After(100 * time.Millisecond):
+	}
+	once.Do(func() { close(release) })
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("never finished")
+	}
+	if _, err := a.Read("link.json"); err == nil {
+		t.Error("link.json is left")
+	}
+}

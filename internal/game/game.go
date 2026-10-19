@@ -309,9 +309,33 @@ func (c *Context) ReloadSaves() error {
 // still queued are sent first, and the server told after, in the
 // background, best effort and bounded (the link's own timeouts). The game
 // links again at its new address.
-func (c *Context) PrepareMove() {
+//
+// Closing and unlinking take as long as the network does, so the game
+// loop calls BeginMove and shows a busy screen until it is done.
+// PrepareMove waits for it.
+func (c *Context) PrepareMove() { <-c.BeginMove() }
+
+// BeginMove is PrepareMove started off the game loop. It ends the play
+// session at once, then closes the link and unlinks the folders in the
+// background. The result is closed when that is finished, and only then
+// may the incoming progress be applied. Nothing else may use the link
+// meanwhile.
+func (c *Context) BeginMove() <-chan struct{} {
 	c.EndSession()
-	c.Link.Close()
+	l := c.Link
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.prepareMove(l)
+	}()
+	return done
+}
+
+func (c *Context) prepareMove(l *link.Client) {
+	defer func() { recover() }() // off the game loop: a panic must not end the game
+	if l != nil {
+		l.Close()
+	}
 	names, _ := save.Root.All()
 	folders := []save.Folder{save.Root}
 	seen := map[string]bool{}

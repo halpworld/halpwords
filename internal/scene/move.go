@@ -52,14 +52,50 @@ func startWith(ctx *game.Context, st move.Store, frag string, leave func(string)
 		if len(here) > 0 {
 			return &moveAsk{st: st, in: in}
 		}
-		applyMove(ctx, st, in)
+		return newImporting(ctx, st, in)
 	}
 	return NewTitle(ctx)
 }
 
-// applyMove puts the incoming progress in place and loads it.
+// importing shows while the game lets go of the old progress before the
+// incoming progress replaces it: unlinking the folders sends what is queued
+// and can take 10 s or more on a slow network, so it runs off the game loop
+// (game.Context.BeginMove) and this screen keeps the frame alive. Then it
+// applies the progress, loads it and goes to the title screen.
+type importing struct {
+	bg   *ebiten.Image // drawn on first use
+	st   move.Store
+	in   *move.Incoming
+	done <-chan struct{}
+}
+
+func newImporting(ctx *game.Context, st move.Store, in *move.Incoming) *importing {
+	return &importing{st: st, in: in, done: ctx.BeginMove()}
+}
+
+func (m *importing) Update(ctx *game.Context) error {
+	select {
+	case <-m.done:
+		applyMove(ctx, m.st, m.in)
+		ctx.Replace(NewTitle(ctx))
+	default:
+	}
+	return nil
+}
+
+func (m *importing) Draw(dst *ebiten.Image, ctx *game.Context) {
+	if m.bg == nil {
+		m.bg = backdrop(6, 1.3)
+	}
+	gfx.DrawArt(dst, m.bg, 0, 0)
+	dots := strings.Repeat(".", int(ctx.Tick/20%4))
+	ctx.Font.DrawCentered(dst, "Importing"+dots, game.ScreenW/2, 150, 2, pal.Yellow)
+	ctx.Font.DrawCentered(dst, "Please wait. This can take a little while.", game.ScreenW/2, 184, 1, pal.Tan)
+}
+
+// applyMove puts the incoming progress in place and loads it, once the
+// game has let go of the old progress (game.Context.BeginMove).
 func applyMove(ctx *game.Context, st move.Store, in *move.Incoming) {
-	ctx.PrepareMove()
 	if err := in.Apply(st); err != nil {
 		ctx.Notify("Couldn't bring your progress: " + err.Error())
 		ctx.ReloadSaves() // the link was closed: start over on what is there
@@ -109,8 +145,10 @@ func (m *moveAsk) Update(ctx *game.Context) error {
 	case input.Confirm() || input.Pressed(ebiten.KeySpace):
 		ctx.Sound.Play(audio.Select)
 		if m.sel == 0 {
-			applyMove(ctx, m.st, m.in)
-		} else if err := m.in.Discard(m.st); err != nil {
+			ctx.Replace(newImporting(ctx, m.st, m.in))
+			return nil
+		}
+		if err := m.in.Discard(m.st); err != nil {
 			ctx.Notify("Couldn't forget the progress you brought: " + err.Error())
 		}
 		ctx.Replace(NewTitle(ctx))

@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/move"
@@ -60,5 +61,27 @@ func TestStartFetchesTheNextPart(t *testing.T) {
 	}
 	if went != move.OldURL+"#send=2" {
 		t.Fatalf("went to %q", went)
+	}
+}
+
+// Progress brought to an empty browser goes through the busy Importing
+// screen, so the unlinking runs off the game loop.
+func TestStartImportsOnABusyScreen(t *testing.T) {
+	useTempDir(t)
+	payload, _ := move.Encode(map[string][]byte{"adventure.json": []byte("hero")})
+	frag := move.Split(payload, move.MaxPart)[0].Fragment()
+	st := memStore{}
+	s := startWith(&game.Context{}, st, frag, noLeave(t))
+	imp, ok := s.(*importing)
+	if !ok {
+		t.Fatalf("got %T", s)
+	}
+	if len(st["adventure.json"]) != 0 {
+		t.Fatal("applied before the old progress was let go")
+	}
+	select {
+	case <-imp.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("never finished preparing")
 	}
 }
