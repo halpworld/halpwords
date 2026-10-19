@@ -48,14 +48,14 @@ func diskRead(name string) ([]byte, error) {
 func diskModTime(string) time.Time { return time.Time{} }
 
 // diskWrite replaces the named file.
-func diskWrite(name string, data []byte) error {
+func diskWrite(name string, data []byte, _ bool) error {
 	_, err := storage("setItem", prefix+name, string(data))
 	return err
 }
 
 // diskWritePrivate replaces the named file. Local storage belongs to the page,
 // so it is as private as a browser allows.
-func diskWritePrivate(name string, data []byte) error { return diskWrite(name, data) }
+func diskWritePrivate(name string, data []byte) error { return diskWrite(name, data, true) }
 
 // diskRemove deletes the named file.
 func diskRemove(name string) error {
@@ -69,7 +69,10 @@ func diskList(dir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	want := prefix + strings.TrimSuffix(dir, "/") + "/"
+	want := prefix
+	if dir = strings.TrimSuffix(dir, "/"); dir != "" {
+		want += dir + "/"
+	}
 	var names []string
 	for i := 0; i < ls.Get("length").Int(); i++ {
 		k, err := storage("key", i)

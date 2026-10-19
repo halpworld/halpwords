@@ -4,8 +4,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -179,5 +182,132 @@ func TestMoveSendsQueuedEventsBeforeUnlinking(t *testing.T) {
 			t.Fatalf("calls: %s", got)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// BeginMove returns at once, even when the server is slow, and closes its
+// channel only when the folders are unlinked: the game loop stays alive
+// while it waits.
+func TestBeginMoveDoesNotBlockTheGameLoop(t *testing.T) {
+	release := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		<-release // a slow network
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/token":
+			w.Write([]byte(`{"device_id":"d1","token_type":"Bearer","access_token":"a2","expires_in":900,"refresh_token":"r2","refresh_expires_in":99999}`))
+		case "/api/v1/events":
+			w.Write([]byte(`{"last_seq":1,"stored":1,"duplicates":0,"refused":[]}`))
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+	defer once.Do(func() { close(release) })
+	ctx, a, _ := computerWithLinkedLearner(t)
+	t.Setenv("HALPWORDS_SERVER", srv.URL)
+	a.Write("link-queue.json", []byte(`{"Answers":[{"Seq":1,"At":"2026-09-26T14:05:09+02:00","Lang":"fr","ListID":"lst","ListVersion":1,"Word":"dog = le chien","Mode":"practice","Tier":4}]}`))
+
+	start := time.Now()
+	done := ctx.BeginMove()
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("BeginMove took %v on a slow network", d)
+	}
+	if ctx.Link != nil {
+		t.Error("the old link is still reachable from the context")
+	}
+	select {
+	case <-done:
+		t.Fatal("finished before the server answered")
+	case <-time.After(100 * time.Millisecond):
+	}
+	once.Do(func() { close(release) })
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("never finished")
+	}
+	if _, err := a.Read("link.json"); err == nil {
+		t.Error("link.json is left")
+	}
+}
+
+func TestPrepareMovePanicInAnUnlinkGoroutineIsAnErrorAndTokensAreGone(t *testing.T) {
+	ctx, a, b := computerWithLinkedLearner(t)
+	old := openForMove
+	openForMove = func(link.Options) *link.Client { panic("boom") }
+	t.Cleanup(func() { openForMove = old })
+	err := <-ctx.BeginMove()
+	if err == nil {
+		t.Fatal("a panic was not reported as an error")
+	}
+	for _, f := range []save.Folder{a, b} {
+		for _, n := range []string{"link.json", "link-queue.json", "link-parked.json"} {
+			if _, err := f.Read(n); err == nil {
+				t.Errorf("%s/%s is left", f, n)
+			}
+		}
+	}
+	if data, err := save.Root.Read(CrashFile); err != nil || !strings.Contains(string(data), "boom") {
+		t.Errorf("no crash report: %v", err)
+	}
+}
+
+func TestPrepareMoveFailsWhenTokensCannotBeRemoved(t *testing.T) {
+	ctx, a, _ := computerWithLinkedLearner(t)
+	dir, _ := a.Dir()
+	// A link-queue.json that is a folder with something in it can't be removed.
+	p := filepath.Join(dir, "link-queue.json")
+	os.Remove(p)
+	if err := os.MkdirAll(filepath.Join(p, "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-ctx.BeginMove(); err == nil {
+		t.Fatal("tokens left on disk were not reported")
+	}
+}
+
+// If the calling goroutine panics after launching an unlinking goroutine,
+// prepareMove still waits for that goroutine before it removes the link
+// files and returns, so nothing writes them back afterwards.
+func TestPrepareMovePanicWaitsForUnlinkGoroutines(t *testing.T) {
+	ctx, a, b := computerWithLinkedLearner(t)
+	release := make(chan struct{})
+	var finished atomic.Bool
+	oldOpen, oldPeek := openForMove, peekForMove
+	t.Cleanup(func() { openForMove, peekForMove = oldOpen, oldPeek })
+	openForMove = func(link.Options) *link.Client {
+		<-release
+		finished.Store(true)
+		panic("late")
+	}
+	calls := 0
+	peekForMove = func(f link.Store) link.Peek {
+		calls++
+		switch calls {
+		case 1: // the root
+			return oldPeek(f)
+		case 2: // a learner: launches the blocking goroutine
+			return link.Peek{Tokens: true}
+		}
+		panic("the caller fails after launching")
+	}
+	time.AfterFunc(200*time.Millisecond, func() { close(release) })
+	err := <-ctx.BeginMove()
+	if err == nil {
+		t.Fatal("no error")
+	}
+	if !finished.Load() {
+		t.Fatal("prepareMove returned while an unlinking goroutine was still running")
+	}
+	for _, f := range []save.Folder{a, b} {
+		if _, err := f.Read("link.json"); err == nil {
+			t.Errorf("%s/link.json is left", f)
+		}
 	}
 }

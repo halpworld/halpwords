@@ -212,3 +212,27 @@ func TestDeckMissedLeavesOutAnswersTooLongToType(t *testing.T) {
 		t.Fatalf("Missed %v, Review %d", got, d.Review())
 	}
 }
+
+func TestMissedIgnoresOutOfRangeIDs(t *testing.T) {
+	d := NewDeck(testEntries(3), rand.New(rand.NewPCG(1, 2)))
+	d.review = []int{1, 7, -2, 2}
+	if got := d.Missed(); !slices.Equal(got, []int{2, 1}) {
+		t.Fatalf("Missed = %v", got)
+	}
+	if d.Review() != 2 {
+		t.Fatalf("Review = %d", d.Review())
+	}
+}
+
+func TestMarkIgnoresOutOfRangeIDs(t *testing.T) {
+	d := NewDeck(testEntries(3), rand.New(rand.NewPCG(1, 2)))
+	d.Mark(9, false)
+	d.Mark(-1, false)
+	if d.Review() != 0 || len(d.review) != 0 {
+		t.Fatalf("review = %v", d.review)
+	}
+	d.Mark(1, false)
+	if !slices.Equal(d.Missed(), []int{1}) {
+		t.Fatalf("Missed = %v", d.Missed())
+	}
+}

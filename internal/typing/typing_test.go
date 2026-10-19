@@ -1,7 +1,11 @@
 package typing
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -124,5 +128,47 @@ func TestMaxLen(t *testing.T) {
 func TestMaxLenIsTheDealLimit(t *testing.T) {
 	if MaxLen != words.MaxAnswerRunes {
 		t.Fatalf("MaxLen %d, words.MaxAnswerRunes %d", MaxLen, words.MaxAnswerRunes)
+	}
+}
+
+// The cap counts NFC characters, as words.TooLong does, whichever way the
+// letters were typed.
+func TestMaxLenAgreesWithTooLong(t *testing.T) {
+	for _, tc := range []struct{ code, letter string }{
+		{"ga", "é"},    // Irish fada, decomposed
+		{"ga", "é"},     // composed
+		{"grc", "ά"},   // alpha + acute
+		{"grc", "ἄ"},  // alpha + psili + oxia
+		{"grc", "ᾗ"}, // eta + dasia + perispomeni + ypogegrammeni
+		{"fr", "ê"},
+	} {
+		f := field(t, tc.code)
+		f.Greek = false // type the characters themselves
+		for i := 0; i < MaxLen+5; i++ {
+			typeAll(f, tc.letter)
+		}
+		text := f.Text()
+		if n := utf8.RuneCountInString(text); n > MaxLen {
+			t.Errorf("%q: %d NFC letters typed, limit %d", tc.letter, n, MaxLen)
+		}
+		if words.TooLong(words.Entry{Answers: []string{text}}) {
+			t.Errorf("%q: typed text %d long is TooLong", tc.letter, utf8.RuneCountInString(text))
+		}
+		if _, ok := composes(tc.letter); ok && f.Len() != MaxLen {
+			t.Errorf("%q: field stopped at %d, want %d", tc.letter, f.Len(), MaxLen)
+		}
+	}
+}
+
+func composes(s string) (rune, bool) {
+	r := []rune(norm.NFC.String(s))
+	return r[0], len(r) == 1
+}
+
+func TestFullFieldTakesComposingMark(t *testing.T) {
+	f := field(t, "ga")
+	typeAll(f, strings.Repeat("a", MaxLen-1)+"e")
+	if !f.Type('́') || f.Len() != MaxLen || !strings.HasSuffix(f.Text(), "é") {
+		t.Fatalf("len %d text %q", f.Len(), f.Text())
 	}
 }

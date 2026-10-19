@@ -59,7 +59,18 @@ type Hider interface {
 // is safe because wasm has no preemption: the handler only runs while the
 // game's frame goroutine is blocked waiting for the next frame, never in
 // the middle of an Update.
-func (c *Context) SaveOnClose() { c.tellScenes(func(s Closer) { s.OnClose(c) }) }
+func (c *Context) SaveOnClose() {
+	c.tellScenes(func(s Closer) { s.OnClose(c) })
+	c.saveMemoryDurable()
+}
+
+// saveMemoryDurable flushes the word memory to disk, which the per-answer
+// writes do not (until #53 item 5).
+func (c *Context) saveMemoryDurable() {
+	if c.Profile != nil {
+		c.Profile.SaveMemoryDurable()
+	}
+}
 
 // SaveOnHide is SaveOnClose for a web page that is hidden, not gone:
 // scenes that are Hiders get OnHide instead of OnClose.
@@ -71,6 +82,7 @@ func (c *Context) SaveOnHide() {
 		}
 		s.OnClose(c)
 	})
+	c.saveMemoryDurable()
 }
 
 // tellScenes calls f for each scene that is a Closer, top first. A scene

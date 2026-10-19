@@ -129,7 +129,13 @@ func (c *Context) Playing(mode, lang string, floor func() int) {
 }
 
 // EndSession ends the play session going on, if there is one.
+//
+// It also flushes the word memory to disk (the per-answer writes are not
+// flushed): every end of a run, quitting and leaving a learner comes through
+// here, so a power cut after any of them loses nothing. It flushes the
+// profile of the learner leaving, so call it before switching.
 func (c *Context) EndSession() {
+	c.saveMemoryDurable()
 	s := c.session
 	if s == nil {
 		return
@@ -147,6 +153,7 @@ func (c *Context) EndSession() {
 // moment. The game calls it when it quits.
 func (g *Game) Close() {
 	g.ctx.EndSession()
+	g.ctx.saveMemoryDurable()
 	g.ctx.Link.Close()
 	for _, done := range g.ctx.closing { // learners who played before
 		select {

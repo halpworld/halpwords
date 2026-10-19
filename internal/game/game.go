@@ -5,10 +5,13 @@ package game
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image/color"
+	"io/fs"
 	"math"
 	"path"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -309,11 +312,59 @@ func (c *Context) ReloadSaves() error {
 // still queued are sent first, and the server told after, in the
 // background, best effort and bounded (the link's own timeouts). The game
 // links again at its new address.
-func (c *Context) PrepareMove() {
+//
+// Closing and unlinking take as long as the network does, so the game
+// loop calls BeginMove and shows a busy screen until it is done.
+// PrepareMove waits for it.
+func (c *Context) PrepareMove() error { return <-c.BeginMove() }
+
+// BeginMove is PrepareMove started off the game loop. It ends the play
+// session at once and lets go of the link (c.Link is nil until the saves are
+// reloaded, so nothing touches the old client meanwhile), then closes it and
+// unlinks the folders in the background. The channel gets the result when
+// that is finished: nil, or an error when something went wrong that leaves
+// the old tokens in doubt. Only on nil may the incoming progress be applied.
+func (c *Context) BeginMove() <-chan error {
 	c.EndSession()
-	c.Link.Close()
-	names, _ := save.Root.All()
+	l := c.Link
+	c.Link = nil
+	done := make(chan error, 1)
+	go func() { done <- prepareMove(l) }()
+	return done
+}
+
+// prepareMove is the slow part of PrepareMove. It runs off the game loop,
+// so a panic is reported (Crash) and returned as an error, not left to end
+// the game; and the link files are always removed, so progress is never
+// applied on top of the old account's tokens.
+func prepareMove(l *link.Client) (err error) {
 	folders := []save.Folder{save.Root}
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		fail any
+	)
+	defer func() {
+		if r := recover(); r != nil {
+			Crash(r, debug.Stack())
+			err = fmt.Errorf("moving: %v", r)
+		}
+		wg.Wait() // no unlinking goroutine may write a file back after this
+		for _, f := range folders {
+			// Not exportable, so the move would leave them. Tokens that
+			// can't be removed fail the move: they must not be reopened on
+			// top of the new progress.
+			for _, n := range [...]string{"link.json", "link-queue.json", "link-parked.json"} {
+				if rerr := f.Remove(n); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) && err == nil {
+					err = fmt.Errorf("moving: removing %s: %w", n, rerr)
+				}
+			}
+		}
+	}()
+	if l != nil {
+		l.Close()
+	}
+	names, _ := save.Root.All()
 	seen := map[string]bool{}
 	for _, n := range names {
 		rest, ok := strings.CutPrefix(n, profile.ProfilesDir+"/")
@@ -323,26 +374,39 @@ func (c *Context) PrepareMove() {
 			folders = append(folders, save.Folder(profile.ProfilesDir+"/"+id))
 		}
 	}
-	var wg sync.WaitGroup
 	for _, f := range folders {
-		if p := link.PeekFolder(f); p.Tokens || p.PendingSSO {
+		if p := peekForMove(f); p.Tokens || p.PendingSSO {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				l := link.Open(link.Options{Store: f, Version: Version, OwnDir: WordsDir})
+				defer func() {
+					if r := recover(); r != nil {
+						Crash(r, debug.Stack())
+						mu.Lock()
+						fail = r
+						mu.Unlock()
+					}
+				}()
+				l := openForMove(link.Options{Store: f, Version: Version, OwnDir: WordsDir})
 				l.Close() // sends what is queued, within its timeouts
 				l.Unlink()
 			}()
 		}
 	}
 	wg.Wait()
-	for _, f := range folders {
-		// Not exportable, so the move would leave them.
-		for _, n := range [...]string{"link.json", "link-queue.json", "link-parked.json"} {
-			f.Remove(n)
-		}
+	mu.Lock()
+	defer mu.Unlock()
+	if fail != nil {
+		return fmt.Errorf("moving: %v", fail)
 	}
+	return nil
 }
+
+// peekForMove reads what a folder's link holds; a variable for tests.
+var peekForMove = link.PeekFolder
+
+// openForMove opens a folder's link to unlink it; a variable for tests.
+var openForMove = link.Open
 
 // loadProfile loads the profile of the learner playing.
 func (c *Context) loadProfile() {

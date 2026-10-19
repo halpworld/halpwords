@@ -3,6 +3,7 @@
 package profile
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/halpworld/halpwords/internal/save"
@@ -75,8 +76,12 @@ func TestDamagedFileIsKept(t *testing.T) {
 	if len(errs) != 1 || p == nil {
 		t.Fatalf("errors %v", errs)
 	}
-	if data, err := save.Read(memoryFile + ".bad"); err != nil || string(data) != "{not json" {
+	bads := badCopies(t, memoryFile)
+	if len(bads) != 1 {
 		t.Fatal("the damaged file was not kept")
+	}
+	if data, err := save.Read(bads[0]); err != nil || string(data) != "{not json" {
+		t.Fatalf("kept %q, %v", data, err)
 	}
 	p.MemoryFor("la") // still usable
 }
@@ -146,5 +151,53 @@ func TestOldSettingsStillLoad(t *testing.T) {
 	}
 	if data, err := save.Read(settingsFile); err != nil || string(data) != oldSettings {
 		t.Errorf("settings.json = %s, %v; want %s", data, err, oldSettings)
+	}
+}
+
+// badCopies returns the names of the kept copies of the damaged file name.
+func badCopies(t *testing.T, name string) []string {
+	t.Helper()
+	all, err := save.List("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, n := range all {
+		if strings.HasPrefix(n, name+".") && strings.HasSuffix(n, ".bad") {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func TestSecondDamageKeepsTheFirstCopy(t *testing.T) {
+	useTempDir(t)
+	for _, bad := range []string{"{first", "{second"} {
+		save.Write(memoryFile, []byte(bad))
+		if _, errs := Load(); len(errs) != 1 {
+			t.Fatalf("errors %v", errs)
+		}
+	}
+	got := map[string]bool{}
+	for _, n := range badCopies(t, memoryFile) {
+		d, _ := save.Read(n)
+		got[string(d)] = true
+	}
+	if !got["{first"] || !got["{second"] {
+		t.Fatalf("copies kept: %v", got)
+	}
+}
+
+func TestSaveMemoryDurableOnlyAfterFastWrites(t *testing.T) {
+	useTempDir(t)
+	p, _ := Load()
+	if p.unsynced {
+		t.Fatal("unsynced at start")
+	}
+	if err := p.SaveMemory(); err != nil || !p.unsynced {
+		t.Fatalf("after SaveMemory: unsynced %v, %v", p.unsynced, err)
+	}
+	if err := p.SaveMemoryDurable(); err != nil || p.unsynced {
+		t.Fatalf("after SaveMemoryDurable: unsynced %v, %v", p.unsynced, err)
 	}
 }

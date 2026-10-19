@@ -1,13 +1,16 @@
 package scene
 
 import (
+	"errors"
 	"io/fs"
 	"maps"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/move"
+	"github.com/halpworld/halpwords/internal/save"
 )
 
 type memStore map[string][]byte
@@ -60,5 +63,51 @@ func TestStartFetchesTheNextPart(t *testing.T) {
 	}
 	if went != move.OldURL+"#send=2" {
 		t.Fatalf("went to %q", went)
+	}
+}
+
+// Progress brought to an empty browser goes through the busy Importing
+// screen, so the unlinking runs off the game loop.
+func TestStartImportsOnABusyScreen(t *testing.T) {
+	useTempDir(t)
+	payload, _ := move.Encode(map[string][]byte{"adventure.json": []byte("hero")})
+	frag := move.Split(payload, move.MaxPart)[0].Fragment()
+	st := memStore{}
+	s := startWith(&game.Context{}, st, frag, noLeave(t))
+	imp, ok := s.(*importing)
+	if !ok {
+		t.Fatalf("got %T", s)
+	}
+	if len(st["adventure.json"]) != 0 {
+		t.Fatal("applied before the old progress was let go")
+	}
+	select {
+	case <-imp.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("never finished preparing")
+	}
+}
+
+// When letting go of the old link failed, nothing is applied (the old
+// tokens might be reopened on the new progress) and the title comes next.
+func TestImportingRefusesToApplyOnError(t *testing.T) {
+	useTempDir(t)
+	t.Cleanup(func() { save.Use(save.Root) }) // opening the learners picks a learner's folder
+	ctx := testContext(t)
+	ctx.TestOpen()
+	next := ctx.TestScenes(nil)
+	st := memStore{"adventure.json": []byte("here")}
+	in := &move.Incoming{ID: "0123456789abcdef", Files: map[string][]byte{"adventure.json": []byte("brought")}}
+	done := make(chan error, 1)
+	done <- errors.New("moving: boom")
+	imp := &importing{st: st, in: in, done: done}
+	if err := imp.Update(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if string(st["adventure.json"]) != "here" || len(st) != 1 {
+		t.Fatalf("applied anyway: %v", st)
+	}
+	if _, ok := next().(*Title); !ok {
+		t.Fatalf("next scene %T, want the title", next())
 	}
 }

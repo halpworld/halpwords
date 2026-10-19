@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -174,5 +176,210 @@ func TestModTime(t *testing.T) {
 	}
 	if got := ModTime("words/a.txt"); !got.Equal(old) {
 		t.Errorf("mod time %v, want %v", got, old)
+	}
+}
+
+func TestRemoveAllDoesNotFollowSymlinks(t *testing.T) {
+	useTempDir(t)
+	dir, _ := Root.Dir()
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "keep.txt"), []byte("mine"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "profiles"), 0o755)
+	if err := os.Symlink(outside, filepath.Join(dir, "profiles", "x")); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	if err := Folder("profiles/x").RemoveAll(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "keep.txt")); err != nil {
+		t.Errorf("file outside was removed: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "profiles", "x")); !os.IsNotExist(err) {
+		t.Errorf("link still there: %v", err)
+	}
+	// profiles itself is a link out: refused.
+	os.RemoveAll(filepath.Join(dir, "profiles"))
+	os.Symlink(outside, filepath.Join(dir, "profiles"))
+	if err := Folder("profiles/y").RemoveAll(); err != nil {
+		t.Logf("refused: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "keep.txt")); err != nil {
+		t.Errorf("file outside was removed: %v", err)
+	}
+}
+
+func TestQuarantineKeepsCopiesAndCapsThem(t *testing.T) {
+	useTempDir(t)
+	Write("memory.json.bad", []byte("legacy"))
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	var names []string
+	for i := 0; i < 5; i++ {
+		// Two in the same second get different names.
+		n, err := Root.quarantine("memory.json", []byte{byte('a' + i)}, at.Add(time.Duration(i/2)*time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, n)
+	}
+	for i, n := range names {
+		for _, m := range names[i+1:] {
+			if n == m {
+				t.Fatalf("name %q used twice", n)
+			}
+		}
+	}
+	left, _ := List("")
+	if len(left) != KeepBad {
+		t.Fatalf("kept %v, want %d", left, KeepBad)
+	}
+	// The newest are the ones kept: c, d, e.
+	for i, want := range []string{"c", "d", "e"} {
+		var got string
+		for _, n := range names {
+			if d, err := Read(n); err == nil && string(d) == want {
+				got = n
+			}
+		}
+		if got == "" {
+			t.Errorf("copy %d (%s) was removed, left %v", i, want, left)
+		}
+	}
+	if _, err := Read("memory.json.bad"); err == nil {
+		t.Error("the oldest, legacy copy was not removed")
+	}
+}
+
+func TestQuarantineInAFolder(t *testing.T) {
+	useTempDir(t)
+	f := Folder("profiles/x")
+	if _, err := f.Quarantine("memory.json", []byte("bad")); err != nil {
+		t.Fatal(err)
+	}
+	if names, _ := f.List(""); len(names) != 1 || !strings.HasSuffix(names[0], ".bad") {
+		t.Fatalf("names %v", names)
+	}
+	if names, _ := Root.List(""); len(names) != 0 {
+		t.Fatalf("root has %v", names)
+	}
+}
+
+func TestWriteLeavesNoTempFiles(t *testing.T) {
+	useTempDir(t)
+	for i := 0; i < 3; i++ {
+		if err := Write("a/b.json", []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if names, _ := List("a"); len(names) != 1 || names[0] != "b.json" {
+		t.Fatalf("names %v", names)
+	}
+}
+
+func TestQuarantineAtTheRootInMemory(t *testing.T) {
+	UseMemory()
+	t.Cleanup(func() { memMu.Lock(); memory = nil; memMu.Unlock() })
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 6; i++ {
+		// Same second every time: the clash check must see the earlier copies.
+		if _, err := Root.quarantine("learners.json", []byte{byte('a' + i)}, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	left, _ := Root.List("")
+	if len(left) != KeepBad {
+		t.Fatalf("kept %v, want %d", left, KeepBad)
+	}
+	if names, _ := Folder("profiles/x").List(""); len(names) != 0 {
+		t.Fatalf("folder has %v", names)
+	}
+}
+
+func TestQuarantineKeepsTheCopyJustWrittenWhenTheClockIsBehind(t *testing.T) {
+	useTempDir(t)
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < KeepBad; i++ {
+		Root.quarantine("a.json", []byte("old"), at.Add(time.Duration(i)*time.Hour))
+	}
+	n, err := Root.quarantine("a.json", []byte("new"), at.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, err := Read(n); err != nil || string(d) != "new" {
+		t.Fatalf("the new copy is gone: %v", err)
+	}
+	if left, _ := Root.List(""); len(left) != KeepBad {
+		t.Fatalf("kept %v", left)
+	}
+}
+
+func TestWriteFastWrites(t *testing.T) {
+	useTempDir(t)
+	if err := Root.WriteFast("m.json", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := Read("m.json"); err != nil || string(d) != "x" {
+		t.Fatalf("%q %v", d, err)
+	}
+}
+
+func TestQuarantineInAFolderInMemory(t *testing.T) {
+	UseMemory()
+	t.Cleanup(func() { memMu.Lock(); memory = nil; memMu.Unlock() })
+	f := Folder("profiles/x")
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 5; i++ {
+		if _, err := f.quarantine("progress.json", []byte{byte('a' + i)}, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if names, _ := f.List(""); len(names) != KeepBad {
+		t.Fatalf("kept %v, want %d", names, KeepBad)
+	}
+	if names, _ := Root.List(""); len(names) != 0 {
+		t.Fatalf("root has %v", names)
+	}
+}
+
+// Writes from many goroutines, durable and fast, to the same and to other
+// names: no race, no temp files left, and the file is one of the writes.
+func TestConcurrentWrites(t *testing.T) {
+	useTempDir(t)
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				data := []byte(strings.Repeat("x", g+1))
+				var err error
+				if g%2 == 0 {
+					err = Write("same.json", data)
+				} else {
+					err = Root.WriteFast("same.json", data)
+				}
+				if err == nil {
+					err = Write("other"+strings.Repeat("o", g)+".json", data)
+				}
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				Read("same.json")
+			}
+		}()
+	}
+	wg.Wait()
+	d, err := Read("same.json")
+	if err != nil || len(d) < 1 || len(d) > 8 || strings.Trim(string(d), "x") != "" {
+		t.Fatalf("same.json = %q, %v", d, err)
+	}
+	names, _ := List("")
+	for _, n := range names {
+		if strings.HasSuffix(n, ".tmp") {
+			t.Errorf("temp file %s left", n)
+		}
+	}
+	if len(nameLocks) != 0 {
+		t.Errorf("%d name locks leaked", len(nameLocks))
 	}
 }

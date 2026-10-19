@@ -226,6 +226,9 @@ type Profile struct {
 
 	disk   bool
 	folder save.Folder
+	// unsynced is set by SaveMemory, which does not flush to disk, and
+	// cleared by SaveMemoryDurable.
+	unsynced bool
 }
 
 // New returns an empty profile that is never written to disk.
@@ -233,7 +236,7 @@ func New() *Profile { return &Profile{Memory: map[string]*words.Memory{}} }
 
 // Load reads the profile from the save package's current folder: the
 // learner playing. Missing files are empty. A damaged file is kept to one
-// side, with ".bad" after its name, and described in the errors; the rest
+// side, as name.<time>.bad (the newest few are kept), and described in the errors; the rest
 // of the profile still loads.
 func Load() (*Profile, []error) { return LoadFrom(save.Current()) }
 
@@ -252,7 +255,7 @@ func LoadFrom(f save.Folder) (*Profile, []error) {
 			if err = json.Unmarshal(data, v); err == nil {
 				return
 			}
-			f.Write(name+".bad", data)
+			f.Quarantine(name, data)
 		}
 		errs = append(errs, err)
 	}
@@ -284,7 +287,11 @@ func (p *Profile) MemoryFor(code string) *words.Memory {
 	return m
 }
 
-func (p *Profile) write(name string, v any) error {
+func (p *Profile) write(name string, v any) error { return p.writeAs(name, v, true) }
+
+// writeAs writes v as file name; durable says whether to flush it to disk
+// (save.Folder.Write) or not (WriteFast).
+func (p *Profile) writeAs(name string, v any, durable bool) error {
 	if !p.disk {
 		return nil
 	}
@@ -292,15 +299,36 @@ func (p *Profile) write(name string, v any) error {
 	if err != nil {
 		return err
 	}
+	if !durable {
+		return p.folder.WriteFast(name, data)
+	}
 	return p.folder.Write(name, data)
 }
 
 // SaveSettings writes the settings.
 func (p *Profile) SaveSettings() error { return p.write(settingsFile, p.Settings) }
 
-// SaveMemory writes what the player knows of their words.
+// SaveMemory writes what the player knows of their words. It runs on every
+// answer, so it is not flushed to disk (an fsync costs a frame or more):
+// a power cut can lose the last answers, or leave an empty file, which the
+// next start sets aside as damaged (all word memory lost). So the game also
+// makes one durable write, SaveMemoryDurable, at the end of a run and on
+// quit, until the writes are debounced (#53 item 5).
 func (p *Profile) SaveMemory() error {
-	return p.write(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory})
+	p.unsynced = true
+	return p.writeAs(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory}, false)
+}
+
+// SaveMemoryDurable writes the word memory and flushes it to disk. Use it
+// where a power cut would hurt most: the end of a run, and quitting.
+// It does nothing when every write since the last flush was durable.
+func (p *Profile) SaveMemoryDurable() error {
+	if !p.unsynced {
+		return nil
+	}
+	err := p.write(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory})
+	p.unsynced = err != nil
+	return err
 }
 
 // SaveFame writes the Hall of Fame.

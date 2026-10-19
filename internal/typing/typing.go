@@ -4,6 +4,7 @@ package typing
 
 import (
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"
 
@@ -95,12 +96,17 @@ func (f *Field) Type(r rune) bool {
 		}
 		return false
 	}
-	if len(f.runes) >= f.limit() {
+	// The cap counts NFC characters, the measure words.TooLong deals by, so
+	// a typed answer at the limit and the dealing check always agree.
+	if len(f.runes) >= f.limit() || nfcLen(append(f.runes[:len(f.runes):len(f.runes)], r)) > f.limit() {
 		return false
 	}
 	f.runes = append(f.runes, r)
 	return true
 }
+
+// nfcLen is the number of characters rs has in NFC.
+func nfcLen(rs []rune) int { return utf8.RuneCountInString(norm.NFC.String(string(rs))) }
 
 func (f *Field) limit() int {
 	if f.Limit > 0 {

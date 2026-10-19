@@ -9,6 +9,7 @@ package save
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -136,10 +137,12 @@ func All() ([]string, error) { return Current().All() }
 func (f Folder) Read(name string) ([]byte, error) {
 	name = f.name(name)
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
+		memMu.Unlock()
+		defer lockName(name)()
 		return diskRead(name)
 	}
+	defer memMu.Unlock()
 	data, ok := memory[name]
 	if !ok {
 		return nil, &fs.PathError{Op: "read", Path: name, Err: fs.ErrNotExist}
@@ -149,15 +152,65 @@ func (f Folder) Read(name string) ([]byte, error) {
 
 // Write replaces the named file. On the desktop it writes a temporary
 // file first, so a crash part way through never leaves half a save.
-func (f Folder) Write(name string, data []byte) error {
+//
+// The write is durable: the file is flushed to disk before the rename, so a
+// power cut leaves the old file or the new one. That costs about 10 ms on
+// an SSD, more on a hard disk; use WriteFast for what is written often.
+func (f Folder) Write(name string, data []byte) error { return f.write(name, data, true) }
+
+// WriteFast is Write without the flush to disk: still a temporary file and
+// a rename, so a crash never leaves half a file, but a power cut can lose
+// the newest write or leave an empty file. It is for what is written on
+// every answer (word memory) until the writes are debounced (#53 item 5).
+// Settings, saves, learners.json and the link's files use Write.
+func (f Folder) WriteFast(name string, data []byte) error { return f.write(name, data, false) }
+
+func (f Folder) write(name string, data []byte, durable bool) error {
 	name = f.name(name)
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
-		return diskWrite(name, data)
+		// Not held across the disk I/O: a game-loop WriteFast must not wait
+		// behind another file's fsync. Writes of one name keep their order.
+		memMu.Unlock()
+		defer lockName(name)()
+		return diskWrite(name, data, durable)
 	}
+	defer memMu.Unlock()
 	memory[name] = append([]byte(nil), data...)
 	return nil
+}
+
+// nameLocks serialises disk access to one file name, so two writes of the
+// same file never rename out of order. Entries are dropped when unused.
+var (
+	nameMu    sync.Mutex
+	nameLocks = map[string]*nameLock{}
+)
+
+type nameLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lockName locks name and returns the unlock.
+func lockName(name string) func() {
+	nameMu.Lock()
+	l := nameLocks[name]
+	if l == nil {
+		l = &nameLock{}
+		nameLocks[name] = l
+	}
+	l.refs++
+	nameMu.Unlock()
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		nameMu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(nameLocks, name)
+		}
+		nameMu.Unlock()
+	}
 }
 
 // WritePrivate replaces the named file with one only the user can read, for
@@ -174,12 +227,95 @@ func (f Folder) WritePrivate(name string, data []byte) error {
 func (f Folder) Remove(name string) error {
 	name = f.name(name)
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
+		memMu.Unlock()
+		defer lockName(name)()
 		return diskRemove(name)
 	}
+	defer memMu.Unlock()
 	delete(memory, name)
 	return nil
+}
+
+// KeepBad is how many damaged copies of one file Quarantine keeps.
+const KeepBad = 3
+
+// Quarantine keeps a damaged file's contents to one side, as
+// "<name>.<UTC time>.bad", so a second damage never overwrites the first
+// copy. It keeps the newest KeepBad copies of that file (the older
+// "<name>.bad" of earlier versions counts as the oldest) and removes the
+// rest. It returns the name it wrote.
+func (f Folder) Quarantine(name string, data []byte) (string, error) {
+	return f.quarantine(name, data, time.Now().UTC())
+}
+
+func (f Folder) quarantine(name string, data []byte, at time.Time) (string, error) {
+	dir, base := path.Split(name)
+	stamp := at.Format("20060102T150405Z")
+	existing, err := f.List(dir)
+	if err != nil {
+		return "", err
+	}
+	have := map[string]bool{}
+	for _, n := range existing {
+		have[n] = true
+	}
+	bad := base + "." + stamp + ".bad"
+	for i := 2; have[bad]; i++ {
+		bad = fmt.Sprintf("%s.%s-%d.bad", base, stamp, i)
+	}
+	if err := f.Write(dir+bad, data); err != nil {
+		return "", err
+	}
+	have[bad] = true
+	var copies []string // oldest first: the old fixed name, then by time
+	if have[base+".bad"] {
+		copies = append(copies, base+".bad")
+	}
+	type stamped struct{ name, key string }
+	var ours []stamped
+	for n := range have {
+		if k, ok := badKey(base, n); ok {
+			ours = append(ours, stamped{n, k})
+		}
+	}
+	sort.Slice(ours, func(i, j int) bool { return ours[i].key < ours[j].key })
+	for _, o := range ours {
+		copies = append(copies, o.name)
+	}
+	// Trim the oldest, but never the copy just written, even when the
+	// clock is behind and it sorts first.
+	for i := 0; len(copies) > KeepBad && i < len(copies); {
+		if copies[i] == bad {
+			i++
+			continue
+		}
+		if err := f.Remove(dir + copies[i]); err != nil {
+			return dir + bad, err
+		}
+		copies = append(copies[:i], copies[i+1:]...)
+	}
+	return dir + bad, nil
+}
+
+// badKey reports whether n is a copy Quarantine made of the file base,
+// "<base>.<stamp>[-k].bad", and a key that sorts copies oldest first.
+func badKey(base, n string) (string, bool) {
+	mid, ok := strings.CutPrefix(n, base+".")
+	if !ok {
+		return "", false
+	}
+	mid, ok = strings.CutSuffix(mid, ".bad")
+	if !ok || len(mid) < 16 || mid[8] != 'T' || mid[15] != 'Z' {
+		return "", false
+	}
+	k := 1
+	if rest := mid[16:]; rest != "" {
+		if _, err := fmt.Sscanf(rest, "-%d", &k); err != nil {
+			return "", false
+		}
+	}
+	return fmt.Sprintf("%s%09d", mid[:16], k), true
 }
 
 // ModTime returns when the named file was last written. It is the zero
@@ -195,15 +331,16 @@ func (f Folder) ModTime(name string) time.Time {
 // List returns the names of the files in the folder dir, sorted. A folder
 // that is not there is empty.
 func (f Folder) List(dir string) ([]string, error) {
-	dir = f.name(strings.TrimSuffix(dir, "/"))
+	dir = strings.TrimSuffix(f.name(strings.TrimSuffix(dir, "/")), "/")
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
+		memMu.Unlock()
 		return diskList(dir)
 	}
+	defer memMu.Unlock()
 	var names []string
 	for name := range memory {
-		if path.Dir(name) == dir {
+		if d := path.Dir(name); d == dir || (d == "." && dir == "") {
 			names = append(names, path.Base(name))
 		}
 	}
@@ -241,8 +378,20 @@ func (f Folder) All() ([]string, error) {
 	return names, nil
 }
 
-// RemoveAll deletes every file in the folder.
+// RemoveAll deletes every file in the folder, and the folder itself on
+// disk. It stays inside the user's folder: a folder that is a symbolic
+// link is unlinked, never followed, and one that resolves to somewhere
+// outside the user's folder is refused.
 func (f Folder) RemoveAll() error {
+	if f != Root && !InMemory() {
+		if err := f.guardDisk(); err != nil {
+			if errors.Is(err, errSymlink) {
+				d, _ := f.Dir()
+				return os.Remove(d) // the link, not what it points to
+			}
+			return err
+		}
+	}
 	names, err := f.All()
 	if err != nil {
 		return err
@@ -253,7 +402,56 @@ func (f Folder) RemoveAll() error {
 		}
 	}
 	if dir, err := f.Dir(); err == nil && f != Root {
-		os.RemoveAll(dir) // the empty folders left
+		// The empty folders left. A virus scanner or indexer can hold one
+		// open for a moment on Windows; an empty folder that stays is not a
+		// failure, only files that remain are.
+		if err := os.RemoveAll(dir); err != nil {
+			if left, _ := f.All(); len(left) > 0 {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+var (
+	errSymlink = errors.New("folder is a symbolic link")
+	errEscape  = errors.New("folder is outside the user's folder")
+)
+
+// guardDisk checks that the folder, on disk, is a real folder inside the
+// user's folder (or is not there).
+func (f Folder) guardDisk() error {
+	dir, err := f.Dir()
+	if err != nil {
+		return nil // a web browser has no folders to escape to
+	}
+	if !fs.ValidPath(string(f)) || string(f) == "." {
+		return errEscape
+	}
+	fi, err := os.Lstat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return err
+	case fi.Mode()&fs.ModeSymlink != 0:
+		return errSymlink
+	}
+	root, err := diskDir()
+	if err != nil {
+		return err
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+	if rel, err := filepath.Rel(realRoot, realDir); err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errEscape
 	}
 	return nil
 }
