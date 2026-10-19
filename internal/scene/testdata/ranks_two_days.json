@@ -1,0 +1,6 @@
+{"boards":[
+ {"scope":"world","kind":"daily","lang":"fr","season":"day","period":"2026-09-24","entries":[
+  {"place":1,"name":"Brave Otter","avatar":"otter","score":4200,"floor":5}]},
+ {"scope":"world","kind":"daily","lang":"fr","season":"day","period":"2026-09-25","entries":[
+  {"place":1,"name":"Quiet Fox","avatar":"fox","score":3900,"floor":4,"you":true}]}
+]}

@@ -2,6 +2,7 @@ package scene
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -39,8 +40,11 @@ func (h *HallOfFame) boards(ctx *game.Context) []link.Board {
 	return out
 }
 
-// boardTitle says which board it is: "Class · Hardcore · this week".
-func boardTitle(b link.Board) string {
+// boardTitle says which board it is at now: "Class · Hardcore · this
+// week". A Daily Dungeon board's day is said against the player's own
+// day (dailyDay): the server may send two or three at once, one for each
+// date that is still today somewhere (halpwords-server#82).
+func boardTitle(b link.Board, now time.Time) string {
 	scope := map[string]string{"friends": "Friends", "class": "Class", "school": "School", "region": "Region",
 		"country": "Country", "world": "World"}[b.Scope]
 	if scope == "" {
@@ -53,11 +57,31 @@ func boardTitle(b link.Board) string {
 	if b.Kind == "daily" {
 		kind = "Daily Dungeon"
 	}
-	season := map[string]string{"week": "this week", "month": "this month", "all": "all time", "day": "today"}[b.Season]
+	season := map[string]string{"week": "this week", "month": "this month", "all": "all time"}[b.Season]
+	if b.Season == "day" {
+		season = dayName(b.Period, now)
+	}
 	if season == "" {
 		season = b.Period
 	}
 	return scope + " · " + kind + " · " + season
+}
+
+// dayName says a Daily Dungeon's day (a date) against the local day at
+// now: "today", "yesterday", or the date, as "26 Sep". A day that is not
+// a date is said as it is.
+func dayName(day string, now time.Time) string {
+	d, err := time.Parse(time.DateOnly, day)
+	if err != nil {
+		return day
+	}
+	switch day {
+	case dailyDay(now):
+		return "today"
+	case dailyDay(now.AddDate(0, 0, -1)):
+		return "yesterday"
+	}
+	return d.Format("2 Jan")
 }
 
 func (h *HallOfFame) drawRankings(dst *ebiten.Image, ctx *game.Context) {
@@ -74,7 +98,7 @@ func (h *HallOfFame) drawRankings(dst *ebiten.Image, ctx *game.Context) {
 	}
 	h.bi = min(h.bi, len(bs)-1)
 	b := bs[h.bi]
-	title := boardTitle(b)
+	title := boardTitle(b, runNow())
 	if len(bs) > 1 {
 		title = fmt.Sprintf("%s  (%d/%d)", title, h.bi+1, len(bs))
 	}
