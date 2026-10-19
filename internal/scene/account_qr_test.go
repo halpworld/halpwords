@@ -22,6 +22,7 @@ import (
 type qrSite struct {
 	mu       sync.Mutex
 	old      bool   // no /link/start: an older server
+	busy     bool   // /link/start answers 429 rate_limited
 	approved bool   // a grown-up approved the code
 	over     string // the poll's answer when the link is over (a code)
 	paths    []string
@@ -39,6 +40,12 @@ func (s *qrSite) serve(w http.ResponseWriter, r *http.Request) {
 	case "/api/v1/link/start":
 		if s.old {
 			fail(http.StatusNotFound, "not_found")
+			return
+		}
+		if s.busy {
+			// A long Retry-After: not tried again by the request.
+			w.Header().Set("Retry-After", "60")
+			fail(http.StatusTooManyRequests, "rate_limited")
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"device_code": "hwlr_1", "user_code": "MKT4-HX7R",
@@ -417,8 +424,6 @@ func TestLinkQRStartFails(t *testing.T) {
 		err  error
 		want string
 	}{
-		{link.ErrSSOBusy, "The server is busy. Press Enter to try again in a moment."},
-		{&link.Error{Status: 429, Code: "rate_limited"}, "The server is busy."},
 		{&link.Error{Status: 400, Code: "invalid_request"}, ""},
 		{&link.Error{Status: 503}, "Can't reach the server."},
 		{errors.New("dial tcp: refused"), "Can't reach the server."},
@@ -439,5 +444,35 @@ func TestLinkQRStartFails(t *testing.T) {
 	p.show(&link.PairCode{UserCode: "MKT4-HX7R", Every: 5 * time.Second, Expires: time.Now().Add(time.Minute)}, 100)
 	if p.nextPoll <= 100 {
 		t.Errorf("first poll at tick %d", p.nextPoll)
+	}
+}
+
+// TestLinkQRBusy: a start the server is too busy for (429) goes
+// straight to typing a code, saying why, without asking again by itself;
+// the next visit to the screen tries a QR code again.
+func TestLinkQRBusy(t *testing.T) {
+	site := &qrSite{busy: true}
+	ctx := qrContext(t, site)
+	a := openLink(t, ctx)
+	acUntil(t, ctx, a, "the typed code", func() bool { return a.mode == acCode })
+	if !strings.Contains(a.msg, "busy") || !strings.Contains(a.msg, "Show the code") {
+		t.Errorf("message %q", a.msg)
+	}
+	drawAccount(ctx, a)
+	for range 400 {
+		a.Update(ctx)
+		ctx.Tick++
+	}
+	if n := site.count("POST /api/v1/link/start"); n != 1 {
+		t.Fatalf("%d starts, want 1", n)
+	}
+	site.mu.Lock()
+	site.busy = false
+	site.mu.Unlock()
+	acPress(t, ctx, a, ebiten.KeyEscape)
+	acPress(t, ctx, a, ebiten.KeyEnter)
+	acUntil(t, ctx, a, "a QR code", func() bool { return a.mode == acQR && a.pair.qr != nil })
+	if n := site.count("POST /api/v1/link/start"); n != 2 {
+		t.Errorf("%d starts, want 2", n)
 	}
 }

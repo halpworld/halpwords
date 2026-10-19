@@ -616,3 +616,23 @@ func TestPairExpiredDropped(t *testing.T) {
 		t.Error("link.json keeps a code that ran out")
 	}
 }
+
+// TestPairStartBusy: a 429 on start (the per-address limit, or too many
+// waiting server-wide) is ErrSSOBusy, tried a bounded number of times,
+// and isn't remembered as ErrPairOff: the next start asks again.
+func TestPairStartBusy(t *testing.T) {
+	f, c, _, _, _ := pairSetup(t)
+	ctx := context.Background()
+	f.startStatus, f.startCode = http.StatusTooManyRequests, codeRateLimited
+	if _, err := c.StartPair(ctx); !errors.Is(err, ErrSSOBusy) || errors.Is(err, ErrPairOff) {
+		t.Fatalf("start on a 429: %v", err)
+	}
+	if f.starts > tries {
+		t.Errorf("%d starts for one 429, want at most %d", f.starts, tries)
+	}
+	n := f.starts
+	f.startStatus, f.startCode = 0, ""
+	if _, err := c.StartPair(ctx); err != nil || f.starts != n+1 {
+		t.Fatalf("after a 429: %v, %d starts", err, f.starts-n)
+	}
+}

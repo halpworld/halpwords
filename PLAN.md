@@ -1122,7 +1122,9 @@ leaves, and goes on with the code in `link.json` after a reload only
 when the screen opens again. A code that runs out is renewed by itself 3
 times, then Enter gets a new one; refused says so with Enter for a new
 code, not_linkable and suspended with only Esc and T, and a start the
-server couldn't answer with Enter (or R) to try again. A code that ran
+server couldn't answer with Enter (or R) to try again. A busy server
+(429 on start) goes straight to the typed code, saying so; the next visit
+tries a QR code again. A code that ran
 out isn't kept in `link.json`. T types a grown-up's code (the old flow);
 an older server (any 404 or 405 on start) goes straight there for the
 session. Once a grown-up approves, the link is held (`Unconfirmed` in

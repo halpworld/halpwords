@@ -208,11 +208,17 @@ func (a *Account) started(ctx *game.Context, r pairStarted) {
 	case errors.Is(r.err, link.ErrLinked):
 		a.pair = nil
 		a.mode = acBrowse
+	case errors.Is(r.err, link.ErrSSOBusy) || errors.As(r.err, &e) && e.Status == 429:
+		// Too many codes asked for (here, or server-wide): the typed code
+		// works without one. Not remembered: the next visit tries QR again.
+		ctx.Sound.Play(audio.Wrong)
+		a.pair = nil
+		a.code = a.code[:0]
+		a.mode = acCode
+		a.say("The server is busy, so type a code instead: your grown-up chooses Show the code on the website.", pal.Tan)
 	default:
 		ctx.Sound.Play(audio.Wrong)
 		switch {
-		case errors.Is(r.err, link.ErrSSOBusy) || errors.As(r.err, &e) && e.Status == 429:
-			p.ended("The server is busy. Press Enter to try again in a moment.", pairRetry)
 		case errors.As(r.err, &e) && e.Status < 500:
 			p.ended(upperFirst(link.Explain(r.err))+".", pairRetry)
 		default:
