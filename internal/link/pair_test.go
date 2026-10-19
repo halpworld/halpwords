@@ -473,3 +473,61 @@ func TestPairUnconfirmed(t *testing.T) {
 	}
 	c.Close()
 }
+
+// writesStore records every link.json written.
+type writesStore struct {
+	*memStore
+	mu     sync.Mutex
+	writes [][]byte
+}
+
+func (w *writesStore) WritePrivate(name string, data []byte) error {
+	if name == stateFile {
+		w.mu.Lock()
+		w.writes = append(w.writes, append([]byte(nil), data...))
+		w.mu.Unlock()
+	}
+	return w.memStore.WritePrivate(name, data)
+}
+
+// TestPairHeldFromFirstSave: link.json is never written with the tokens
+// of a link by QR code without the hold, so a crash right after the
+// tokens arrive can't leave the game linked and free to sync.
+func TestPairHeldFromFirstSave(t *testing.T) {
+	f := &pairServer{approved: true}
+	srv := httptest.NewServer(http.HandlerFunc(f.serve))
+	t.Cleanup(srv.Close)
+	f.verifyURL = srv.URL + "/link?c=MKT4HX7R"
+	st := &writesStore{memStore: newMemStore()}
+	c := Open(Options{Store: st, Server: srv.URL})
+	c.sleep = func(time.Duration) {}
+	ctx := context.Background()
+	if _, err := c.StartPair(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.PollPair(ctx); err != nil {
+		t.Fatal(err)
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	linked := 0
+	for i, d := range st.writes {
+		var s struct {
+			Refresh     string
+			Unconfirmed bool
+		}
+		if err := json.Unmarshal(d, &s); err != nil {
+			t.Fatal(err)
+		}
+		if s.Refresh == "" {
+			continue
+		}
+		linked++
+		if !s.Unconfirmed {
+			t.Errorf("write %d has the tokens without the hold", i)
+		}
+	}
+	if linked == 0 {
+		t.Fatal("link.json never written with the tokens")
+	}
+}

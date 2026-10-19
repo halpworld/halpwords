@@ -237,12 +237,11 @@ func (c *Client) PollPair(ctx context.Context) error {
 			c.revoke(t)
 			return ErrPairExpired
 		}
-		c.signedIn(t, WayPairing)
 		// Nothing syncs until the child says the learner is them: a
 		// grown-up who picked the wrong child (or scanned another
-		// family's screen) must not get this game's progress.
-		c.st.Unconfirmed = true
-		c.stateUnsaved = c.saveState() != nil
+		// family's screen) must not get this game's progress. The hold
+		// is in the first link.json written.
+		c.signedInHeld(t, WayPairing, true)
 		return nil
 	}
 	if again && c.now().Before(code.Expires) {
