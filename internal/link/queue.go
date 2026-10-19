@@ -277,7 +277,10 @@ func (c *Client) fold() {
 func (c *Client) saveQueue() error { return c.writeQueue(false) }
 
 // writeQueue writes the queue if it changed. With try, it gives up rather
-// than wait for the lock.
+// than wait for the lock. The file is written without c.mu, but under qMu,
+// taken before c.mu is let go: whatever changes the file under c.mu after
+// the copy here (removeQueueFile, writeQueueFile) waits for the write, so
+// an unlink can't be followed by a write of the old queue (#80).
 func (c *Client) writeQueue(try bool) error {
 	if try {
 		if !c.mu.TryLock() {
@@ -290,12 +293,21 @@ func (c *Client) writeQueue(try bool) error {
 		c.mu.Unlock()
 		return nil
 	}
+	if try {
+		if !c.qMu.TryLock() {
+			c.mu.Unlock()
+			return errBusy
+		}
+	} else {
+		c.qMu.Lock()
+	}
 	q := queue{
 		Answers:  append([]qAnswer(nil), c.q.Answers...),
 		Sessions: append([]qSession(nil), c.q.Sessions...),
 		Totals:   append([]qTotals(nil), c.q.Totals...),
 		Folded:   c.q.Folded,
 	}
+	gen := c.gen
 	c.dirty = false
 	c.mu.Unlock()
 	var err error
@@ -307,6 +319,7 @@ func (c *Client) writeQueue(try bool) error {
 			err = c.o.Store.Write(queueFile, data)
 		}
 	}
+	c.qMu.Unlock() // before c.mu again: qMu is never held waiting for c.mu
 	if err != nil {
 		if try && !c.mu.TryLock() {
 			return err
@@ -314,10 +327,30 @@ func (c *Client) writeQueue(try bool) error {
 		if !try {
 			c.mu.Lock()
 		}
-		c.dirty = true
+		if c.gen == gen {
+			// Tried again at the next save; a queue of a link since
+			// undone is not.
+			c.dirty = true
+		}
 		c.mu.Unlock()
 	}
 	return err
+}
+
+// removeQueueFile removes the queue file. c.mu is held; it waits for a
+// writeQueue still writing.
+func (c *Client) removeQueueFile() error {
+	c.qMu.Lock()
+	defer c.qMu.Unlock()
+	return c.o.Store.Remove(queueFile)
+}
+
+// writeQueueFile writes the queue file. c.mu is held; it waits for a
+// writeQueue still writing.
+func (c *Client) writeQueueFile(data []byte) error {
+	c.qMu.Lock()
+	defer c.qMu.Unlock()
+	return c.o.Store.Write(queueFile, data)
 }
 
 // errBusy is a TrySave that found the link busy.

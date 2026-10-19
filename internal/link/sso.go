@@ -222,12 +222,12 @@ func (c *Client) PollSSO(ctx context.Context) error {
 	case err == nil:
 		c.mu.Lock()
 		if c.st.SSO != code || c.st.linked() {
-			c.mu.Unlock()
 			// Cancelled (Esc) or replaced while the answer was on its
 			// way: the pupil chose to stop, so the tokens are dropped,
 			// and the server told, so the device isn't left signed in
 			// with nobody holding it.
 			c.revoke(t)
+			c.mu.Unlock()
 			return ErrSSOExpired
 		}
 		defer c.mu.Unlock()

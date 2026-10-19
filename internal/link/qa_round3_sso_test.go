@@ -224,7 +224,7 @@ func TestQARemoteUnlinkText(t *testing.T) {
 	c.mu.Unlock()
 	c.lost(gen)
 	st := c.Status()
-	if st.Note != "This game was unlinked. Your progress is still here." || c.Linked() {
+	if st.Note != "The link to the account was lost. Your progress is still here: link again to sync." || c.Linked() {
 		t.Fatalf("note %q linked %v", st.Note, c.Linked())
 	}
 	// A stale generation does not repeat or overwrite it.

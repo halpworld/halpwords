@@ -414,6 +414,13 @@ type Client struct {
 
 	bg sync.WaitGroup // telling the server about an unlink
 
+	// qMu serialises writing and removing the queue file (#80). It is
+	// taken after c.mu, never before: writeQueue takes it under c.mu with
+	// its copy of the queue, then lets c.mu go while it writes. So a
+	// change made under c.mu after that copy (an unlink removing the file)
+	// reaches the disk after the write, never before it.
+	qMu sync.Mutex
+
 	// life ends when the client is closed: the background sign-in and
 	// syncs stop with it, so none writes the learner's folder after it.
 	life    context.Context
