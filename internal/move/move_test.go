@@ -367,3 +367,42 @@ func TestSavesAreRootRelative(t *testing.T) {
 		t.Errorf("conflicts = %v", here)
 	}
 }
+
+func TestApplyClearsRemovedLearnersFolders(t *testing.T) {
+	st := memStore{
+		"learners.json":                  []byte(`{"List":[{"ID":"old1"},{"ID":"old2"}]}`),
+		"profiles/old1/profile.json":     []byte("one"),
+		"profiles/old1/ai.json":          []byte("keys"),
+		"profiles/old2/profile.json":     []byte("two"),
+		"profiles/old2/profile.json.bad": []byte("damaged"),
+		"profiles/old2/crash.txt":        []byte("crash"),
+		"profiles/old2/reports/r1.json":  []byte("r"),
+		"ai.json":                        []byte("root keys"),
+	}
+	in := &Incoming{ID: "x", Files: map[string][]byte{
+		"learners.json":              []byte(`{"List":[{"ID":"new1"},{"ID":"empty"}]}`),
+		"profiles/new1/profile.json": []byte("new"),
+	}}
+	if err := in.Apply(st); err != nil {
+		t.Fatal(err)
+	}
+	for name := range st {
+		if strings.HasPrefix(name, "profiles/old") {
+			t.Errorf("%s was left behind", name)
+		}
+	}
+	if string(st["profiles/new1/profile.json"]) != "new" || string(st["ai.json"]) != "root keys" {
+		t.Errorf("store = %v", st)
+	}
+}
+
+func TestApplyKeepsLearnerListedWithoutFiles(t *testing.T) {
+	st := memStore{"profiles/empty/ai.json": []byte("keys")}
+	in := &Incoming{ID: "x", Files: map[string][]byte{"learners.json": []byte(`{"List":[{"ID":"empty"}]}`)}}
+	if err := in.Apply(st); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st["profiles/empty/ai.json"]; !ok {
+		t.Error("a listed learner's own files were removed")
+	}
+}

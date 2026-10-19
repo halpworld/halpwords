@@ -241,8 +241,20 @@ func (f Folder) All() ([]string, error) {
 	return names, nil
 }
 
-// RemoveAll deletes every file in the folder.
+// RemoveAll deletes every file in the folder, and the folder itself on
+// disk. It stays inside the user's folder: a folder that is a symbolic
+// link is unlinked, never followed, and one that resolves to somewhere
+// outside the user's folder is refused.
 func (f Folder) RemoveAll() error {
+	if f != Root && !InMemory() {
+		if err := f.guardDisk(); err != nil {
+			if errors.Is(err, errSymlink) {
+				d, _ := f.Dir()
+				return os.Remove(d) // the link, not what it points to
+			}
+			return err
+		}
+	}
 	names, err := f.All()
 	if err != nil {
 		return err
@@ -253,7 +265,49 @@ func (f Folder) RemoveAll() error {
 		}
 	}
 	if dir, err := f.Dir(); err == nil && f != Root {
-		os.RemoveAll(dir) // the empty folders left
+		return os.RemoveAll(dir) // the empty folders left
+	}
+	return nil
+}
+
+var (
+	errSymlink = errors.New("folder is a symbolic link")
+	errEscape  = errors.New("folder is outside the user's folder")
+)
+
+// guardDisk checks that the folder, on disk, is a real folder inside the
+// user's folder (or is not there).
+func (f Folder) guardDisk() error {
+	dir, err := f.Dir()
+	if err != nil {
+		return nil // a web browser has no folders to escape to
+	}
+	if !fs.ValidPath(string(f)) || string(f) == "." {
+		return errEscape
+	}
+	fi, err := os.Lstat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return err
+	case fi.Mode()&fs.ModeSymlink != 0:
+		return errSymlink
+	}
+	root, err := diskDir()
+	if err != nil {
+		return err
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+	if rel, err := filepath.Rel(realRoot, realDir); err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errEscape
 	}
 	return nil
 }

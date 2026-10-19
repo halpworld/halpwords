@@ -176,3 +176,32 @@ func TestModTime(t *testing.T) {
 		t.Errorf("mod time %v, want %v", got, old)
 	}
 }
+
+func TestRemoveAllDoesNotFollowSymlinks(t *testing.T) {
+	useTempDir(t)
+	dir, _ := Root.Dir()
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "keep.txt"), []byte("mine"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "profiles"), 0o755)
+	if err := os.Symlink(outside, filepath.Join(dir, "profiles", "x")); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	if err := Folder("profiles/x").RemoveAll(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "keep.txt")); err != nil {
+		t.Errorf("file outside was removed: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "profiles", "x")); !os.IsNotExist(err) {
+		t.Errorf("link still there: %v", err)
+	}
+	// profiles itself is a link out: refused.
+	os.RemoveAll(filepath.Join(dir, "profiles"))
+	os.Symlink(outside, filepath.Join(dir, "profiles"))
+	if err := Folder("profiles/y").RemoveAll(); err != nil {
+		t.Logf("refused: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "keep.txt")); err != nil {
+		t.Errorf("file outside was removed: %v", err)
+	}
+}

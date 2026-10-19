@@ -1,6 +1,7 @@
 package move
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -30,6 +31,14 @@ func (saveStore) Read(name string) ([]byte, error)     { return save.Root.Read(n
 func (saveStore) Write(name string, data []byte) error { return save.Root.Write(name, data) }
 func (saveStore) Remove(name string) error             { return save.Root.Remove(name) }
 func (saveStore) All() ([]string, error)               { return save.Root.All() }
+
+// RemoveFolder deletes a whole folder of the save root, such as a learner's
+// profiles/<id>, and nothing outside it (see save.Folder.RemoveAll).
+func (saveStore) RemoveFolder(name string) error { return save.Folder(name).RemoveAll() }
+
+// folderRemover is a Store that can delete whole folders, which Apply uses
+// to clear away a removed learner's folder.
+type folderRemover interface{ RemoveFolder(name string) error }
 
 // The package keeps parts that have arrived, and the IDs of payloads
 // already dealt with, in the stash folder. Nothing in it moves.
@@ -173,6 +182,9 @@ func (in *Incoming) Apply(st Store) error {
 			}
 		}
 	}
+	if err := in.removeLearners(st); err != nil {
+		return err
+	}
 	names := make([]string, 0, len(in.Files))
 	for name := range in.Files {
 		names = append(names, name)
@@ -184,6 +196,58 @@ func (in *Incoming) Apply(st Store) error {
 		}
 	}
 	return in.Discard(st)
+}
+
+// removeLearners deletes the whole folder of every learner here who is not
+// in the incoming progress, with the files that do not move (ai.json, damaged
+// files, crash reports), so nothing is left that a rebuild from the
+// folders could bring back as an empty learner holding AI keys. Only
+// profiles/<id> folders are touched.
+func (in *Incoming) removeLearners(st Store) error {
+	keep := map[string]bool{}
+	for name := range in.Files {
+		if id, ok := profileID(name); ok {
+			keep[id] = true
+		}
+	}
+	var list struct{ List []struct{ ID string } }
+	if json.Unmarshal(in.Files["learners.json"], &list) == nil {
+		for _, l := range list.List {
+			keep[l.ID] = true
+		}
+	}
+	all, err := st.All()
+	if err != nil {
+		return err
+	}
+	gone := map[string]bool{}
+	for _, name := range all {
+		if id, ok := profileID(name); ok && !keep[id] {
+			if err := st.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			gone[id] = true
+		}
+	}
+	if fr, ok := st.(folderRemover); ok {
+		for id := range gone {
+			if err := fr.RemoveFolder("profiles/" + id); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// profileID returns the id of the learner whose folder holds the file name,
+// when name is a clean path of the form profiles/<id>/....
+func profileID(name string) (string, bool) {
+	rest, ok := strings.CutPrefix(name, "profiles/")
+	id, _, found := strings.Cut(rest, "/")
+	if !ok || !found || id == "" || id == "." || id == ".." || strings.ContainsAny(id, `\`) || strings.Contains(name, "..") {
+		return "", false
+	}
+	return id, true
 }
 
 // Discard forgets the incoming progress and remembers that it was dealt
