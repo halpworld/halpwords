@@ -499,6 +499,11 @@ func (c *Client) wait() time.Duration {
 	for i := 0; i < c.failures && d < maxBackoff; i++ {
 		d *= 2
 	}
+	if c.dailyWaits() {
+		// A Daily run counts only within compete.DailySendWindow
+		// (Q127): keep trying at the usual pace while one waits.
+		return SyncEvery
+	}
 	return min(d, maxBackoff)
 }
 

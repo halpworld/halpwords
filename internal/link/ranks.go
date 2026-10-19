@@ -35,8 +35,8 @@ func (c *Client) Run(r compete.Run, listHash string) {
 		return
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if !c.st.linked() || c.st.Stopped {
+		c.mu.Unlock()
 		return
 	}
 	c.st.Runs = append(c.st.Runs, qRun{Code: r.Share.Code(), Tally: r.Tally, Secs: r.Secs, ListHash: listHash, At: c.now()})
@@ -44,6 +44,71 @@ func (c *Client) Run(r compete.Run, listHash string) {
 		c.st.Runs = slices.Clone(c.st.Runs[n-maxRuns:])
 	}
 	c.saveState()
+	c.mu.Unlock()
+	if r.Share.Daily {
+		// A Daily run only counts if the server has it within
+		// compete.DailySendWindow (Q127): send it now, not at the next
+		// sync.
+		if c.soon != nil {
+			c.soon()
+		} else {
+			c.SyncNow()
+		}
+	}
+}
+
+// codeDailyLate is the server's answer to a Daily Dungeon run it received
+// more than compete.DailySendWindow after the run ended (Q127).
+const codeDailyLate = "daily_late"
+
+// LateNote is the note (Status.Note) after a Daily run was dropped for being too late.
+const LateNote = "A Daily run was sent too late to count on the board."
+
+// daily reports whether r is a Daily Dungeon run.
+func (r qRun) daily() bool {
+	s, err := compete.ParseShare(r.Code)
+	return err == nil && s.Daily
+}
+
+// late reports whether r is a Daily Dungeon run past
+// compete.DailySendWindow at now: the server would refuse it.
+func (r qRun) late(now time.Time) bool {
+	return r.daily() && compete.DailyTooLate(r.At, now)
+}
+
+// DailyWaiting reports whether the Daily Dungeon run with share code code
+// still waits to be sent, in time to count, while the game is linked and
+// the learner is on a board: the result screen then asks the child to go
+// online. It says nothing for a game that isn't linked or a learner with
+// no boards (rankings off).
+func (c *Client) DailyWaiting(code string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.st.linked() || c.st.Stopped || len(c.st.Boards) == 0 {
+		return false
+	}
+	now := c.now()
+	for _, r := range c.st.Runs {
+		if r.Code == code && r.daily() && !r.late(now) {
+			return true
+		}
+	}
+	return false
+}
+
+// dailyWaits reports whether a Daily run waits in time to be sent, so
+// the next sync must not wait long. c.mu is held.
+func (c *Client) dailyWaits() bool {
+	now := c.now()
+	for _, r := range c.st.Runs {
+		if r.daily() && !r.late(now) {
+			return true
+		}
+	}
+	return false
 }
 
 type wireTally struct {
@@ -66,7 +131,10 @@ type wireRun struct {
 // uploadRuns sends the finished runs, oldest first. A run the server
 // takes, or refuses for good (a 4xx: implausible, not on a board, or
 // rankings off), is dropped; anything else stops until the next sync.
-// syncMu is held.
+// A Daily run past compete.DailySendWindow is dropped without being sent,
+// and one the server calls too late (daily_late) is dropped too; either
+// way the player gets LateNote. Only the board loses it: the run's XP and
+// word practice were kept when it ended. syncMu is held.
 func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 	for {
 		c.mu.Lock()
@@ -79,6 +147,13 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 			return nil
 		}
 		r := c.st.Runs[0]
+		if r.late(c.now()) {
+			c.st.Runs = c.st.Runs[1:]
+			c.st.LateDaily = true
+			c.saveState()
+			c.mu.Unlock()
+			continue
+		}
 		c.mu.Unlock()
 
 		t := r.Tally
@@ -99,6 +174,9 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 		}
 		if len(c.st.Runs) > 0 && c.st.Runs[0] == r {
 			c.st.Runs = c.st.Runs[1:]
+		}
+		if e != nil && e.Code == codeDailyLate {
+			c.st.LateDaily = true
 		}
 		c.saveState()
 		c.mu.Unlock()

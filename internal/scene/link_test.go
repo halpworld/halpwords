@@ -253,3 +253,18 @@ func TestSignInScreenFinishesBeforeTheFirstSync(t *testing.T) {
 		t.Fatal("not linked")
 	}
 }
+
+// The title screen tells the child once that a Daily run was sent too
+// late to count (Q127), and the note is then gone.
+func TestTitleTellsOfALateDaily(t *testing.T) {
+	ctx := testContext(t)
+	store := memFiles{"link.json": []byte(`{"Refresh":"r","LateDaily":true}`)}
+	ctx.Link = link.Open(link.Options{Store: store, Server: "http://127.0.0.1:1"})
+	if n := ctx.Link.Status().Note; n != link.LateNote {
+		t.Fatalf("note before the title %q", n)
+	}
+	NewTitle(ctx)
+	if n := ctx.Link.Status().Note; n != "" {
+		t.Fatalf("note after the title %q", n)
+	}
+}

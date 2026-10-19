@@ -672,6 +672,24 @@ clear a floor first"; the server keeps none, from any game version (old
 games still send them). The run keeps its score, share code and local
 Hall of Fame place.
 
+*Now (owner decisions 2026-10-19, Q127, done):* decision (owner): "lets
+not allow this delayed submission. It should be submitted as soon as its
+done, if you are late then no go. Maybe a small grace perioid for some
+minutes. So we can warn that they need to go online if they want this to
+be submitted or they might lose it". A Daily run counts on the board only
+if the server receives it within `compete.DailySendWindow` (15 minutes)
+of its `played_at` (`compete.DailyTooLate`, shared with halpwords-server,
+which answers 422 `daily_late`). The game asks for a sync as soon as a
+Daily run is queued and, while one waits, never backs off longer than
+`link.SyncEvery`. If a linked learner on a board still has the run
+waiting two seconds after game over, the screen says "Go online in the
+next 15 minutes, / or it won't count on the board." A Daily run past the
+window is dropped from the queue unsent, or when the server answers
+`daily_late`; the next title screen (and Account) says "A Daily run was
+sent too late to count on the board." Only the board submission is lost:
+XP, word practice, the score and the Hall of Fame place stay. Hardcore
+runs are unchanged.
+
 *Now (M5, done):* `internal/compete` (now `pkg/compete`) (no Ebitengine dependency) holds the
 score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
 `halloffame.json`.
