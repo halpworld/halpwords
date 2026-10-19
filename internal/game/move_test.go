@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -231,5 +233,40 @@ func TestBeginMoveDoesNotBlockTheGameLoop(t *testing.T) {
 	}
 	if _, err := a.Read("link.json"); err == nil {
 		t.Error("link.json is left")
+	}
+}
+
+func TestPrepareMovePanicIsAnErrorAndTokensAreGone(t *testing.T) {
+	ctx, a, b := computerWithLinkedLearner(t)
+	old := openForMove
+	openForMove = func(link.Options) *link.Client { panic("boom") }
+	t.Cleanup(func() { openForMove = old })
+	err := <-ctx.BeginMove()
+	if err == nil {
+		t.Fatal("a panic was not reported as an error")
+	}
+	for _, f := range []save.Folder{a, b} {
+		for _, n := range []string{"link.json", "link-queue.json", "link-parked.json"} {
+			if _, err := f.Read(n); err == nil {
+				t.Errorf("%s/%s is left", f, n)
+			}
+		}
+	}
+	if data, err := save.Root.Read(CrashFile); err != nil || !strings.Contains(string(data), "boom") {
+		t.Errorf("no crash report: %v", err)
+	}
+}
+
+func TestPrepareMoveFailsWhenTokensCannotBeRemoved(t *testing.T) {
+	ctx, a, _ := computerWithLinkedLearner(t)
+	dir, _ := a.Dir()
+	// A link-queue.json that is a folder with something in it can't be removed.
+	p := filepath.Join(dir, "link-queue.json")
+	os.Remove(p)
+	if err := os.MkdirAll(filepath.Join(p, "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-ctx.BeginMove(); err == nil {
+		t.Fatal("tokens left on disk were not reported")
 	}
 }

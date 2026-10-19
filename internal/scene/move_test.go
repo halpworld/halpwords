@@ -1,6 +1,7 @@
 package scene
 
 import (
+	"errors"
 	"io/fs"
 	"maps"
 	"slices"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/halpworld/halpwords/internal/game"
 	"github.com/halpworld/halpwords/internal/move"
+	"github.com/halpworld/halpwords/internal/save"
 )
 
 type memStore map[string][]byte
@@ -83,5 +85,29 @@ func TestStartImportsOnABusyScreen(t *testing.T) {
 	case <-imp.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("never finished preparing")
+	}
+}
+
+// When letting go of the old link failed, nothing is applied (the old
+// tokens might be reopened on the new progress) and the title comes next.
+func TestImportingRefusesToApplyOnError(t *testing.T) {
+	useTempDir(t)
+	t.Cleanup(func() { save.Use(save.Root) }) // opening the learners picks a learner's folder
+	ctx := testContext(t)
+	ctx.TestOpen()
+	next := ctx.TestScenes(nil)
+	st := memStore{"adventure.json": []byte("here")}
+	in := &move.Incoming{ID: "0123456789abcdef", Files: map[string][]byte{"adventure.json": []byte("brought")}}
+	done := make(chan error, 1)
+	done <- errors.New("moving: boom")
+	imp := &importing{st: st, in: in, done: done}
+	if err := imp.Update(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if string(st["adventure.json"]) != "here" || len(st) != 1 {
+		t.Fatalf("applied anyway: %v", st)
+	}
+	if _, ok := next().(*Title); !ok {
+		t.Fatalf("next scene %T, want the title", next())
 	}
 }

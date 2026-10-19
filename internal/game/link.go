@@ -147,6 +147,7 @@ func (c *Context) EndSession() {
 // moment. The game calls it when it quits.
 func (g *Game) Close() {
 	g.ctx.EndSession()
+	g.ctx.saveMemoryDurable()
 	g.ctx.Link.Close()
 	for _, done := range g.ctx.closing { // learners who played before
 		select {

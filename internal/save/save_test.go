@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -318,5 +319,67 @@ func TestWriteFastWrites(t *testing.T) {
 	}
 	if d, err := Read("m.json"); err != nil || string(d) != "x" {
 		t.Fatalf("%q %v", d, err)
+	}
+}
+
+func TestQuarantineInAFolderInMemory(t *testing.T) {
+	UseMemory()
+	t.Cleanup(func() { memMu.Lock(); memory = nil; memMu.Unlock() })
+	f := Folder("profiles/x")
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 5; i++ {
+		if _, err := f.quarantine("progress.json", []byte{byte('a' + i)}, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if names, _ := f.List(""); len(names) != KeepBad {
+		t.Fatalf("kept %v, want %d", names, KeepBad)
+	}
+	if names, _ := Root.List(""); len(names) != 0 {
+		t.Fatalf("root has %v", names)
+	}
+}
+
+// Writes from many goroutines, durable and fast, to the same and to other
+// names: no race, no temp files left, and the file is one of the writes.
+func TestConcurrentWrites(t *testing.T) {
+	useTempDir(t)
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				data := []byte(strings.Repeat("x", g+1))
+				var err error
+				if g%2 == 0 {
+					err = Write("same.json", data)
+				} else {
+					err = Root.WriteFast("same.json", data)
+				}
+				if err == nil {
+					err = Write("other"+strings.Repeat("o", g)+".json", data)
+				}
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				Read("same.json")
+			}
+		}()
+	}
+	wg.Wait()
+	d, err := Read("same.json")
+	if err != nil || len(d) < 1 || len(d) > 8 || strings.Trim(string(d), "x") != "" {
+		t.Fatalf("same.json = %q, %v", d, err)
+	}
+	names, _ := List("")
+	for _, n := range names {
+		if strings.HasSuffix(n, ".tmp") {
+			t.Errorf("temp file %s left", n)
+		}
+	}
+	if len(nameLocks) != 0 {
+		t.Errorf("%d name locks leaked", len(nameLocks))
 	}
 }

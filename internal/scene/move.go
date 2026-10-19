@@ -77,8 +77,10 @@ func (m *importing) Update(ctx *game.Context) error {
 	select {
 	case err := <-m.done:
 		if err != nil {
-			// The old link's tokens may be left: don't put the new progress
-			// on top of them. The game starts over on what is there.
+			// The old link's tokens may be left, so the new progress is not
+			// put on top of them: nothing is applied, and the progress is
+			// not marked as dealt with. The game starts over on what is
+			// here; the player can bring it again from the old address.
 			ctx.Notify("Couldn't bring your progress")
 			ctx.ReloadSaves()
 		} else {

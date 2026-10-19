@@ -65,6 +65,9 @@ var sendRun = func(ctx *game.Context, r compete.Run, listHash string) { ctx.Link
 // newGameOver ends run r, which fell or was given up.
 func newGameOver(ctx *game.Context, r *run, gaveUp bool) *GameOver {
 	ctx.EndSession()
+	if r.prof != nil {
+		r.prof.SaveMemoryDurable() // the per-answer writes are not flushed
+	}
 	g := &GameOver{
 		bg: backdrop(9, 1.2), lang: r.lang, mode: r.mode, class: r.hero.Class.String(),
 		floor: r.depth, tally: r.tally, score: r.score(), seed: r.seed, gaveUp: gaveUp,

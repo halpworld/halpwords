@@ -5,8 +5,10 @@ package game
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image/color"
+	"io/fs"
 	"math"
 	"path"
 	"runtime/debug"
@@ -337,15 +339,25 @@ func (c *Context) BeginMove() <-chan error {
 // applied on top of the old account's tokens.
 func prepareMove(l *link.Client) (err error) {
 	folders := []save.Folder{save.Root}
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		fail any
+	)
 	defer func() {
 		if r := recover(); r != nil {
 			Crash(r, debug.Stack())
 			err = fmt.Errorf("moving: %v", r)
 		}
+		wg.Wait() // no unlinking goroutine may write a file back after this
 		for _, f := range folders {
-			// Not exportable, so the move would leave them.
+			// Not exportable, so the move would leave them. Tokens that
+			// can't be removed fail the move: they must not be reopened on
+			// top of the new progress.
 			for _, n := range [...]string{"link.json", "link-queue.json", "link-parked.json"} {
-				f.Remove(n)
+				if rerr := f.Remove(n); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) && err == nil {
+					err = fmt.Errorf("moving: removing %s: %w", n, rerr)
+				}
 			}
 		}
 	}()
@@ -362,11 +374,6 @@ func prepareMove(l *link.Client) (err error) {
 			folders = append(folders, save.Folder(profile.ProfilesDir+"/"+id))
 		}
 	}
-	var (
-		wg   sync.WaitGroup
-		mu   sync.Mutex
-		fail any
-	)
 	for _, f := range folders {
 		if p := link.PeekFolder(f); p.Tokens || p.PendingSSO {
 			wg.Add(1)
@@ -380,18 +387,23 @@ func prepareMove(l *link.Client) (err error) {
 						mu.Unlock()
 					}
 				}()
-				l := link.Open(link.Options{Store: f, Version: Version, OwnDir: WordsDir})
+				l := openForMove(link.Options{Store: f, Version: Version, OwnDir: WordsDir})
 				l.Close() // sends what is queued, within its timeouts
 				l.Unlink()
 			}()
 		}
 	}
 	wg.Wait()
+	mu.Lock()
+	defer mu.Unlock()
 	if fail != nil {
 		return fmt.Errorf("moving: %v", fail)
 	}
 	return nil
 }
+
+// openForMove opens a folder's link to unlink it; a variable for tests.
+var openForMove = link.Open
 
 // loadProfile loads the profile of the learner playing.
 func (c *Context) loadProfile() {

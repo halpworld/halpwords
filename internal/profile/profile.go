@@ -307,10 +307,18 @@ func (p *Profile) SaveSettings() error { return p.write(settingsFile, p.Settings
 
 // SaveMemory writes what the player knows of their words. It runs on every
 // answer, so it is not flushed to disk (an fsync costs a frame or more):
-// a power cut can lose the last answers. That stays so until the writes are
-// debounced (#53 item 5).
+// a power cut can lose the last answers, or leave an empty file, which the
+// next start sets aside as damaged (all word memory lost). So the game also
+// makes one durable write, SaveMemoryDurable, at the end of a run and on
+// quit, until the writes are debounced (#53 item 5).
 func (p *Profile) SaveMemory() error {
 	return p.writeAs(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory}, false)
+}
+
+// SaveMemoryDurable writes the word memory and flushes it to disk. Use it
+// where a power cut would hurt most: the end of a run, and quitting.
+func (p *Profile) SaveMemoryDurable() error {
+	return p.write(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory})
 }
 
 // SaveFame writes the Hall of Fame.

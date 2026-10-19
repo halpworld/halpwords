@@ -137,10 +137,12 @@ func All() ([]string, error) { return Current().All() }
 func (f Folder) Read(name string) ([]byte, error) {
 	name = f.name(name)
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
+		memMu.Unlock()
+		defer lockName(name)()
 		return diskRead(name)
 	}
+	defer memMu.Unlock()
 	data, ok := memory[name]
 	if !ok {
 		return nil, &fs.PathError{Op: "read", Path: name, Err: fs.ErrNotExist}
@@ -166,12 +168,49 @@ func (f Folder) WriteFast(name string, data []byte) error { return f.write(name,
 func (f Folder) write(name string, data []byte, durable bool) error {
 	name = f.name(name)
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
+		// Not held across the disk I/O: a game-loop WriteFast must not wait
+		// behind another file's fsync. Writes of one name keep their order.
+		memMu.Unlock()
+		defer lockName(name)()
 		return diskWrite(name, data, durable)
 	}
+	defer memMu.Unlock()
 	memory[name] = append([]byte(nil), data...)
 	return nil
+}
+
+// nameLocks serialises disk access to one file name, so two writes of the
+// same file never rename out of order. Entries are dropped when unused.
+var (
+	nameMu    sync.Mutex
+	nameLocks = map[string]*nameLock{}
+)
+
+type nameLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lockName locks name and returns the unlock.
+func lockName(name string) func() {
+	nameMu.Lock()
+	l := nameLocks[name]
+	if l == nil {
+		l = &nameLock{}
+		nameLocks[name] = l
+	}
+	l.refs++
+	nameMu.Unlock()
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		nameMu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(nameLocks, name)
+		}
+		nameMu.Unlock()
+	}
 }
 
 // WritePrivate replaces the named file with one only the user can read, for
@@ -188,10 +227,12 @@ func (f Folder) WritePrivate(name string, data []byte) error {
 func (f Folder) Remove(name string) error {
 	name = f.name(name)
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
+		memMu.Unlock()
+		defer lockName(name)()
 		return diskRemove(name)
 	}
+	defer memMu.Unlock()
 	delete(memory, name)
 	return nil
 }
@@ -292,10 +333,11 @@ func (f Folder) ModTime(name string) time.Time {
 func (f Folder) List(dir string) ([]string, error) {
 	dir = strings.TrimSuffix(f.name(strings.TrimSuffix(dir, "/")), "/")
 	memMu.Lock()
-	defer memMu.Unlock()
 	if memory == nil {
+		memMu.Unlock()
 		return diskList(dir)
 	}
+	defer memMu.Unlock()
 	var names []string
 	for name := range memory {
 		if d := path.Dir(name); d == dir || (d == "." && dir == "") {
