@@ -229,6 +229,29 @@ type Profile struct {
 	// unsynced is set by SaveMemory, which does not flush to disk, and
 	// cleared by SaveMemoryDurable.
 	unsynced bool
+	// memFailed is set while the last write of the word memory failed;
+	// memTold once MemoryFailure has said so (#53 item 5).
+	memFailed, memTold bool
+}
+
+// noteMemory records how a write of the word memory went.
+func (p *Profile) noteMemory(err error) error {
+	p.memFailed = err != nil
+	if err == nil {
+		p.memTold = false
+	}
+	return err
+}
+
+// MemoryFailure reports true once each time the word memory starts to fail
+// to save, for the game to tell the player; false while it keeps failing
+// and after it works again.
+func (p *Profile) MemoryFailure() bool {
+	if p.memFailed && !p.memTold {
+		p.memTold = true
+		return true
+	}
+	return false
 }
 
 // New returns an empty profile that is never written to disk.
@@ -316,7 +339,7 @@ func (p *Profile) SaveSettings() error { return p.write(settingsFile, p.Settings
 // quit, until the writes are debounced (#53 item 5).
 func (p *Profile) SaveMemory() error {
 	p.unsynced = true
-	return p.writeAs(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory}, false)
+	return p.noteMemory(p.writeAs(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory}, false))
 }
 
 // SaveMemoryDurable writes the word memory and flushes it to disk. Use it
@@ -328,7 +351,7 @@ func (p *Profile) SaveMemoryDurable() error {
 	}
 	err := p.write(memoryFile, struct{ Memory map[string]*words.Memory }{p.Memory})
 	p.unsynced = err != nil
-	return err
+	return p.noteMemory(err)
 }
 
 // SaveFame writes the Hall of Fame.

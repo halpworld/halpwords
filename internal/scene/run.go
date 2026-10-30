@@ -392,7 +392,7 @@ func (r *run) lastFloor() bool { return r.quest != nil && r.depth >= len(r.quest
 // remember writes what the player has learned to disk, if it can.
 func (r *run) remember() {
 	if r.prof != nil {
-		r.prof.SaveMemory()
+		r.prof.SaveMemory() // a failure is shown by the game (Profile.MemoryFailure)
 	}
 }
 

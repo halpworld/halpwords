@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"bytes"
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
@@ -31,6 +32,10 @@ const (
 	learnersFile = "learners.json"
 	// ProfilesDir is the folder that holds each learner's folder.
 	ProfilesDir = "profiles"
+	// identityFile, in a learner's own folder, is a copy of their entry in
+	// learners.json: name, lock, website learner ID and lockout. A damaged
+	// learners.json is rebuilt from these, so a child's lock survives it.
+	identityFile = "identity.json"
 )
 
 // Lockouts of a learner's folder: wrong tries in a row before it locks,
@@ -93,7 +98,11 @@ func (l *Learner) Folder() save.Folder { return save.Folder(ProfilesDir + "/" + 
 // hundred combinations, so the hash can be guessed offline in moments, and
 // the wrong-tries counter is in the same file. That is accepted (#62); the
 // README says so. Copies of learners.json kept to one side (learners.json.<time>.bad)
-// hold the same hashes. Don't present the lock as more than that in the game.
+// hold the same hashes, and so does the learner's own copy of their entry,
+// profiles/<ID>/identity.json, which is what a damaged learners.json is
+// rebuilt from (its lock, lockout and learner ID come back). A planted
+// identity.json is trusted as learners.json is. Don't present the lock as
+// more than that in the game.
 type Lock struct {
 	Kind string // "card" or "pictures"
 	// Grid are the 9 pictures to show, for "pictures": the server's,
@@ -170,7 +179,9 @@ type Learners struct {
 	// into the first learner's folder.
 	Migrated bool `json:",omitempty"`
 	// Repaired is set when the list was damaged or missing and was made
-	// again from the learners' folders: the locks are lost.
+	// again from the learners' folders. A learner whose folder has an
+	// identity.json comes back with their name, lock and learner ID; one
+	// without is named "Player N", with no lock.
 	Repaired bool `json:"-"`
 
 	root save.Folder
@@ -229,6 +240,7 @@ func (ls *Learners) rebuild() error {
 		return err
 	}
 	seen := map[string]bool{}
+	var latest time.Time
 	for _, n := range names {
 		rest, ok := strings.CutPrefix(n, ProfilesDir+"/")
 		id, _, found := strings.Cut(rest, "/")
@@ -236,9 +248,56 @@ func (ls *Learners) rebuild() error {
 			continue
 		}
 		seen[id] = true
-		ls.List = append(ls.List, &Learner{ID: id, Name: ls.nextName()})
+		l := ls.readIdentity(id)
+		if l == nil {
+			l = &Learner{ID: id, Name: ls.nextName()}
+		}
+		ls.List = append(ls.List, l)
+		if l.LastUsed.After(latest) {
+			latest, ls.Current = l.LastUsed, id
+		}
 	}
 	return nil
+}
+
+// readIdentity returns the learner kept in the folder of learner id, or
+// nil when there is none or it can't be used.
+func (ls *Learners) readIdentity(id string) *Learner {
+	data, err := save.Folder(ProfilesDir + "/" + id).Read(identityFile)
+	if err != nil {
+		return nil
+	}
+	l := &Learner{}
+	if json.Unmarshal(data, l) != nil || l.ID != id {
+		return nil
+	}
+	if l.Name = strings.TrimSpace(l.Name); l.Name == "" {
+		l.Name = ls.nextName()
+	}
+	if l.Lock != nil && (l.Lock.Salt == "" || l.Lock.Hash == "") {
+		// A lock that can never open: the learner signs in again instead.
+		l.Lock, l.NeedsSignIn = nil, true
+	}
+	return l
+}
+
+// saveIdentity keeps the learner's entry in their own folder, if it
+// changed. A guest the game named and nobody has signed in as has nothing
+// to keep, and their folder stays empty (see Context.Pristine).
+func saveIdentity(l *Learner) error {
+	if l.Lock == nil && !l.NeedsSignIn && l.LearnerID == "" && l.Owner == "" &&
+		(l.Name == "" || GeneratedName(l.Name)) {
+		return l.Folder().Remove(identityFile)
+	}
+	data, err := json.MarshalIndent(l, "", "  ")
+	if err != nil {
+		return err
+	}
+	f := l.Folder()
+	if old, err := f.Read(identityFile); err == nil && bytes.Equal(old, data) {
+		return nil
+	}
+	return f.Write(identityFile, data)
 }
 
 // migrate moves the files of a game from before W2.5 into the first
@@ -276,7 +335,7 @@ func (ls *Learners) migrate() error {
 				return err
 			}
 		}
-		if first.Name == "" || strings.HasPrefix(first.Name, "Player ") {
+		if first.Name == "" || GeneratedName(first.Name) {
 			if name := fameName(dst); name != "" {
 				first.Name = name
 			}
@@ -312,11 +371,20 @@ func fameName(f save.Folder) string {
 	return strings.TrimSpace(fame.Name)
 }
 
-// Save writes the list.
+// Save writes the list, and each learner's own copy of their entry in
+// their folder. learners.json is the authority: only its error is
+// returned. The copies are best effort, so one learner's unwritable
+// folder (or a full browser storage) never stops the others; they are
+// only for rebuilding a damaged list.
 func (ls *Learners) Save() error {
 	data, err := json.MarshalIndent(ls, "", "  ")
 	if err != nil {
 		return err
+	}
+	for _, l := range ls.List {
+		if validID(l.ID) {
+			saveIdentity(l)
+		}
 	}
 	return ls.root.Write(learnersFile, data)
 }
@@ -333,6 +401,21 @@ func (ls *Learners) Find(id string) *Learner {
 
 // CurrentLearner is the learner playing now.
 func (ls *Learners) CurrentLearner() *Learner { return ls.Find(ls.Current) }
+
+// GeneratedName reports whether name is one the game gives a learner
+// itself, "Player 2" and so on, as opposed to one a child chose.
+func GeneratedName(name string) bool {
+	n, ok := strings.CutPrefix(name, "Player ")
+	if !ok || n == "" {
+		return false
+	}
+	for _, r := range n {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // nextName is a name for a new learner: "Player 2" and so on.
 func (ls *Learners) nextName() string {
@@ -409,6 +492,8 @@ func (ls *Learners) Unlock(id, secret string) (bool, error) {
 		return false, ErrLocked
 	}
 	l.Tries++
+	// learners.json is the authority; the learner's own copy is best effort
+	// (see Save), so a full storage there never shuts a child out.
 	if err := ls.Save(); err != nil {
 		l.Tries--
 		return false, err
