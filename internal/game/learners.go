@@ -34,9 +34,10 @@ func (c *Context) openLearners() {
 		link.SweepParked(l.Folder(), time.Now())
 	}
 	if ls.Repaired {
-		// The locks were lost: whoever holds tokens must sign in again.
+		// Learners without a lock (their folder had no identity.json)
+		// who hold tokens must sign in again.
 		for _, l := range ls.List {
-			if link.PeekFolder(l.Folder()).Tokens {
+			if l.Lock == nil && link.PeekFolder(l.Folder()).Tokens {
 				l.NeedsSignIn = true
 			}
 		}

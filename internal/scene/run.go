@@ -52,11 +52,14 @@ type logLine struct {
 
 // run is one adventure: everything that carries over from floor to floor.
 type run struct {
-	lang *words.Language
-	deck *words.Deck
-	rng  *rand.Rand
-	src  *rand.PCG // rng's generator, kept so saves can store its state
-	seed uint64
+	// memFailed is set while the word memory can't be written, and
+	// memNoticed once the player has been told (#53 item 5).
+	memFailed, memNoticed bool
+	lang                  *words.Language
+	deck                  *words.Deck
+	rng                   *rand.Rand
+	src                   *rand.PCG // rng's generator, kept so saves can store its state
+	seed                  uint64
 
 	hero hero
 	// shrine is where the hero wakes up after falling: the last Save
@@ -392,7 +395,11 @@ func (r *run) lastFloor() bool { return r.quest != nil && r.depth >= len(r.quest
 // remember writes what the player has learned to disk, if it can.
 func (r *run) remember() {
 	if r.prof != nil {
-		r.prof.SaveMemory()
+		err := r.prof.SaveMemory()
+		r.memFailed = err != nil
+		if err == nil {
+			r.memNoticed = false
+		}
 	}
 }
 
