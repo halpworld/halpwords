@@ -67,6 +67,48 @@ const codeDailyLate = "daily_late"
 // LateNote is the note (Status.Note) after a Daily run was dropped for being too late.
 const LateNote = "Your Daily run reached the board too late to count. Your XP is safe!"
 
+// The server's answers to a run it refuses for its time: stale_run is
+// older than its limit (14 days) or ahead of the server, implausible_run
+// fails its checks, which a Daily played on the wrong day by a wrong
+// clock does.
+const (
+	codeStaleRun       = "stale_run"
+	codeImplausibleRun = "implausible_run"
+)
+
+// The notes (Status.Note) after the server refused a run (runNote).
+const (
+	ClockRunNote = "A run didn't count: the computer's clock is wrong. Your XP is safe!"
+	OldRunNote   = "A run waited too long to reach the board. Your XP is safe!"
+	BadRunNote   = "A run couldn't count on the board. Your XP is safe!"
+)
+
+// RunNote reports whether note is one of the notes about a run that
+// didn't count on a board (LateNote and runNote's).
+func RunNote(note string) bool {
+	switch note {
+	case LateNote, ClockRunNote, OldRunNote, BadRunNote:
+		return true
+	}
+	return false
+}
+
+// runNote is the note for a run the server refused with code, or "" for
+// a refusal that says nothing to the player. A wrong clock (clockWrong)
+// is named first: it is the likely cause, and the one the player can
+// fix.
+func runNote(code string, clockWrong bool) string {
+	switch {
+	case code != codeStaleRun && code != codeImplausibleRun:
+		return ""
+	case clockWrong:
+		return ClockRunNote
+	case code == codeStaleRun:
+		return OldRunNote
+	}
+	return BadRunNote
+}
+
 // daily reports whether r is a Daily Dungeon run.
 func (r qRun) daily() bool {
 	s, err := compete.ParseShare(r.Code)
@@ -151,6 +193,14 @@ type wireRun struct {
 	AgeS int64 `json:"age_s"`
 }
 
+// errCode is e's code, or "" for none.
+func errCode(e *Error) string {
+	if e == nil {
+		return ""
+	}
+	return e.Code
+}
+
 // ageSecs is how long ago, in whole seconds on the device clock, a run
 // that ended at at is at now; never below 0.
 func ageSecs(at, now time.Time) int64 {
@@ -162,7 +212,10 @@ func ageSecs(at, now time.Time) int64 {
 // rankings off), is dropped; anything else stops until the next sync.
 // A Daily run past compete.DailySendWindow is dropped without being sent,
 // and one the server calls too late (daily_late) is dropped too; either
-// way a learner on a Daily board gets LateNote. Only the board loses it: the run's XP and
+// way a learner on a Daily board gets LateNote. A run refused for its time
+// or its checks (stale_run, implausible_run) gives a learner on a board
+// a note saying so (runNote), naming a wrong clock when the server's
+// Date says so (ClockWrong). Only the board loses it: the run's XP and
 // word practice were kept when it ended. syncMu is held.
 func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 	for {
@@ -207,6 +260,9 @@ func (c *Client) uploadRuns(ctx context.Context, gen int) error {
 		}
 		if e != nil && e.Code == codeDailyLate && c.onDailyBoard() {
 			c.st.LateDaily = true
+		}
+		if n := runNote(errCode(e), c.clockWrong); n != "" && len(c.st.Boards) > 0 {
+			c.st.RunNote = n
 		}
 		c.saveState()
 		c.mu.Unlock()

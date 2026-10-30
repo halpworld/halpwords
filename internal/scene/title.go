@@ -62,9 +62,10 @@ func NewTitle(ctx *game.Context) game.Scene {
 		// (account_qr.go): Account is where they do.
 		t.sel = slices.Index(t.items, titleAccount)
 		ctx.Notify("A grown-up linked this game. Open Account to finish.")
-	} else if ctx.Link.Status().Note == link.LateNote {
-		// A Daily run was dropped for being sent too late (Q127).
-		ctx.NotifyFor(link.LateNote, 5*60) // long enough to read
+	} else if n := ctx.Link.Status().Note; link.RunNote(n) {
+		// A run didn't count on a board: a Daily sent too late (Q127),
+		// or one the server refused for its time or its checks (#68).
+		ctx.NotifyFor(n, 5*60) // long enough to read
 		ctx.Link.ClearNote()
 	}
 	return t

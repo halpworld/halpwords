@@ -295,6 +295,10 @@ type state struct {
 	// late (Q127), until the player has seen LateNote (ClearNote). It is
 	// kept so the note outlives a restart.
 	LateDaily bool `json:",omitempty"`
+	// RunNote is the note about a run the server refused (runNote),
+	// until the player has seen it (ClearNote). It is kept so the note
+	// outlives a restart.
+	RunNote string `json:",omitempty"`
 	// Kept are the lists that stopped being assigned and were kept as the
 	// player's own: the own file name, by the list's server id (moveOut).
 	// Like NextSeq, it outlives the link.
@@ -355,7 +359,12 @@ type Status struct {
 	// Outdated is set when the server says this game is too old for
 	// some of its features.
 	Outdated bool
-	Lists    int
+	// ClockWrong is set while the server's last answer said a time more
+	// than clockOff from this computer's clock (its Date header), for a
+	// learner on a board or with a refused run's note: runs timed by a
+	// wrong clock may not count on the boards, and nothing else needs it.
+	ClockWrong bool
+	Lists      int
 	// Unconfirmed is set after a link by QR code until the child says
 	// the learner is them (ConfirmPair) or not (Unlink). Nothing syncs
 	// until then.
@@ -419,8 +428,11 @@ type Client struct {
 	failures int
 	// suspended: the last sync was paused by the server (Status.Suspended).
 	suspended bool
-	note      string
-	batch     int // events per batch; halved after a too_large answer
+	// clockWrong: the server's last answer said this computer's clock
+	// is wrong (Status.ClockWrong, seeClock).
+	clockWrong bool
+	note       string
+	batch      int // events per batch; halved after a too_large answer
 
 	kick    chan struct{}
 	stop    chan struct{}
@@ -609,10 +621,15 @@ func (c *Client) Status() Status {
 		Note:      c.note,
 		Lists:     len(c.st.Lists),
 
+		ClockWrong: c.clockWrong && (len(c.st.Boards) > 0 || c.st.RunNote != ""),
+
 		Unconfirmed: c.st.Unconfirmed && c.st.linked(),
 	}
 	if s.Note == "" && c.st.LateDaily {
 		s.Note = LateNote
+	}
+	if s.Note == "" {
+		s.Note = c.st.RunNote
 	}
 	if m := c.st.Me; m != nil {
 		s.Learner = m.Learner.DisplayName
@@ -626,8 +643,13 @@ func (c *Client) Status() Status {
 func (c *Client) ClearNote() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.note == "" && c.st.LateDaily {
+	switch {
+	case c.note != "":
+	case c.st.LateDaily:
 		c.st.LateDaily = false
+		c.saveState()
+	case c.st.RunNote != "":
+		c.st.RunNote = ""
 		c.saveState()
 	}
 	c.note = ""

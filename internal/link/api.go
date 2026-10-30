@@ -242,6 +242,11 @@ func (c *Client) requestIn(rctx context.Context, hc *http.Client, stall *time.Ti
 	defer resp.Body.Close()
 	limitBytes := int64(16 << 20)
 	raw, isRaw := out.(*[]byte) // the body as it is, such as an audio pack
+	if !isRaw {
+		// An audio pack may come from a browser's cache, with the
+		// Date of when it was first fetched.
+		c.seeClock(resp.Header)
+	}
 	if isRaw {
 		limitBytes = audiopack.MaxBytes + 1
 	}
@@ -268,6 +273,26 @@ func (c *Client) requestIn(rctx context.Context, hc *http.Client, stall *time.Ti
 		return resp.StatusCode, resp.Header, nil
 	}
 	return resp.StatusCode, resp.Header, errorFrom(resp.StatusCode, resp.Header, data)
+}
+
+// clockOff is how far this computer's clock may be from the server's
+// before the game says it looks wrong: a day, as the server allows
+// before it stops trusting the game's times.
+const clockOff = 24 * time.Hour
+
+// seeClock compares the server's time, in the Date header of an answer,
+// with this computer's clock (Status.ClockWrong). An answer without a
+// Date (a browser that doesn't show it) changes nothing. c.mu is not
+// held.
+func (c *Client) seeClock(h http.Header) {
+	d, err := http.ParseTime(h.Get("Date"))
+	if err != nil {
+		return
+	}
+	off := c.now().Sub(d)
+	c.mu.Lock()
+	c.clockWrong = off > clockOff || off < -clockOff
+	c.mu.Unlock()
 }
 
 // errorFrom is the *Error of an error answer: its status, the code and

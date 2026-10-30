@@ -268,3 +268,52 @@ func TestTitleTellsOfALateDaily(t *testing.T) {
 		t.Fatalf("note after the title %q", n)
 	}
 }
+
+// The title screen tells the child once why a run didn't count on a
+// board (#68), as for a late Daily, and the note is then gone.
+func TestTitleTellsOfARefusedRun(t *testing.T) {
+	ctx := testContext(t)
+	data, _ := json.Marshal(map[string]any{"Refresh": "r", "RunNote": link.ClockRunNote})
+	ctx.Link = link.Open(link.Options{Store: memFiles{"link.json": data}, Server: "http://127.0.0.1:1"})
+	if n := ctx.Link.Status().Note; n != link.ClockRunNote {
+		t.Fatalf("note before the title %q", n)
+	}
+	NewTitle(ctx)
+	if n := ctx.Link.Status().Note; n != "" {
+		t.Fatalf("note after the title %q", n)
+	}
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.Font = gfx.NewFont(face)
+	// Each note fits the notice in the top corner.
+	for _, n := range []string{link.ClockRunNote, link.OldRunNote, link.BadRunNote} {
+		if w := ctx.Font.Width(n, 1); w > game.ScreenW-40 {
+			t.Errorf("%q is %dpx wide, room for %d", n, w, game.ScreenW-40)
+		}
+	}
+}
+
+// Account says a wrong clock last, after anything that stops the sync,
+// on one line of its window (#68).
+func TestAccountSaysClockWrong(t *testing.T) {
+	ctx := testContext(t)
+	if s, _ := syncProblem(link.Status{Linked: true, ClockWrong: true}); s != ClockWrongText {
+		t.Errorf("clock wrong: %q", s)
+	}
+	if s, _ := syncProblem(link.Status{Linked: true, ClockWrong: true, Offline: true}); s == ClockWrongText {
+		t.Error("clock wrong said before offline")
+	}
+	if s, _ := syncProblem(link.Status{Linked: true}); s != "" {
+		t.Errorf("no problem: %q", s)
+	}
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.Font = gfx.NewFont(face)
+	if w, room := ctx.Font.Width(ClockWrongText, 1), game.ScreenW-80-32; w > room {
+		t.Errorf("%q is %dpx wide, room for %d", ClockWrongText, w, room)
+	}
+}
