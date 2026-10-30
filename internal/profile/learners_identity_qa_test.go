@@ -6,10 +6,9 @@ import (
 	"testing"
 )
 
-// The learner being unlocked has an unwritable folder and a change to
-// record: the try can't be recorded, so the secret is not tried (fails
-// closed), and the try count goes back.
-func TestUnlockFailsClosedWhenOwnIdentityUnwritable(t *testing.T) {
+// The learner being unlocked has an unwritable folder: their own identity
+// copy is best effort, so the right code still opens (learners.json saved).
+func TestUnlockOpensWhenOwnIdentityUnwritable(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root writes anywhere")
 	}
@@ -22,16 +21,11 @@ func TestUnlockFailsClosedWhenOwnIdentityUnwritable(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(dir, 0o700) })
-	ok, err := ls.Unlock(ada.ID, "ABCD") // the right code
-	if ok || err == nil {
-		t.Errorf("unlocked with the try unrecorded: %v, %v", ok, err)
+	if ok, err := ls.Unlock(ada.ID, "WRONG"); ok || err != nil {
+		t.Errorf("wrong code: %v, %v", ok, err)
 	}
-	if ada.Tries != 0 {
-		t.Errorf("tries = %d after a failed record", ada.Tries)
-	}
-	os.Chmod(dir, 0o700)
 	if ok, err := ls.Unlock(ada.ID, "ABCD"); !ok || err != nil {
-		t.Errorf("after the folder is fixed: %v, %v", ok, err)
+		t.Errorf("right code with an unwritable own folder: %v, %v", ok, err)
 	}
 }
 

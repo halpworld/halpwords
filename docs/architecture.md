@@ -221,6 +221,7 @@ the user's folder itself.
 | File | Where | Holds |
 |---|---|---|
 | `learners.json` | root | The learners on this computer, their names and sign-in locks. |
+| `profiles/<id>/identity.json` | learner | A copy of the learner's entry in `learners.json`: name, lock hash, wrong tries and lockout, website learner ID. A damaged `learners.json` is rebuilt from these. Written best effort whenever the list is saved; not written for an unnamed guest. |
 | `ai.json`, `ai-spend.json` | root | The AI provider, keys (private), models, budgets, and what has been spent. |
 | `ai/bank-<lang>.json` | root | Generated gap-fills, riddles, taunts and tips, kept so they are paid for once. |
 | `reports/queue.json` | root | Reports waiting to be sent. |

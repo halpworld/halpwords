@@ -39,6 +39,8 @@ func (c *Context) openLearners() {
 		for _, l := range ls.List {
 			if l.Lock == nil && link.PeekFolder(l.Folder()).Tokens {
 				l.NeedsSignIn = true
+			}
+			if l.NeedsSignIn {
 				lost++
 			}
 		}

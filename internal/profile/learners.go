@@ -492,13 +492,9 @@ func (ls *Learners) Unlock(id, secret string) (bool, error) {
 		return false, ErrLocked
 	}
 	l.Tries++
-	// The try must be on record in the learner's own copy too, or a damaged
-	// list would give the tries back.
-	err := ls.Save()
-	if err == nil && l.Lock != nil {
-		err = saveIdentity(l)
-	}
-	if err != nil {
+	// learners.json is the authority; the learner's own copy is best effort
+	// (see Save), so a full storage there never shuts a child out.
+	if err := ls.Save(); err != nil {
 		l.Tries--
 		return false, err
 	}
