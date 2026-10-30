@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,6 +209,7 @@ func TestUnlockFailsClosed(t *testing.T) {
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	ls.now = func() time.Time { return now }
 	l := ls.CurrentLearner()
+	l.Name = "Cy"
 	l.Lock, _ = NewLock(LockCard, "ABCD")
 	dir, err := save.Root.Dir()
 	if err != nil {
@@ -232,5 +234,96 @@ func TestUnlockFailsClosed(t *testing.T) {
 	ls.Unlock(l.ID, "WRONG")
 	if l.LockedUntil.Before(before) {
 		t.Errorf("the lockout moved from %v back to %v", before, l.LockedUntil)
+	}
+}
+
+// TestRebuildKeepsIdentity: a damaged learners.json is rebuilt with each
+// learner's name, lock, learner ID and lockout from their own folder; a
+// folder without that file falls back to "Player N" with no lock.
+func TestRebuildKeepsIdentity(t *testing.T) {
+	for name, damage := range map[string]func(){
+		"corrupt": func() { save.Root.Write(learnersFile, []byte("{not json")) },
+		"missing": func() { save.Root.Remove(learnersFile) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			useTempDir(t)
+			t.Cleanup(func() { save.Use(save.Root) })
+			ls, err := OpenLearners(save.Root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ada := ls.List[0]
+			ada.Name, ada.LearnerID = "Ada", "lrn_ada"
+			if ada.Lock, err = NewLock(LockPictures, PicturesSecret([]int{1, 2, 3})); err != nil {
+				t.Fatal(err)
+			}
+			bo, _ := ls.Add("Bo")
+			if err := ls.Save(); err != nil {
+				t.Fatal(err)
+			}
+			ada.Tries = 2
+			if err := ls.Use(ada.ID); err != nil {
+				t.Fatal(err)
+			}
+			// Bo's identity file is lost; a third learner never had one.
+			save.Root.Remove("profiles/" + bo.ID + "/" + identityFile)
+			save.Root.Write("profiles/"+bo.ID+"/progress.json", []byte("{}"))
+			save.Root.Write("profiles/zz9/progress.json", []byte("{}"))
+
+			damage()
+			got, err := OpenLearners(save.Root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !got.Repaired {
+				t.Error("not marked repaired")
+			}
+			a := got.Find(ada.ID)
+			if a == nil || a.Name != "Ada" || a.LearnerID != "lrn_ada" || a.Lock == nil || a.Tries != 2 {
+				t.Fatalf("Ada came back as %+v", a)
+			}
+			if ok, err := got.Unlock(ada.ID, PicturesSecret([]int{9, 9, 9})); ok || err != nil {
+				t.Errorf("wrong pictures opened the lock: %v, %v", ok, err)
+			}
+			if ok, _ := got.Unlock(ada.ID, PicturesSecret([]int{1, 2, 3})); !ok {
+				t.Error("the right pictures don't open the restored lock")
+			}
+			for _, id := range []string{bo.ID, "zz9"} {
+				l := got.Find(id)
+				if l == nil || l.Lock != nil || !strings.HasPrefix(l.Name, "Player ") {
+					t.Errorf("learner %s without identity = %+v", id, l)
+				}
+			}
+			if got.Current != ada.ID {
+				t.Errorf("current = %q, want the last used learner %q", got.Current, ada.ID)
+			}
+		})
+	}
+}
+
+// TestIdentityFollowsLockRemoval: taking a lock off through the list
+// takes it off the learner's own copy too, so it doesn't come back.
+func TestIdentityFollowsLockRemoval(t *testing.T) {
+	useTempDir(t)
+	t.Cleanup(func() { save.Use(save.Root) })
+	ls, err := OpenLearners(save.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := ls.List[0]
+	l.Name = "Cy"
+	l.Lock, _ = NewLock(LockCard, "ABCD")
+	ls.Save()
+	l.Lock = nil
+	if err := ls.Save(); err != nil {
+		t.Fatal(err)
+	}
+	save.Root.Remove(learnersFile)
+	got, err := OpenLearners(save.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Find(l.ID) == nil || got.Find(l.ID).Lock != nil {
+		t.Error("a removed lock came back")
 	}
 }
