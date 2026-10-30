@@ -903,6 +903,12 @@ func (s *SignIn) tryUnlock(ctx *game.Context, secret string) {
 		ctx.Sound.Play(audio.Wrong)
 		s.say("Too many wrong tries. Wait a few minutes, then try again.", pal.Rose)
 		s.text = s.text[:0]
+	case err != nil:
+		// The try couldn't be saved (full disk or browser storage), so the
+		// code wasn't looked at.
+		ctx.Sound.Play(audio.Wrong)
+		s.say("Couldn't save: storage may be full.", pal.Rose)
+		s.text = s.text[:0]
 	default:
 		ctx.Sound.Play(audio.Wrong)
 		s.say("That's not right. Try again.", pal.Rose)

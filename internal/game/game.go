@@ -170,6 +170,15 @@ func (c *Context) toggleFullscreen() {
 	c.ApplyOptions()
 }
 
+// noteSaveFailure tells the player, once, that their word memory could not
+// be saved (a full disk or browser storage), from whatever scene it
+// happened in.
+func (c *Context) noteSaveFailure() {
+	if c.Profile != nil && c.Profile.MemoryFailure() {
+		c.NotifyFor("Could not save your progress: storage may be full", 300)
+	}
+}
+
 // Notify shows a short message in the top corner for a moment.
 func (c *Context) Notify(msg string) { c.NotifyFor(msg, 90) }
 
@@ -516,6 +525,7 @@ func (g *Game) Update() error {
 	g.ctx.Input.Update()
 	g.ctx.Sound.update(g.ctx.Tick)
 	g.ctx.pollLink()
+	g.ctx.noteSaveFailure()
 	if g.ctx.noticeT > 0 {
 		g.ctx.noticeT--
 	}
