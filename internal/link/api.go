@@ -333,7 +333,12 @@ func (c *Client) setTokens(t tokens) {
 		c.st.DeviceID = t.DeviceID
 	}
 	c.st.Access, c.st.AccessExp = t.AccessToken, now.Add(time.Duration(t.ExpiresIn)*time.Second)
-	c.st.Refresh, c.st.RefreshExp = t.RefreshToken, now.Add(time.Duration(t.RefreshExpiresIn)*time.Second)
+	c.st.Refresh, c.st.RefreshExp = t.RefreshToken, time.Time{}
+	if t.RefreshExpiresIn > 0 {
+		// Without it, the expiry is unknown (zero), never now: an
+		// invalid_token then drops, as a link the server ended.
+		c.st.RefreshExp = now.Add(time.Duration(t.RefreshExpiresIn) * time.Second)
+	}
 }
 
 // refresh swaps the refresh token for new tokens. A refresh token the

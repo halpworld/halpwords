@@ -250,7 +250,7 @@ func (c *Client) stopProgress() {
 		c.changes++
 	}
 	c.st.Stopped = true
-	c.dropUnsent()
+	c.dropUnsent(false)
 	c.saveState()
 	if p := c.play; p != nil {
 		// Play takes p.mu before c.mu, so not here.
@@ -260,14 +260,17 @@ func (c *Client) stopProgress() {
 
 // dropUnsent forgets, on disk too and at once, every event this game
 // kept for the linked learner: the queue, unsent runs and what was
-// parked for them after an earlier link (for everyone in this folder
-// while the learner isn't known yet). It is for a learner whose
+// parked for them after an earlier link. It is for a learner whose
 // progress is stopped, and for a link the server ended (lost, with
 // invalid_token). Nothing of that time is ever sent, even by a game
-// that stops before its next save. c.mu is held, so the queue file is removed here rather than by
+// that stops before its next save. With unknown (only a link the server
+// ended), the parked events of everyone in this folder go while the
+// learner isn't known yet (before the link's first /me): they may be
+// this learner's, from before the link ended. Without it, a learner not
+// known yet drops no one's parked events. c.mu is held, so the queue file is removed here rather than by
 // writeQueue, which takes the lock (the queue is empty, so writeQueue
 // would only remove it too).
-func (c *Client) dropUnsent() {
+func (c *Client) dropUnsent(unknown bool) {
 	c.q = queue{}
 	c.st.Runs = nil
 	c.dirty = false
@@ -276,12 +279,12 @@ func (c *Client) dropUnsent() {
 			c.dirty = true // Save tries again
 		}
 	}
-	// Before the first /me of a link, the learner isn't known yet: the
-	// parked events of everyone in this folder go, as the stricter
-	// reading (they may be this learner's, from before the link ended).
 	id := ""
 	if c.st.Me != nil {
 		id = c.st.Me.Learner.ID
+	}
+	if id == "" && !unknown {
+		return
 	}
 	n := len(c.parked)
 	c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return id == "" || p.Learner == id })
@@ -686,9 +689,9 @@ func (c *Client) revoke(t tokens) {
 // grown-up, and the game can be linked again.
 const lostNote = "The link to the account was lost. Your progress is still here: link again to sync."
 
-// endedNote is the note after lost without keep: the play not yet sent
+// EndedNote is the note after lost without keep: the play not yet sent
 // was dropped. Like lostNote, it doesn't say who ended the link.
-const endedNote = "The link to the account was lost. Your progress is still here; play since the last sync was not sent. Link again to keep syncing."
+const EndedNote = "The link to the account was lost. Your progress is still here; play since the last sync was not sent. Link again to keep syncing."
 
 // lost unlinks the game because the server no longer takes its tokens.
 // With keep, the events not sent are kept for the learner (park), not
@@ -707,14 +710,14 @@ func (c *Client) lost(gen int, keep bool) {
 		// now (full local storage): see parkForUnlink.
 		c.unlink(c.parkForUnlink())
 	} else {
-		c.dropUnsent()
+		c.dropUnsent(true)
 		c.unlink(false)
 	}
 	// Neutral about who ended it: the server refused the tokens (a lost
 	// refresh, say), so say the link was lost (#84).
 	c.note = lostNote
 	if !keep {
-		c.note = endedNote
+		c.note = EndedNote
 	}
 	play := c.play
 	c.mu.Unlock()

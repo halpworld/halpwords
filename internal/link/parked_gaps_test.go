@@ -162,7 +162,7 @@ func TestInvalidTokenUnlinksAndDrops(t *testing.T) {
 	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
 		t.Fatalf("sync: %v", err)
 	}
-	if s := c.Status(); s.Linked || s.Pending != 0 || s.Note != endedNote {
+	if s := c.Status(); s.Linked || s.Pending != 0 || s.Note != EndedNote {
 		t.Errorf("status: %+v", s)
 	}
 	if st.has(parkedFile) || st.has(queueFile) {
@@ -371,9 +371,65 @@ func TestUnreadableStateKeepsQueue(t *testing.T) {
 	}
 }
 
-// The ended note fits the Account window in at most two lines.
-func TestEndedNoteFits(t *testing.T) {
-	if n := len(endedNote); n > 2*66 {
-		t.Errorf("endedNote is %d characters, room for %d", n, 2*66)
+// A learner whose progress is stopped, seen at a new link's first /me
+// (not known yet), drops no one else's parked events: only a link the
+// server ended drops them all (#116 review).
+func TestStoppedBeforeMeKeepsOthersParked(t *testing.T) {
+	f, c, st, clk := setup(t)
+	c.mu.Lock()
+	c.parked = []parked{{Learner: "lrn_other", At: clk.now(), Queue: queue{Answers: []qAnswer{{Seq: 900}}}}}
+	err := c.writeParked()
+	c.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.LinkNow(context.Background(), "abcd efgh"); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.stopped = true
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrProgressStopped) {
+		t.Fatalf("sync: %v", err)
+	}
+	if !c.Status().Stopped {
+		t.Fatal("not stopped")
+	}
+	var ps []parked
+	if err := json.Unmarshal(st.files[parkedFile], &ps); err != nil {
+		t.Fatal(err)
+	}
+	if len(ps) != 1 || ps[0].Learner != "lrn_other" {
+		t.Errorf("parked after a stopped learner linked: %+v", ps)
+	}
+	// And Open with the stopped state keeps them too.
+	c.Close()
+	reopen(f, st, clk).Close()
+	if !st.has(parkedFile) {
+		t.Error("another learner's parked events dropped at start-up")
+	}
+}
+
+// An unknown refresh token expiry (refresh_expires_in 0 or missing) is
+// zero, never now: an invalid_token then drops, as a link the server
+// ended, rather than parking as an expiry.
+func TestUnknownRefreshExpiryDrops(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.mu.Lock()
+	c.setTokens(tokens{AccessToken: "a", RefreshToken: "r"})
+	exp := c.st.RefreshExp
+	c.st.AccessExp = time.Time{}
+	c.mu.Unlock()
+	if !exp.IsZero() {
+		t.Fatalf("RefreshExp %v with no refresh_expires_in", exp)
+	}
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	clk.add(time.Hour)
+	revoke(f)
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	if st.has(parkedFile) || c.Status().Note != EndedNote {
+		t.Errorf("parked %v, note %q", st.has(parkedFile), c.Status().Note)
 	}
 }

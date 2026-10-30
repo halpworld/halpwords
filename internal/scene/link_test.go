@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -266,5 +267,30 @@ func TestTitleTellsOfALateDaily(t *testing.T) {
 	NewTitle(ctx)
 	if n := ctx.Link.Status().Note; n != "" {
 		t.Fatalf("note after the title %q", n)
+	}
+}
+
+// Each note the link leaves after a lost link fits the Account window
+// with the four lines under it (the window holds eight, 18 px apart).
+func TestLostNotesFitAccount(t *testing.T) {
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := gfx.NewFont(face)
+	const width = game.ScreenW - 80 - 32
+	for _, n := range []string{link.EndedNote, "The link to the account was lost. Your progress is still here: link again to sync."} {
+		lines := windowLines(f, n, width)
+		if len(lines)+4 > 8 {
+			t.Errorf("%q takes %d lines: with the 4 below, more than the window's 8", n, len(lines))
+		}
+		if got := strings.Join(lines, " "); got != n {
+			t.Errorf("wrapped %q, want %q", got, n)
+		}
+		for _, l := range lines {
+			if w := f.Width(l, 1); w > width {
+				t.Errorf("line %q is %dpx wide, room for %d", l, w, width)
+			}
+		}
 	}
 }

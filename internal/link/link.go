@@ -535,7 +535,7 @@ func Open(o Options) *Client {
 		if c.st.linked() && c.st.Stopped {
 			// Stopped: a queue from an older game (or one that stopped
 			// before it saved) is never sent.
-			c.dropUnsent()
+			c.dropUnsent(false)
 			c.saveState()
 		}
 	}
