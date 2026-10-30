@@ -324,9 +324,12 @@ sequenceDiagram
 - **Never on the critical path.** Requests run in goroutines with timeouts.
   Events wait in `link-queue.json` (10,000 in a browser, 50,000 on the
   desktop; the oldest answers fold into daily totals).
-- **If the server stops taking the tokens** (unlinked on the website), the
-  unsent events move to `link-parked.json` for that learner and are dropped
-  after 30 days.
+- **If the server ends the link** (401 `invalid_token`: unlinked on the
+  website, or progress consent withdrawn), the unsent events and that
+  learner's parked ones are deleted at once. **If the link is only lost**
+  (`token_reused` after a lost refresh answer, or an expired refresh
+  token), they move to `link-parked.json` for that learner and are
+  dropped after 30 days.
 - **Endpoints used**, all under `/api/v1`: `link`, `link/class`, `token`,
   `unlink`, `me`, `events`, `memory`, `lists` (and `lists/{id}/audio`),
   `assignments`, `maps`, `runs`, `ranks`, `choices` (and its sub-routes),

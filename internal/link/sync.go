@@ -250,7 +250,7 @@ func (c *Client) stopProgress() {
 		c.changes++
 	}
 	c.st.Stopped = true
-	c.dropStopped()
+	c.dropUnsent(false)
 	c.saveState()
 	if p := c.play; p != nil {
 		// Play takes p.mu before c.mu, so not here.
@@ -258,14 +258,19 @@ func (c *Client) stopProgress() {
 	}
 }
 
-// dropStopped forgets, on disk too and at once, every event this game
-// kept for a learner whose progress is stopped: the queue, unsent runs
-// and what was parked for them after an earlier link. Nothing of the
-// stopped time is ever sent, even by a game that stops before its next
-// save. c.mu is held, so the queue file is removed here rather than by
+// dropUnsent forgets, on disk too and at once, every event this game
+// kept for the linked learner: the queue, unsent runs and what was
+// parked for them after an earlier link. It is for a learner whose
+// progress is stopped, and for a link the server ended (lost, with
+// invalid_token). Nothing of that time is ever sent, even by a game
+// that stops before its next save. With unknown (only a link the server
+// ended), the parked events of everyone in this folder go while the
+// learner isn't known yet (before the link's first /me): they may be
+// this learner's, from before the link ended. Without it, a learner not
+// known yet drops no one's parked events. c.mu is held, so the queue file is removed here rather than by
 // writeQueue, which takes the lock (the queue is empty, so writeQueue
 // would only remove it too).
-func (c *Client) dropStopped() {
+func (c *Client) dropUnsent(unknown bool) {
 	c.q = queue{}
 	c.st.Runs = nil
 	c.dirty = false
@@ -274,13 +279,17 @@ func (c *Client) dropStopped() {
 			c.dirty = true // Save tries again
 		}
 	}
-	if c.st.Me != nil && c.st.Me.Learner.ID != "" {
-		id := c.st.Me.Learner.ID
-		n := len(c.parked)
-		c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return p.Learner == id })
-		if len(c.parked) != n {
-			c.writeParked()
-		}
+	id := ""
+	if c.st.Me != nil {
+		id = c.st.Me.Learner.ID
+	}
+	if id == "" && !unknown {
+		return
+	}
+	n := len(c.parked)
+	c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return id == "" || p.Learner == id })
+	if len(c.parked) != n {
+		c.writeParked()
 	}
 }
 
@@ -680,22 +689,36 @@ func (c *Client) revoke(t tokens) {
 // grown-up, and the game can be linked again.
 const lostNote = "The link to the account was lost. Your progress is still here: link again to sync."
 
+// EndedNote is the note after lost without keep: the play not yet sent
+// was dropped. Like lostNote, it doesn't say who ended the link.
+const EndedNote = "The link to the account was lost. Your progress is still here; play since the last sync was not sent. Link again to keep syncing."
+
 // lost unlinks the game because the server no longer takes its tokens.
-// The events not sent are kept for the learner (park), not forgotten.
-func (c *Client) lost(gen int) {
+// With keep, the events not sent are kept for the learner (park), not
+// forgotten. Without it, they are dropped at once (dropUnsent), with
+// those parked for the learner before.
+func (c *Client) lost(gen int, keep bool) {
 	c.mu.Lock()
 	if c.gen != gen || !c.st.linked() {
 		c.mu.Unlock()
 		return
 	}
-	// The events not sent wait for this learner to link again; the
-	// server may only have lost track of a refresh (a lost answer).
-	// They must not be lost when they can't be written now (full local
-	// storage): see parkForUnlink.
-	c.unlink(c.parkForUnlink())
-	// Not unlinked by a grown-up: the server refused the tokens (a lost
+	if keep {
+		// The events not sent wait for this learner to link again;
+		// the server may only have lost track of a refresh (a lost
+		// answer). They must not be lost when they can't be written
+		// now (full local storage): see parkForUnlink.
+		c.unlink(c.parkForUnlink())
+	} else {
+		c.dropUnsent(true)
+		c.unlink(false)
+	}
+	// Neutral about who ended it: the server refused the tokens (a lost
 	// refresh, say), so say the link was lost (#84).
 	c.note = lostNote
+	if !keep {
+		c.note = EndedNote
+	}
 	play := c.play
 	c.mu.Unlock()
 	// As Unlink does: a game that isn't linked has no room to be in.

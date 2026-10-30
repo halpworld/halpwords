@@ -643,7 +643,7 @@ func TestUnlinkNoteIsNeutral(t *testing.T) {
 	c.signedIn(tokens{AccessToken: "a", RefreshToken: "r", ExpiresIn: 60, RefreshExpiresIn: 60}, WayPairing)
 	gen := c.gen
 	c.mu.Unlock()
-	c.lost(gen)
+	c.lost(gen, true)
 	if got := c.Status().Note; got != "The link to the account was lost. Your progress is still here: link again to sync." {
 		t.Errorf("note %q", got)
 	}

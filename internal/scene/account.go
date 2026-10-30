@@ -403,6 +403,21 @@ func msgLines(f *gfx.Font, msg string) []string {
 	return lines
 }
 
+// windowLines wraps s at spaces into the lines of the Account window,
+// width px wide; the last is cut short if it can't be wrapped.
+func windowLines(f *gfx.Font, s string, width int) []string {
+	var out []string
+	for f.Width(s, 1) > width {
+		cut := strings.LastIndex(s[:min(len(s), width/8)], " ")
+		if cut <= 0 {
+			break
+		}
+		out = append(out, s[:cut])
+		s = s[cut+1:]
+	}
+	return append(out, fit(f, s, width, 1))
+}
+
 // Draw implements game.Scene.
 func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
@@ -417,18 +432,10 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 	tx := x + 16
 	ty := y + 12
 	line := func(s string, c color.RGBA) {
-		// Wrap a long line at a space.
-		for f.Width(s, 1) > w-32 {
-			cut := strings.LastIndex(s[:min(len(s), (w-32)/8)], " ")
-			if cut <= 0 {
-				break
-			}
-			f.DrawShadow(dst, s[:cut], tx, ty, 1, c)
+		for _, l := range windowLines(f, s, w-32) {
+			f.DrawShadow(dst, l, tx, ty, 1, c)
 			ty += 18
-			s = s[cut+1:]
 		}
-		f.DrawShadow(dst, fit(f, s, w-32, 1), tx, ty, 1, c)
-		ty += 18
 	}
 	if st.Unconfirmed {
 		line("A grown-up linked this game to their account.", pal.Yellow)

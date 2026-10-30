@@ -358,13 +358,18 @@ func (c *Client) setTokens(t tokens) {
 		c.st.DeviceID = t.DeviceID
 	}
 	c.st.Access, c.st.AccessExp = t.AccessToken, now.Add(time.Duration(t.ExpiresIn)*time.Second)
-	c.st.Refresh, c.st.RefreshExp = t.RefreshToken, now.Add(time.Duration(t.RefreshExpiresIn)*time.Second)
+	c.st.Refresh, c.st.RefreshExp = t.RefreshToken, time.Time{}
+	if t.RefreshExpiresIn > 0 {
+		// Without it, the expiry is unknown (zero), never now: an
+		// invalid_token then drops, as a link the server ended.
+		c.st.RefreshExp = now.Add(time.Duration(t.RefreshExpiresIn) * time.Second)
+	}
 }
 
 // refresh swaps the refresh token for new tokens. A refresh token the
 // server no longer takes (invalid_token, token_reused) means the game was
-// unlinked on the website: the game unlinks itself too, keeping the
-// events not sent for the learner. Any other 401 (a proxy, say) is a
+// unlinked: the game unlinks itself too, keeping the events not sent for
+// the learner only after token_reused (see below). Any other 401 (a proxy, say) is a
 // failure like any other, tried again at the next sync. syncMu is held.
 func (c *Client) refresh(ctx context.Context, gen int) error {
 	c.mu.Lock()
@@ -394,8 +399,21 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 	}
 	var e *Error
 	if errors.As(err, &e) && e.Status == http.StatusUnauthorized && (e.Code == codeInvalidToken || e.Code == codeTokenReused) {
-		// These tokens are finished.
-		c.lost(gen)
+		// These tokens are finished. token_reused is the game's own
+		// pair gone stale (a refresh whose answer was lost, #39), and
+		// invalid_token for a refresh token past its expiry is a game
+		// not online for months: the events not sent are parked for
+		// the learner. Any other invalid_token is a link the server
+		// ended: a grown-up unlinked the game, the learner's
+		// connection ended, or a family withdrew the progress consent
+		// and the server deleted the learner's devices. The answer
+		// gives no reason, so the stricter reading holds for all of
+		// them: the events not sent are dropped, and are never sent
+		// after a new link (#113).
+		c.mu.Lock()
+		expired := !c.st.RefreshExp.IsZero() && !c.now().Before(c.st.RefreshExp)
+		c.mu.Unlock()
+		c.lost(gen, e.Code == codeTokenReused || expired)
 		return ErrUnlinked
 	}
 	if err != nil {

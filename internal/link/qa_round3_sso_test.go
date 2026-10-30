@@ -222,7 +222,7 @@ func TestQARemoteUnlinkText(t *testing.T) {
 	c.signedIn(tokens{AccessToken: "a", RefreshToken: "r", ExpiresIn: 3600, RefreshExpiresIn: 3600}, WayPairing)
 	gen := c.gen
 	c.mu.Unlock()
-	c.lost(gen)
+	c.lost(gen, true)
 	st := c.Status()
 	if st.Note != "The link to the account was lost. Your progress is still here: link again to sync." || c.Linked() {
 		t.Fatalf("note %q linked %v", st.Note, c.Linked())
@@ -231,7 +231,7 @@ func TestQARemoteUnlinkText(t *testing.T) {
 	c.mu.Lock()
 	c.note = ""
 	c.mu.Unlock()
-	c.lost(gen)
+	c.lost(gen, true)
 	if n := c.Status().Note; n != "" {
 		t.Errorf("a stale lost() wrote a note: %q", n)
 	}
