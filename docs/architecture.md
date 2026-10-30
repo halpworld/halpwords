@@ -325,8 +325,9 @@ sequenceDiagram
   Events wait in `link-queue.json` (10,000 in a browser, 50,000 on the
   desktop; the oldest answers fold into daily totals).
 - **If the server ends the link** (401 `invalid_token`: unlinked on the
-  website, or progress consent withdrawn), the unsent events and that
-  learner's parked ones are deleted at once. **If the link is only lost**
+  website, or progress consent withdrawn), the unsent events and runs and that
+  learner's parked ones are deleted at once (every parked entry in the
+  folder, before the first `/me` says who the learner is). **If the link is only lost**
   (`token_reused` after a lost refresh answer, or an expired refresh
   token), they move to `link-parked.json` for that learner and are
   dropped after 30 days.

@@ -695,6 +695,19 @@ to count. Your XP is safe!" Only the board submission is lost:
 XP, word practice, the score and the Hall of Fame place stay. Hardcore
 runs are unchanged.
 
+*Now (game #68, done):* **the game says when the clock is wrong.**
+`link.Status.ClockWrong` is set while the `Date` header of the server's
+answers is more than 24 hours (the server's own tolerance) from the device
+clock, and clears on the next good answer; an answer without `Date` and
+audio packs change nothing. It needs halpwords-server#175 (CORS exposes
+`Date`) deployed first, or the web build never sees the header. For a
+learner on a board, Account says "The date or time here looks wrong. Ask a
+grown-up to fix it." (last in its order of problems). A `stale_run` or
+`implausible_run` answer drops the run as before and keeps one note in
+`link.json` for the title screen to show once: a wrong clock, a run too old
+for the board, or a run that couldn't count; each ends "Your XP is safe!".
+The other codes `/api/v1/events` refuses are still not shown.
+
 *Now (M5, done):* `internal/compete` (now `pkg/compete`) (no Ebitengine dependency) holds the
 score, codes and Hall of Fame; `internal/profile` keeps the Hall of Fame in
 `halloffame.json`.
@@ -1011,6 +1024,20 @@ text in local storage (#61); the picture or card lock keeps classmates
 out at the keyboard but its few pictures can be tried offline by someone
 who can copy `learners.json` (#62); a pairing-code learner has no lock
 (#64, Q3 stands). The README says all three in its privacy notes.
+
+*Now (identity.json, game #53 parts 2 and 5, done):* **a damaged
+`learners.json` keeps names and locks.** `Learners.Save` also writes each
+learner's entry (name, lock, wrong tries and lockout, website learner ID,
+owner, sign-in flag, last used) to `profiles/<id>/identity.json`, best
+effort; `rebuild()` restores from it, after a check that the file's ID is
+its folder's. A folder without it falls back to "Player N", no lock. A
+guest the game named (`profile.GeneratedName`) and nobody signed in as gets
+no file, so its folder stays empty. A stale copy can bring back a lock that
+was removed, only in the stricter direction. Same trust as `learners.json`
+(#62). Failed saves speak up: a failed `SaveMemory` shows "Could not save
+your progress: storage may be full" from any scene, once per streak of
+failures, and a failed save on unlock says "Couldn't save: storage may be
+full."
 
 *Now (server W5.4, done):* **signing in with a school Google or
 Microsoft account.** The sign-in screen's *I have a school Google or

@@ -588,7 +588,7 @@ Sound & Screen turns it off. Nothing changes when the website can't be reached: 
 wait (in `link-queue.json`) until it can. The tokens are kept in
 `link.json`, readable only by you. If the website ends a game's link
 (a grown-up unlinked it there, or a family withdrew permission for
-progress), the answers and sessions not yet sent are deleted at once and
+progress), the answers, sessions and runs not yet sent are deleted at once and
 never sent later. If the link was only lost (a refresh whose answer
 never arrived, or a game not online for so long that its link ran out),
 they wait in `link-parked.json`, also readable only by you, for that

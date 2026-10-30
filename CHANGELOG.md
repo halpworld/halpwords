@@ -185,6 +185,43 @@ version as its release notes.
 
 ### Fixed
 
+- **A server-ended link no longer leaves old play to be sent.** When the
+  server answers 401 `invalid_token` to a refresh (a grown-up unlinked the
+  game, a family withdrew permission for progress, an adult was removed),
+  the game now drops the queue, the runs not yet sent and the learner's
+  parked events at once, and shows "The link to the account was lost.
+  Your progress is still here; play since the last sync was not sent. Link
+  again to keep syncing." The game can't tell these cases apart, so it
+  takes the stricter reading. Before the first `/me` it doesn't know the
+  learner yet, so it drops every parked entry in the folder. A
+  `token_reused` answer (a refresh whose answer was lost) and an expired
+  refresh token still park events for 30 days. A queue left behind by an
+  unlink that couldn't remove it is dropped at start-up, only when the
+  link state is known to be empty. No change to the wire or `pkg/`.
+- **The game says when the clock is wrong, and why a run didn't count.**
+  The game compares the server's `Date` header with its own clock. When
+  they are more than 24 hours apart, a learner on a board sees "The date
+  or time here looks wrong. Ask a grown-up to fix it." in Account. When
+  the server refuses a run as `stale_run` or `implausible_run`, the title
+  screen says once why ("A run didn't count: the computer's clock is
+  wrong", "A run waited too long to reach the board" or "A run couldn't
+  count on the board", each with "Your XP is safe!"). **Deploy order:** the
+  web build can only read `Date` once halpwords-server#175 (CORS exposes
+  `Date`) is deployed, so deploy the server first. Desktop builds work
+  either way.
+- **A learner's name and lock survive a damaged `learners.json`.** Each
+  learner's folder now keeps `identity.json`: name, lock, wrong tries and
+  lockout, and website learner ID. Rebuilding the list restores them, so a
+  damaged or deleted `learners.json` no longer drops a child's lock or
+  resets a lockout. A folder without the file still comes back as "Player
+  N" with no lock. The file is written on a best effort basis and is
+  copied by anyone who can copy `learners.json`, so it is no stronger a
+  lock (see the README's privacy notes).
+- **A failed save is no longer silent.** If the word memory can't be saved
+  during a run, any scene shows "Could not save your progress: storage may
+  be full" (once per run of failures), and unlocking a learner whose save
+  fails says "Couldn't save: storage may be full."
+
 - **Answers too long to type are never dealt.** The typing field took 40
   letters, so a monster or puzzle with a longer answer could not be
   beaten. It now takes 60 (`words.MaxAnswerRunes`, also a raid's answer
