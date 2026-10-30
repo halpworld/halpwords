@@ -162,7 +162,7 @@ func TestInvalidTokenUnlinksAndDrops(t *testing.T) {
 	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
 		t.Fatalf("sync: %v", err)
 	}
-	if s := c.Status(); s.Linked || s.Pending != 0 || s.Note != lostNote {
+	if s := c.Status(); s.Linked || s.Pending != 0 || s.Note != endedNote {
 		t.Errorf("status: %+v", s)
 	}
 	if st.has(parkedFile) || st.has(queueFile) {
@@ -263,5 +263,117 @@ func TestRefreshRetriesExhaustedKeepsLink(t *testing.T) {
 	}
 	if len(slept) != tries-1 || slept[0] != retryWait(1) || slept[1] != retryWait(2) {
 		t.Errorf("waits %v", slept)
+	}
+}
+
+// token_reused parks the events; an invalid_token after the next link but
+// before its first /me (the learner not known yet) still drops them, so
+// nothing from before is sent after a later link (#113, review).
+func TestTokenReusedThenInvalidTokenDropsParked(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	loseLink(t, f, c)
+	if !st.has(parkedFile) {
+		t.Fatal("not parked after token_reused")
+	}
+	// Link again but don't sync, so the parked events are not yet sent.
+	f.mu.Lock()
+	f.code = "QRST-VWXY"
+	f.mu.Unlock()
+	if err := c.LinkNow(context.Background(), "QRSTVWXY"); err != nil {
+		t.Fatal(err)
+	}
+	revoke(f)
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	if st.has(parkedFile) {
+		t.Errorf("parked events survive invalid_token: %s", st.files[parkedFile])
+	}
+	c.Close()
+	c2 := reopen(f, st, clk)
+	defer c2.Close()
+	relink(t, f, c2)
+	if n := len(f.eventsOf("answers")); n != 0 {
+		t.Errorf("%d old answers sent after relink", n)
+	}
+}
+
+// A refresh token past its expiry (a game offline for months) answers
+// invalid_token too; that is not a link the server ended, so the events
+// are parked and sent after the learner links again, with the lost note.
+func TestExpiredRefreshParks(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	c.mu.Lock()
+	exp := c.st.RefreshExp
+	c.mu.Unlock()
+	clk.add(exp.Sub(clk.now()) + time.Minute)
+	revoke(f)
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	if s := c.Status(); s.Note != lostNote {
+		t.Errorf("note %q", s.Note)
+	}
+	if !st.has(parkedFile) {
+		t.Fatal("events not parked after an expired refresh token")
+	}
+	relink(t, f, c)
+	if n := len(f.eventsOf("answers")); n != 1 {
+		t.Errorf("%d answers sent after relink, want 1", n)
+	}
+}
+
+// failStore fails to read one file with an error other than not-exist.
+type failStore struct {
+	*memStore
+	name string
+}
+
+func (s failStore) Read(name string) ([]byte, error) {
+	if name == s.name {
+		return nil, errors.New("disk error")
+	}
+	return s.memStore.Read(name)
+}
+
+// The queue is dropped at start-up only when the state says for sure the
+// game isn't linked: not when link.json can't be read or parsed.
+func TestUnreadableStateKeepsQueue(t *testing.T) {
+	st := newMemStore()
+	q, _ := json.Marshal(queue{Answers: []qAnswer{{Seq: 7}}})
+	st.files[queueFile] = q
+	st.files[stateFile] = []byte(`{"Refresh":"r"}`)
+	c := Open(Options{Store: failStore{st, stateFile}, Server: "http://127.0.0.1:1"})
+	c.mu.Lock()
+	n := c.q.len()
+	c.mu.Unlock()
+	c.Close()
+	if n != 1 || !st.has(queueFile) {
+		t.Errorf("queue dropped (%d left) when link.json couldn't be read", n)
+	}
+	st.files[stateFile] = []byte("{damaged")
+	c = Open(Options{Store: st, Server: "http://127.0.0.1:1"})
+	c.mu.Lock()
+	n = c.q.len()
+	c.mu.Unlock()
+	c.Close()
+	if n != 1 || !st.has(queueFile) {
+		t.Errorf("queue dropped (%d left) when link.json couldn't be parsed", n)
+	}
+	// Read and parsed with no tokens: unlinked for sure, so it goes.
+	st.files[stateFile] = []byte(`{"NextSeq":3}`)
+	c = Open(Options{Store: st, Server: "http://127.0.0.1:1"})
+	c.Close()
+	if st.has(queueFile) {
+		t.Error("queue kept with link.json saying unlinked")
+	}
+}
+
+// The ended note fits the Account window in at most two lines.
+func TestEndedNoteFits(t *testing.T) {
+	if n := len(endedNote); n > 2*66 {
+		t.Errorf("endedNote is %d characters, room for %d", n, 2*66)
 	}
 }

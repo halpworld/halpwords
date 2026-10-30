@@ -586,10 +586,13 @@ downloads each assigned list's audio (kept next to the list as
 `assigned/<list>.audio`) and says the word after a miss; *Say words* in
 Sound & Screen turns it off. Nothing changes when the website can't be reached: answers
 wait (in `link-queue.json`) until it can. The tokens are kept in
-`link.json`, readable only by you. If the website stops taking a game's
-tokens (it was unlinked there, or the link ran out), the answers and sessions not yet sent wait
-in `link-parked.json`, also readable only by you, for that learner to link
-the game again; they are thrown away after 30 days. Each learner's files,
+`link.json`, readable only by you. If the website ends a game's link
+(a grown-up unlinked it there, or a family withdrew permission for
+progress), the answers and sessions not yet sent are deleted at once and
+never sent later. If the link was only lost (a refresh whose answer
+never arrived, or a game not online for so long that its link ran out),
+they wait in `link-parked.json`, also readable only by you, for that
+learner to link the game again; they are thrown away after 30 days. Each learner's files,
 these included, are in their own folder and are deleted when the learner
 is removed; the link files never move with the web game to a new address.
 `HALPWORDS_SERVER` points the game at

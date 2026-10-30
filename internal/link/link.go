@@ -504,13 +504,18 @@ func Open(o Options) *Client {
 		c.o.QueueCap = defaultCap
 	}
 	if o.Store != nil {
-		if data, err := o.Store.Read(stateFile); err == nil {
-			json.Unmarshal(data, &c.st)
+		// unlinked: the state file says, for sure, that the game isn't
+		// linked: it is there and read with no tokens, or there is
+		// none. A file that couldn't be read or parsed says nothing.
+		data, err := o.Store.Read(stateFile)
+		unlinked := errors.Is(err, fs.ErrNotExist)
+		if err == nil {
+			unlinked = json.Unmarshal(data, &c.st) == nil && !c.st.linked()
 		}
 		if data, err := o.Store.Read(queueFile); err == nil {
 			json.Unmarshal(data, &c.q)
 		}
-		if !c.st.linked() && c.q.len() > 0 {
+		if unlinked && c.q.len() > 0 {
 			// A queue with no link is one an unlink couldn't remove:
 			// it belongs to no one now (a link the server ended,
 			// say), so it is dropped, never sent after the next link.

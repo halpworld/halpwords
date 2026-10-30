@@ -370,16 +370,20 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 	var e *Error
 	if errors.As(err, &e) && e.Status == http.StatusUnauthorized && (e.Code == codeInvalidToken || e.Code == codeTokenReused) {
 		// These tokens are finished. token_reused is the game's own
-		// pair gone stale (a refresh whose answer was lost, #39): the
-		// events not sent are parked for the learner. invalid_token is
-		// a link the server ended: a grown-up unlinked the game, the
-		// learner's connection ended, or a family withdrew the
-		// progress consent and the server deleted the learner's
-		// devices (or the tokens ran out). The answer gives no reason,
-		// so the stricter reading holds for all of them: the events
-		// not sent are dropped, and are never sent after a new link
-		// (#113).
-		c.lost(gen, e.Code == codeTokenReused)
+		// pair gone stale (a refresh whose answer was lost, #39), and
+		// invalid_token for a refresh token past its expiry is a game
+		// not online for months: the events not sent are parked for
+		// the learner. Any other invalid_token is a link the server
+		// ended: a grown-up unlinked the game, the learner's
+		// connection ended, or a family withdrew the progress consent
+		// and the server deleted the learner's devices. The answer
+		// gives no reason, so the stricter reading holds for all of
+		// them: the events not sent are dropped, and are never sent
+		// after a new link (#113).
+		c.mu.Lock()
+		expired := !c.st.RefreshExp.IsZero() && !c.now().Before(c.st.RefreshExp)
+		c.mu.Unlock()
+		c.lost(gen, e.Code == codeTokenReused || expired)
 		return ErrUnlinked
 	}
 	if err != nil {

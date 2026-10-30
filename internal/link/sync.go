@@ -260,7 +260,8 @@ func (c *Client) stopProgress() {
 
 // dropUnsent forgets, on disk too and at once, every event this game
 // kept for the linked learner: the queue, unsent runs and what was
-// parked for them after an earlier link. It is for a learner whose
+// parked for them after an earlier link (for everyone in this folder
+// while the learner isn't known yet). It is for a learner whose
 // progress is stopped, and for a link the server ended (lost, with
 // invalid_token). Nothing of that time is ever sent, even by a game
 // that stops before its next save. c.mu is held, so the queue file is removed here rather than by
@@ -275,13 +276,17 @@ func (c *Client) dropUnsent() {
 			c.dirty = true // Save tries again
 		}
 	}
-	if c.st.Me != nil && c.st.Me.Learner.ID != "" {
-		id := c.st.Me.Learner.ID
-		n := len(c.parked)
-		c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return p.Learner == id })
-		if len(c.parked) != n {
-			c.writeParked()
-		}
+	// Before the first /me of a link, the learner isn't known yet: the
+	// parked events of everyone in this folder go, as the stricter
+	// reading (they may be this learner's, from before the link ended).
+	id := ""
+	if c.st.Me != nil {
+		id = c.st.Me.Learner.ID
+	}
+	n := len(c.parked)
+	c.parked = slices.DeleteFunc(c.parked, func(p parked) bool { return id == "" || p.Learner == id })
+	if len(c.parked) != n {
+		c.writeParked()
 	}
 }
 
@@ -681,6 +686,10 @@ func (c *Client) revoke(t tokens) {
 // grown-up, and the game can be linked again.
 const lostNote = "The link to the account was lost. Your progress is still here: link again to sync."
 
+// endedNote is the note after lost without keep: the play not yet sent
+// was dropped. Like lostNote, it doesn't say who ended the link.
+const endedNote = "The link to the account was lost. Your progress is still here; play since the last sync was not sent. Link again to keep syncing."
+
 // lost unlinks the game because the server no longer takes its tokens.
 // With keep, the events not sent are kept for the learner (park), not
 // forgotten. Without it, they are dropped at once (dropUnsent), with
@@ -701,9 +710,12 @@ func (c *Client) lost(gen int, keep bool) {
 		c.dropUnsent()
 		c.unlink(false)
 	}
-	// Not unlinked by a grown-up: the server refused the tokens (a lost
+	// Neutral about who ended it: the server refused the tokens (a lost
 	// refresh, say), so say the link was lost (#84).
 	c.note = lostNote
+	if !keep {
+		c.note = endedNote
+	}
 	play := c.play
 	c.mu.Unlock()
 	// As Unlink does: a game that isn't linked has no room to be in.

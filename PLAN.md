@@ -928,8 +928,13 @@ pairing code and keeps the device tokens in a private `link.json` (local
 storage on the web). Answers to assigned words, daily totals for the rest,
 and play sessions wait in `link-queue.json` (at most 50,000 events; the
 oldest answers fold into daily totals) and go up every three minutes, when
-asked and on quitting. If the server stops taking the tokens (unlinked on
-the website, or a refresh whose answer was lost too long ago), the events
+asked and on quitting. If the server ends the link (`invalid_token`:
+unlinked on the website, or a family withdrew progress consent, which
+deletes the learner's devices), the events not sent and the learner's
+parked ones are deleted at once and never sent after a new link (#113;
+before the learner is known, everyone's parked in the folder). If the
+link is only lost (`token_reused` after a refresh whose answer was lost
+too long ago, or a refresh token past its expiry), the events
 not sent move to a private `link-parked.json` in the learner's folder,
 with the learner's id and when, and go up when the same learner links the
 game again; they are dropped after 30 days (checked for every learner's
