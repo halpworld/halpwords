@@ -2,6 +2,7 @@ package link
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -209,17 +210,142 @@ func TestDailyLateFromServer(t *testing.T) {
 		t.Errorf("note %q", s)
 	}
 
-	// Another refusal is dropped quietly, as before.
+	// A refusal that isn't about the run's time or checks is dropped
+	// quietly, as before.
 	c.ClearNote()
 	f.mu.Lock()
-	f.runCode = ""
+	f.runCode = "invalid_request"
 	f.mu.Unlock()
 	c.Run(run, "0123456789abcdef")
 	if err := c.Sync(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if s := c.Status().Note; s != "" {
-		t.Errorf("note after implausible_run %q", s)
+		t.Errorf("note after invalid_request %q", s)
+	}
+}
+
+// TestClockWrong: the game compares the server's Date with its own clock
+// on every answer, and says the clock looks wrong only when they are
+// more than a day apart, either way (#68).
+func TestClockWrong(t *testing.T) {
+	f, c, _, _ := linked(t)
+	onBoard(t, f, c)
+	if c.Status().ClockWrong {
+		t.Fatal("clock wrong with the server's clock the same")
+	}
+	for _, tc := range []struct {
+		skew time.Duration
+		want bool
+	}{
+		{23 * time.Hour, false},
+		{-23 * time.Hour, false},
+		{clockOff + time.Minute, true},
+		{-clockOff - time.Minute, true},
+		{0, false},
+	} {
+		f.mu.Lock()
+		f.skew = tc.skew
+		f.mu.Unlock()
+		if err := c.Sync(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if got := c.Status().ClockWrong; got != tc.want {
+			t.Errorf("server %v from the game: ClockWrong %v, want %v", tc.skew, got, tc.want)
+		}
+	}
+	// An answer with no Date changes nothing.
+	c.mu.Lock()
+	c.clockWrong = true
+	c.mu.Unlock()
+	c.seeClock(http.Header{})
+	if !c.Status().ClockWrong {
+		t.Error("an answer without a Date cleared ClockWrong")
+	}
+}
+
+// TestClockWrongOnlyForBoards: Status says the clock is wrong only to a
+// learner on a board, or with a refused run's note; with rankings off,
+// nothing on the Account screen needs it.
+func TestClockWrongOnlyForBoards(t *testing.T) {
+	f, c, _, _ := linked(t)
+	f.mu.Lock()
+	f.skew = 3 * 24 * time.Hour
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.Status().ClockWrong {
+		t.Error("ClockWrong shown to a learner on no board")
+	}
+	c.mu.Lock()
+	seen := c.clockWrong
+	c.st.RunNote = ClockRunNote
+	c.mu.Unlock()
+	if !seen || !c.Status().ClockWrong {
+		t.Errorf("ClockWrong not shown with a refused run's note (seen %v)", seen)
+	}
+	c.ClearNote()
+	onBoard(t, f, c)
+	if !c.Status().ClockWrong {
+		t.Error("ClockWrong not shown to a learner on a board")
+	}
+}
+
+// TestRunRefusedNotes: a run the server refuses for its time or its
+// checks (stale_run, implausible_run) tells a learner on a board why it
+// didn't count, naming a wrong clock when the server's Date says so. The
+// note outlives a restart and goes once seen. A learner on no board is
+// told nothing (#68).
+func TestRunRefusedNotes(t *testing.T) {
+	for _, tc := range []struct {
+		code  string
+		skew  time.Duration
+		board bool
+		want  string
+	}{
+		{"stale_run", 0, true, OldRunNote},
+		{"implausible_run", 0, true, BadRunNote},
+		{"", 0, true, BadRunNote}, // the fake's implausible_run
+		{"stale_run", 3 * 24 * time.Hour, true, ClockRunNote},
+		{"implausible_run", -3 * 24 * time.Hour, true, ClockRunNote},
+		{"stale_run", 0, false, ""},
+	} {
+		f, c, st, clk := linked(t)
+		c.soon = func() {}
+		if tc.board {
+			onBoard(t, f, c)
+		}
+		f.mu.Lock()
+		f.runStatus, f.runCode, f.skew = 422, tc.code, tc.skew
+		f.mu.Unlock()
+		c.Run(dailyRun(clk), "0123456789abcdef")
+		if err := c.Sync(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if n := c.Status().Note; n != tc.want {
+			t.Errorf("%s, skew %v, board %v: note %q, want %q", tc.code, tc.skew, tc.board, n, tc.want)
+			continue
+		}
+		if tc.want == "" {
+			continue
+		}
+		if !RunNote(tc.want) {
+			t.Errorf("RunNote(%q) false", tc.want)
+		}
+		c.Close()
+		c2 := reopen(f, st, clk)
+		if n := c2.Status().Note; n != tc.want {
+			t.Errorf("%s: note after a restart %q", tc.code, n)
+		}
+		c2.ClearNote()
+		if n := c2.Status().Note; n != "" {
+			t.Errorf("%s: note after ClearNote %q", tc.code, n)
+		}
+		c2.Close()
+		if n := reopen(f, st, clk).Status().Note; n != "" {
+			t.Errorf("%s: note back after a restart %q", tc.code, n)
+		}
 	}
 }
 

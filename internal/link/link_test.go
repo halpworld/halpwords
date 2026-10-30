@@ -160,6 +160,11 @@ type fake struct {
 
 	playMu sync.Mutex
 	playWS http.HandlerFunc // answers /api/v1/play, outside mu
+
+	// date is the server's clock, for the Date header of its answers
+	// (nil: the real time); skew moves it on from the game's.
+	date func() time.Time
+	skew time.Duration
 }
 
 func newFake(t *testing.T) *fake {
@@ -231,6 +236,9 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.date != nil {
+		w.Header().Set("Date", f.date().Add(f.skew).UTC().Format(http.TimeFormat))
+	}
 	path := r.URL.Path
 	f.calls[path]++
 	f.agents = append(f.agents, r.Header.Get("User-Agent"))
@@ -629,6 +637,7 @@ func setup(t *testing.T) (*fake, *Client, *memStore, *clock) {
 	f := newFake(t)
 	st := newMemStore()
 	clk := &clock{t: time.Date(2026, 9, 26, 14, 5, 9, 0, time.FixedZone("CEST", 2*3600))}
+	f.date = clk.now // the server's clock agrees with the game's
 	c := Open(Options{Store: st, Server: f.srv.URL, Version: "v1.2.0-3-gabcdef", OwnDir: "words", Now: clk.now})
 	c.sleep = func(time.Duration) {}
 	return f, c, st, clk

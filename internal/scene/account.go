@@ -540,6 +540,10 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 	}
 }
 
+// ClockWrongText is the Account screen's line while the server's clock
+// and this computer's are more than a day apart (link.Status.ClockWrong).
+const ClockWrongText = "The date or time here looks wrong. Ask a grown-up to fix it."
+
 // syncProblem is the line saying why the last sync didn't work, or ""
 // when it did. A learner who stopped their own progress being kept gets
 // a calm line: the game stays linked and works as before. A suspended account (halpwords-server#130) gets a calm
@@ -547,7 +551,8 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 // picks up by itself once a grown-up sorts it out.
 //
 // A suspended, removed or paused account, or another error, says more
-// than being stopped does, so it comes first (PLAN §14, 2026-10-12).
+// than being stopped does, so it comes first (PLAN §14, 2026-10-12). A
+// wrong clock comes last: it only matters for the boards.
 func syncProblem(st link.Status) (string, color.RGBA) {
 	switch {
 	case st.Suspended:
@@ -561,6 +566,8 @@ func syncProblem(st link.Status) (string, color.RGBA) {
 		return upperFirst(link.Explain(st.Err)) + ".", pal.Tan
 	case st.Stopped:
 		return "Your progress isn't being kept, so this game doesn't sync. It still works here.", pal.Ice
+	case st.ClockWrong:
+		return ClockWrongText, pal.Yellow
 	}
 	return "", color.RGBA{}
 }
