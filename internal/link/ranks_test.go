@@ -230,6 +230,7 @@ func TestDailyLateFromServer(t *testing.T) {
 // more than a day apart, either way (#68).
 func TestClockWrong(t *testing.T) {
 	f, c, _, _ := linked(t)
+	onBoard(t, f, c)
 	if c.Status().ClockWrong {
 		t.Fatal("clock wrong with the server's clock the same")
 	}
@@ -260,6 +261,34 @@ func TestClockWrong(t *testing.T) {
 	c.seeClock(http.Header{})
 	if !c.Status().ClockWrong {
 		t.Error("an answer without a Date cleared ClockWrong")
+	}
+}
+
+// TestClockWrongOnlyForBoards: Status says the clock is wrong only to a
+// learner on a board, or with a refused run's note; with rankings off,
+// nothing on the Account screen needs it.
+func TestClockWrongOnlyForBoards(t *testing.T) {
+	f, c, _, _ := linked(t)
+	f.mu.Lock()
+	f.skew = 3 * 24 * time.Hour
+	f.mu.Unlock()
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c.Status().ClockWrong {
+		t.Error("ClockWrong shown to a learner on no board")
+	}
+	c.mu.Lock()
+	seen := c.clockWrong
+	c.st.RunNote = ClockRunNote
+	c.mu.Unlock()
+	if !seen || !c.Status().ClockWrong {
+		t.Errorf("ClockWrong not shown with a refused run's note (seen %v)", seen)
+	}
+	c.ClearNote()
+	onBoard(t, f, c)
+	if !c.Status().ClockWrong {
+		t.Error("ClockWrong not shown to a learner on a board")
 	}
 }
 

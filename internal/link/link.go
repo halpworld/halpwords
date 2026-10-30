@@ -360,8 +360,9 @@ type Status struct {
 	// some of its features.
 	Outdated bool
 	// ClockWrong is set while the server's last answer said a time more
-	// than clockOff from this computer's clock (its Date header). Runs
-	// timed by a wrong clock may not count on the boards.
+	// than clockOff from this computer's clock (its Date header), for a
+	// learner on a board or with a refused run's note: runs timed by a
+	// wrong clock may not count on the boards, and nothing else needs it.
 	ClockWrong bool
 	Lists      int
 	// Unconfirmed is set after a link by QR code until the child says
@@ -620,7 +621,7 @@ func (c *Client) Status() Status {
 		Note:      c.note,
 		Lists:     len(c.st.Lists),
 
-		ClockWrong: c.clockWrong,
+		ClockWrong: c.clockWrong && (len(c.st.Boards) > 0 || c.st.RunNote != ""),
 
 		Unconfirmed: c.st.Unconfirmed && c.st.linked(),
 	}

@@ -8,7 +8,13 @@ import (
 	"time"
 )
 
-func clockWrongOf(c *Client) bool { return c.Status().ClockWrong }
+// clockWrongOf is what the link saw of the clock, whether or not Status
+// shows it (only to a learner on a board).
+func clockWrongOf(c *Client) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.clockWrong
+}
 
 // seeClock edge cases: exactly a day is fine, a second more is wrong, and
 // a missing or malformed Date changes nothing, either way round.

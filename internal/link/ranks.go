@@ -78,8 +78,8 @@ const (
 
 // The notes (Status.Note) after the server refused a run (runNote).
 const (
-	ClockRunNote = "A run didn't count: the clock on this computer looks wrong."
-	OldRunNote   = "A run was too old to count on the board. Your XP is safe!"
+	ClockRunNote = "A run didn't count: the computer's clock is wrong. Your XP is safe!"
+	OldRunNote   = "A run waited too long to reach the board. Your XP is safe!"
 	BadRunNote   = "A run couldn't count on the board. Your XP is safe!"
 )
 

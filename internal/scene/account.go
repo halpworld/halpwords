@@ -535,7 +535,7 @@ func (a *Account) Draw(dst *ebiten.Image, ctx *game.Context) {
 
 // ClockWrongText is the Account screen's line while the server's clock
 // and this computer's are more than a day apart (link.Status.ClockWrong).
-const ClockWrongText = "The clock on this computer looks wrong. Fix it so your runs count."
+const ClockWrongText = "The date or time here looks wrong. Ask a grown-up to fix it."
 
 // syncProblem is the line saying why the last sync didn't work, or ""
 // when it did. A learner who stopped their own progress being kept gets
