@@ -98,7 +98,11 @@ func (l *Learner) Folder() save.Folder { return save.Folder(ProfilesDir + "/" + 
 // hundred combinations, so the hash can be guessed offline in moments, and
 // the wrong-tries counter is in the same file. That is accepted (#62); the
 // README says so. Copies of learners.json kept to one side (learners.json.<time>.bad)
-// hold the same hashes. Don't present the lock as more than that in the game.
+// hold the same hashes, and so does the learner's own copy of their entry,
+// profiles/<ID>/identity.json, which is what a damaged learners.json is
+// rebuilt from (its lock, lockout and learner ID come back). A planted
+// identity.json is trusted as learners.json is. Don't present the lock as
+// more than that in the game.
 type Lock struct {
 	Kind string // "card" or "pictures"
 	// Grid are the 9 pictures to show, for "pictures": the server's,
@@ -282,7 +286,7 @@ func (ls *Learners) readIdentity(id string) *Learner {
 // to keep, and their folder stays empty (see Context.Pristine).
 func saveIdentity(l *Learner) error {
 	if l.Lock == nil && !l.NeedsSignIn && l.LearnerID == "" && l.Owner == "" &&
-		(l.Name == "" || strings.HasPrefix(l.Name, "Player ")) {
+		(l.Name == "" || GeneratedName(l.Name)) {
 		return l.Folder().Remove(identityFile)
 	}
 	data, err := json.MarshalIndent(l, "", "  ")
@@ -331,7 +335,7 @@ func (ls *Learners) migrate() error {
 				return err
 			}
 		}
-		if first.Name == "" || strings.HasPrefix(first.Name, "Player ") {
+		if first.Name == "" || GeneratedName(first.Name) {
 			if name := fameName(dst); name != "" {
 				first.Name = name
 			}
@@ -368,21 +372,21 @@ func fameName(f save.Folder) string {
 }
 
 // Save writes the list, and each learner's own copy of their entry in
-// their folder (the lock stays on the list if that fails, but Save says
-// so, and Unlock then doesn't try a secret).
+// their folder. learners.json is the authority: only its error is
+// returned. The copies are best effort, so one learner's unwritable
+// folder (or a full browser storage) never stops the others; they are
+// only for rebuilding a damaged list.
 func (ls *Learners) Save() error {
 	data, err := json.MarshalIndent(ls, "", "  ")
 	if err != nil {
 		return err
 	}
-	var errs []error
 	for _, l := range ls.List {
 		if validID(l.ID) {
-			errs = append(errs, saveIdentity(l))
+			saveIdentity(l)
 		}
 	}
-	errs = append(errs, ls.root.Write(learnersFile, data))
-	return errors.Join(errs...)
+	return ls.root.Write(learnersFile, data)
 }
 
 // Find returns the learner with the ID, or nil.
@@ -397,6 +401,21 @@ func (ls *Learners) Find(id string) *Learner {
 
 // CurrentLearner is the learner playing now.
 func (ls *Learners) CurrentLearner() *Learner { return ls.Find(ls.Current) }
+
+// GeneratedName reports whether name is one the game gives a learner
+// itself, "Player 2" and so on, as opposed to one a child chose.
+func GeneratedName(name string) bool {
+	n, ok := strings.CutPrefix(name, "Player ")
+	if !ok || n == "" {
+		return false
+	}
+	for _, r := range n {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // nextName is a name for a new learner: "Player 2" and so on.
 func (ls *Learners) nextName() string {
@@ -473,7 +492,13 @@ func (ls *Learners) Unlock(id, secret string) (bool, error) {
 		return false, ErrLocked
 	}
 	l.Tries++
-	if err := ls.Save(); err != nil {
+	// The try must be on record in the learner's own copy too, or a damaged
+	// list would give the tries back.
+	err := ls.Save()
+	if err == nil && l.Lock != nil {
+		err = saveIdentity(l)
+	}
+	if err != nil {
 		l.Tries--
 		return false, err
 	}

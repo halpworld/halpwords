@@ -210,7 +210,6 @@ func TestUnlockFailsClosed(t *testing.T) {
 	ls.now = func() time.Time { return now }
 	l := ls.CurrentLearner()
 	l.Name = "Cy"
-	l.Name = "Cy"
 	l.Lock, _ = NewLock(LockCard, "ABCD")
 	dir, err := save.Root.Dir()
 	if err != nil {

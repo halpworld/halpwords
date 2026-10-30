@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -191,3 +192,69 @@ func TestRebuildWithGarbageFoldersAndRace(t *testing.T) {
 	}
 	_ = ls
 }
+
+// One learner's unwritable folder must not stop the list from saving, or
+// another learner's lock from being tried (learners.json is the authority).
+func TestIdentityWriteIsBestEffort(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes anywhere")
+	}
+	ls, ada := openIdentityFixture(t)
+	bo, _ := ls.Add("Bo")
+	if err := ls.Save(); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := bo.Folder().Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	bo.Name = "Bobby" // would need a new identity.json
+	if err := ls.Save(); err != nil {
+		t.Errorf("Save failed for another learner's folder: %v", err)
+	}
+	if ok, err := ls.Unlock(ada.ID, "ABCD"); !ok || err != nil {
+		t.Errorf("Unlock(ada) = %v, %v", ok, err)
+	}
+	if got, err := OpenLearners(save.Root); err != nil || got.Find(bo.ID) == nil {
+		t.Errorf("reopen: %v", err)
+	}
+}
+
+// The first start after the upgrade has no identity.json anywhere; even if
+// none can be written, the list opens.
+func TestOpenWithoutIdentityFiles(t *testing.T) {
+	ls, ada := openIdentityFixture(t)
+	for _, l := range ls.List {
+		save.Root.Remove(idPath(l.ID))
+	}
+	got, err := OpenLearners(save.Root)
+	if err != nil || got.Find(ada.ID) == nil || got.Find(ada.ID).Lock == nil {
+		t.Fatalf("open without identity files: %v", err)
+	}
+	if _, err := save.Root.Read(idPath(ada.ID)); err != nil {
+		t.Errorf("identity.json not written on the first save: %v", err)
+	}
+}
+
+// A name a child chose that looks like a generated one is kept.
+func TestChosenPlayerNameIsKept(t *testing.T) {
+	for n, want := range map[string]bool{"Player 3": true, "Player 12": true, "Player One": false, "Player ": false, "Ada": false} {
+		if GeneratedName(n) != want {
+			t.Errorf("GeneratedName(%q) != %v", n, want)
+		}
+	}
+	ls, _ := openIdentityFixture(t)
+	p, _ := ls.Add("Player One")
+	ls.Save()
+	save.Root.Write(idPathOf(p.ID, "x.json"), []byte("{}"))
+	got := reopenAfterDamage(t)
+	if l := got.Find(p.ID); l == nil || l.Name != "Player One" {
+		t.Errorf("learner = %+v", l)
+	}
+}
+
+func idPathOf(id, f string) string { return "profiles/" + id + "/" + f }

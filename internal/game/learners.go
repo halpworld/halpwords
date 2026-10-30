@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/halpworld/halpwords/internal/link"
@@ -36,13 +35,19 @@ func (c *Context) openLearners() {
 	if ls.Repaired {
 		// Learners without a lock (their folder had no identity.json)
 		// who hold tokens must sign in again.
+		lost := 0
 		for _, l := range ls.List {
 			if l.Lock == nil && link.PeekFolder(l.Folder()).Tokens {
 				l.NeedsSignIn = true
+				lost++
 			}
 		}
 		ls.Save()
-		c.Notify("Learner data was repaired: sign in again to open a learner")
+		if lost > 0 {
+			c.Notify("Learner data was repaired: some learners must sign in again")
+		} else {
+			c.Notify("Learner data was repaired")
+		}
 	}
 	id := ls.Current
 	if cur := ls.CurrentLearner(); cur != nil && c.NeedsSignIn(cur) && !resumingSSO(cur, time.Now()) {
@@ -133,7 +138,7 @@ func (c *Context) Pristine(l *profile.Learner) bool {
 	if l.Lock != nil || l.NeedsSignIn || l.LearnerID != "" || l.Owner != "" || hasTokens(l) {
 		return false
 	}
-	if l.Name != "" && !strings.HasPrefix(l.Name, "Player ") {
+	if l.Name != "" && !profile.GeneratedName(l.Name) {
 		return false
 	}
 	names, err := l.Folder().All()

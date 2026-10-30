@@ -272,11 +272,6 @@ func (c *Crawl) Update(ctx *game.Context) error {
 	c.afterClose(ctx, time.Now())
 	c.run.ai.poll(c)
 	c.countPlayed()
-	if r := c.run; r.memFailed && !r.memNoticed {
-		// A full disk or browser storage: say so once, not on every answer.
-		r.memNoticed = true
-		ctx.NotifyFor("Could not save your progress: storage may be full", 300)
-	}
 	if c.run.race != nil {
 		// A race sends only its progress, to the room.
 		if c.updateRace(ctx) {
