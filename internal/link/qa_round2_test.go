@@ -229,5 +229,5 @@ func TestLostWithoutARoom(t *testing.T) {
 		t.Fatalf("phase %v", st.Phase)
 	}
 	// A second loss for the same, already gone, link does nothing.
-	c.lost(c.gen)
+	c.lost(c.gen, true)
 }

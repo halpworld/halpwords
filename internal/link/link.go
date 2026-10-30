@@ -510,6 +510,13 @@ func Open(o Options) *Client {
 		if data, err := o.Store.Read(queueFile); err == nil {
 			json.Unmarshal(data, &c.q)
 		}
+		if !c.st.linked() && c.q.len() > 0 {
+			// A queue with no link is one an unlink couldn't remove:
+			// it belongs to no one now (a link the server ended,
+			// say), so it is dropped, never sent after the next link.
+			c.q = queue{}
+			o.Store.Remove(queueFile)
+		}
 		if data, err := o.Store.Read(parkedFile); err == nil {
 			json.Unmarshal(data, &c.parked)
 		}
@@ -523,7 +530,7 @@ func Open(o Options) *Client {
 		if c.st.linked() && c.st.Stopped {
 			// Stopped: a queue from an older game (or one that stopped
 			// before it saved) is never sent.
-			c.dropStopped()
+			c.dropUnsent()
 			c.saveState()
 		}
 	}

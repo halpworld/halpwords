@@ -338,8 +338,8 @@ func (c *Client) setTokens(t tokens) {
 
 // refresh swaps the refresh token for new tokens. A refresh token the
 // server no longer takes (invalid_token, token_reused) means the game was
-// unlinked on the website: the game unlinks itself too, keeping the
-// events not sent for the learner. Any other 401 (a proxy, say) is a
+// unlinked: the game unlinks itself too, keeping the events not sent for
+// the learner only after token_reused (see below). Any other 401 (a proxy, say) is a
 // failure like any other, tried again at the next sync. syncMu is held.
 func (c *Client) refresh(ctx context.Context, gen int) error {
 	c.mu.Lock()
@@ -369,8 +369,17 @@ func (c *Client) refresh(ctx context.Context, gen int) error {
 	}
 	var e *Error
 	if errors.As(err, &e) && e.Status == http.StatusUnauthorized && (e.Code == codeInvalidToken || e.Code == codeTokenReused) {
-		// These tokens are finished.
-		c.lost(gen)
+		// These tokens are finished. token_reused is the game's own
+		// pair gone stale (a refresh whose answer was lost, #39): the
+		// events not sent are parked for the learner. invalid_token is
+		// a link the server ended: a grown-up unlinked the game, the
+		// learner's connection ended, or a family withdrew the
+		// progress consent and the server deleted the learner's
+		// devices (or the tokens ran out). The answer gives no reason,
+		// so the stricter reading holds for all of them: the events
+		// not sent are dropped, and are never sent after a new link
+		// (#113).
+		c.lost(gen, e.Code == codeTokenReused)
 		return ErrUnlinked
 	}
 	if err != nil {

@@ -2,6 +2,7 @@ package link
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -137,10 +138,21 @@ func TestMeLastSeqNeverLowers(t *testing.T) {
 	}
 }
 
-// Both codes of a finished refresh token unlink; the events are kept.
-func TestInvalidTokenUnlinksAndParks(t *testing.T) {
-	f, c, st, _ := linked(t)
+// invalid_token is a link the server ended (a grown-up unlinked the
+// game, or a family withdrew the progress consent and the server deleted
+// the learner's devices): the game unlinks, and the events it hadn't sent
+// are dropped at once, on disk too, and never sent after a new link, even
+// across a restart (#113).
+func TestInvalidTokenUnlinksAndDrops(t *testing.T) {
+	f, c, st, clk := linked(t)
 	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	c.Session(Session{Start: clk.now(), Mode: "practice", Lang: "fr", Secs: 60})
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if !st.has(queueFile) {
+		t.Fatal("no queue file to drop")
+	}
 	f.mu.Lock()
 	f.refresh = "hwr_other" // the server knows no such token: invalid_token
 	f.mu.Unlock()
@@ -150,8 +162,82 @@ func TestInvalidTokenUnlinksAndParks(t *testing.T) {
 	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
 		t.Fatalf("sync: %v", err)
 	}
+	if s := c.Status(); s.Linked || s.Pending != 0 || s.Note != lostNote {
+		t.Errorf("status: %+v", s)
+	}
+	if st.has(parkedFile) || st.has(queueFile) {
+		t.Error("events kept on disk after invalid_token")
+	}
+	c.Close()
+	c2 := reopen(f, st, clk)
+	relink(t, f, c2)
+	if n, m := len(f.eventsOf("answers")), len(f.eventsOf("sessions")); n != 0 || m != 0 {
+		t.Errorf("%d answers and %d sessions from before the link ended sent after a new link", n, m)
+	}
+}
+
+// invalid_token also drops what was parked for the same learner after an
+// earlier lost link; another learner's parked events stay theirs.
+func TestInvalidTokenDropsLearnersParked(t *testing.T) {
+	f, c, st, clk := linked(t)
+	c.mu.Lock()
+	me := c.st.Me.Learner.ID
+	old := queue{Answers: []qAnswer{{Seq: 900}}}
+	c.parked = []parked{{Learner: me, At: clk.now(), Queue: old}, {Learner: "lrn_other", At: clk.now(), Queue: old}}
+	err := c.writeParked()
+	c.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.refresh = "hwr_other"
+	f.mu.Unlock()
+	c.mu.Lock()
+	c.st.AccessExp = time.Time{}
+	c.mu.Unlock()
+	if err := c.Sync(context.Background()); !errors.Is(err, ErrUnlinked) {
+		t.Fatalf("sync: %v", err)
+	}
+	var ps []parked
+	if err := json.Unmarshal(st.files[parkedFile], &ps); err != nil {
+		t.Fatal(err)
+	}
+	if len(ps) != 1 || ps[0].Learner != "lrn_other" {
+		t.Errorf("parked after invalid_token: %+v", ps)
+	}
+}
+
+// token_reused is the game's own pair gone stale (a refresh whose answer
+// was lost): the events not sent are still parked for the learner.
+func TestTokenReusedParks(t *testing.T) {
+	f, c, st, _ := linked(t)
+	c.Answer("fr", dog, "practice", words.Answer{Tier: words.Perfect})
+	loseLink(t, f, c)
 	if !st.has(parkedFile) {
-		t.Error("events not kept after invalid_token")
+		t.Error("events not kept after token_reused")
+	}
+}
+
+// A queue file left with no link (an unlink that couldn't remove it) is
+// dropped at start-up, so it is never sent as the next link's.
+func TestUnlinkedQueueFileDroppedAtOpen(t *testing.T) {
+	st := newMemStore()
+	data, _ := json.Marshal(queue{Answers: []qAnswer{{Seq: 7}}})
+	if err := st.Write(queueFile, data); err != nil {
+		t.Fatal(err)
+	}
+	c := Open(Options{Store: st, Server: "http://127.0.0.1:1"})
+	t.Cleanup(c.Close)
+	if s := c.Status(); s.Pending != 0 {
+		t.Errorf("pending %d", s.Pending)
+	}
+	if st.has(queueFile) {
+		t.Error("queue file kept")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.st.NextSeq < 1 {
+		t.Errorf("NextSeq %d", c.st.NextSeq)
 	}
 }
 
