@@ -12,10 +12,13 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/gfx"
 	"github.com/halpworld/halpwords/internal/input"
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/qr"
+	"github.com/halpworld/halpwords/internal/unifont"
 )
 
 // qrSite is a server that links by QR code, for the Account screen.
@@ -474,5 +477,37 @@ func TestLinkQRBusy(t *testing.T) {
 	acUntil(t, ctx, a, "a QR code", func() bool { return a.mode == acQR && a.pair.qr != nil })
 	if n := site.count("POST /api/v1/link/start"); n != 2 {
 		t.Errorf("%d starts, want 2", n)
+	}
+}
+
+// "Is this you?" says where the learner belongs when the server says
+// (halpwords#110), and the longest line still fits two lines of the
+// dialog.
+func TestPairedWho(t *testing.T) {
+	for _, c := range []struct{ name, where, want string }{
+		{"", "St Mary's", "Linked, but no name was set."},
+		{"Aoife", "", "Linked to Aoife."},
+		{"Aoife", "family", "Linked to Aoife (family)."},
+		{"Aoife", "school", "Linked to Aoife (school)."},
+	} {
+		if got := pairedWho(c.name, c.where); got != c.want {
+			t.Errorf("pairedWho(%q, %q) = %q, want %q", c.name, c.where, got, c.want)
+		}
+	}
+	face, err := unifont.ParseBytes(assets.UnifontHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := gfx.NewFont(face)
+	const tw = 480 - 40
+	long := pairedWho(strings.Repeat("Ó", 30)+" "+strings.Repeat("Ó", 20), "school")
+	lines := wrap2(f, long, tw)
+	if len(lines) > 2 || strings.Join(lines, " ") != long {
+		t.Errorf("%q wraps to %q", long, lines)
+	}
+	for _, l := range lines {
+		if w := f.Width(l, 1); w > tw {
+			t.Errorf("%q is %dpx wide, room for %d", l, w, tw)
+		}
 	}
 }
