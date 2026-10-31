@@ -69,6 +69,7 @@ func parityNames() []string {
 		"profiles/k3v9q2/words/x.txt", "ai/bank-fr.json", "ai-spend.json", "profiles/k3v9q2/adventure.json",
 		"fame.json.bad", "reports/queue.json", "reports/x", "reports", "report/queue.json", "profiles/k3v9q2/reports/queue.json",
 		"profiles/k3v9q2/reports", "profiles/reports/x", "words/reports/x.txt", "move/done", "move/part-x-1-1", "profiles/k3v9q2/move/done", "moves/done", "move",
+		"assigned/lst_a.txt", "assigned/lst_a.audio", "profiles/k3v9q2/assigned/lst_a.txt", "words/assigned/x.txt", "assigned", "profiles/k3v9q2/assigned", "profiles/assigned/x",
 		"notai.json", "ai.json.txt", "xai.json", "words/crash.txt.old", "link.jsonx", "a/link.json/b",
 		"", "/abs", "a/", "a//b", "a\\b", "a\nb", "a/./b", "../x", "a/../b", "\u007f", "a\u0085b",
 		strings.Repeat("x", 255), strings.Repeat("x", 256),

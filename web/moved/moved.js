@@ -37,7 +37,10 @@
     let parts = name.split("/");
     if (parts[0] === "profiles" && parts.length >= 3) parts = parts.slice(2);
     const reports = parts.length > 1 && parts[0] === "reports";
-    return !(STAY.includes(base) || name.endsWith(".bad") || name.startsWith("move/") || reports);
+    // Lists assigned through the link stay: the game fetches them again
+    // once it is linked at the new address.
+    const assigned = parts.length > 1 && parts[0] === "assigned";
+    return !(STAY.includes(base) || name.endsWith(".bad") || name.startsWith("move/") || reports || assigned);
   }
 
   // collect returns the game's files in storage (local storage, or
