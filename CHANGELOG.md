@@ -7,6 +7,12 @@ version as its release notes.
 
 ### Added
 
+- **Boss Raid grading knows the other words.** `pkg/raid` has a new
+  `GradeAmong(typed, entry, others, langCode, usedBackspace)`, the shared
+  package's `Grade` with the game's rule that a one-letter slip that is the
+  answer to another word is a Miss, not a Graze (#71). `Grade` is unchanged;
+  halpwords-server should pass the raid list's entries.
+
 - **Type a word list in the game.** On the Word Lists screen, N opens a quick
   editor: a title, a language and one `english = answer` word per line,
   checked as you type, with a one-screen format hint. E edits one of your own
@@ -189,6 +195,15 @@ version as its release notes.
   writes the new lines too.
 
 ### Fixed
+
+- **English contractions in Reverse puzzles.** `I'm` now matches `I am`,
+  `don't` matches `do not`, and so on, in either direction. Shared package
+  `pkg/words`: `Grade` with `words.English` expands contractions on both the
+  typed text and the answer; no API change, so halpwords-server needs no
+  change.
+- **Riddles that gave the answer away or fitted two words.** Reworded
+  `battle`, `war`, `I say`, `I teach`, `son`, `daughter`, `sister`,
+  `brother`, `man` and `woman`. (#45)
 
 - **A server-ended link no longer leaves old play to be sent.** When the
   server answers 401 `invalid_token` to a refresh (a grown-up unlinked the

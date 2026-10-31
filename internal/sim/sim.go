@@ -253,7 +253,7 @@ func (b *bot) strike(m *dungeon.Monster) {
 	n := utf8.RuneCountInString(e.Answers[0])
 	a := b.t.answer(n, m.Has(dungeon.Ghostly) || m.Has(dungeon.Mirrored), b.rng)
 	speed := combat.Speed(n, a.secs/h.TimeBonus())
-	dmg, crit := combat.Damage(h.ATK(), a.tier, h.SpeedDamage(speed), h.Streak)
+	dmg, crit := combat.Damage(h.ATK(), a.tier, h.SpeedDamage(speed), speed, h.Streak)
 	if !crit && a.tier >= words.Correct && b.rng.Float64() < h.LuckyCrit() {
 		dmg = int(float64(dmg)*1.5 + 0.5)
 	}

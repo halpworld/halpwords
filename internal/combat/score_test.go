@@ -46,7 +46,7 @@ func TestDamage(t *testing.T) {
 		{words.Miss, 2, 5, 0, false},
 	}
 	for _, c := range cases {
-		got, crit := Damage(6, c.tier, c.speed, c.streak)
+		got, crit := Damage(6, c.tier, c.speed, c.speed, c.streak)
 		if got != c.want || crit != c.crit {
 			t.Errorf("Damage(6, %v, %v, %d) = %d, %v; want %d, %v", c.tier, c.speed, c.streak, got, crit, c.want, c.crit)
 		}
@@ -74,5 +74,17 @@ func TestSpeedWindow(t *testing.T) {
 		if s := Speed(n, w*0.99); s <= 0.5 {
 			t.Errorf("Speed(%d, just inside window) = %v, want above 0.5", n, s)
 		}
+	}
+}
+
+// A boosted speed (the Scribe's) scales the damage but doesn't make a
+// critical hit: that takes a real speed of 1.5 (#59).
+func TestCritUsesRealSpeed(t *testing.T) {
+	boosted := 1 + (1.34-1)*1.5 // 1.51
+	if _, crit := Damage(6, words.Perfect, boosted, 1.34, 0); crit {
+		t.Error("critical at real speed 1.34")
+	}
+	if _, crit := Damage(6, words.Perfect, 1.5, 1.5, 0); !crit {
+		t.Error("not critical at real speed 1.5")
 	}
 }

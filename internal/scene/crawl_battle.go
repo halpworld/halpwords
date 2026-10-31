@@ -425,7 +425,7 @@ func (c *Crawl) strike(ctx *game.Context) {
 	res := c.grade(typed)
 	speed := combat.Speed(runes(res.Expected), secs(ctx.Tick-b.start)/c.timeScale())
 	hinted := b.hints > 0
-	dmg, crit := combat.Damage(h.ATK(), res.Tier, h.SpeedDamage(speed), h.Streak)
+	dmg, crit := combat.Damage(h.ATK(), res.Tier, h.SpeedDamage(speed), speed, h.Streak)
 	lucky := false
 	if !crit && !hinted && res.Tier >= words.Correct && c.run.rng.Float64() < h.LuckyCrit() {
 		crit, lucky = true, true
