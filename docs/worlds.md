@@ -246,7 +246,8 @@ per frame on desktop and 1.4 ms on wasm (node), with 0 allocations.
   drops the names it doesn't know, so its Director picks only from the old
   six. After the server's `go.mod` bump it picks from all ten. `MaxThemes`
   (24) has room.
-- **Teacher maps:** can choose all ten worlds since #77 (`maps.Themes`).
+- **Teacher maps:** can choose all ten worlds since #77, and all fourteen
+  since #74 (`maps.Themes`).
   The server strips themes from maps served to a game that doesn't know
   them (`GetMaps` and the play-test file, by the `X-Halpwords-Map-Themes` header
   the game sends: how many `maps.Themes` it knows; none means six), so merge the
