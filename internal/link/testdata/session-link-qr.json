@@ -1,5 +1,5 @@
 {
-  "comment": "A recorded link by QR code (halpwords-server#153): the game starts, polls before the grown-up approves, polls too soon, and takes its tokens. Replayed against the game's client by internal/link/pair_test.go and validated against the server's schemas by halpwords-server's internal/api/schema_test.go. The code_challenge is the S256 of the code_verifier. Every secret here is made up.",
+  "comment": "A recorded link by QR code (halpwords-server#153): the game starts, polls before the grown-up approves, polls too soon, and takes its tokens. The cases are the other answers the server gives (halpwords#109), each on its own: to start (after nothing) or to a poll (after the recorded start), with headers where they matter; game names what the game makes of it (internal/link/pair_test.go). Replayed against the game's client by internal/link/pair_test.go and checked by halpwords-server's internal/api/linkqr_test.go, which loads this file from the game module: every body against the server's schemas, and each case's status and code against the server's own. The code_challenge is the S256 of the code_verifier. Every secret here is made up.",
   "exchanges": [
     {
       "name": "start",
@@ -73,6 +73,154 @@
           "kind": "family"
         }
       }
+    }
+  ],
+  "cases": [
+    {
+      "name": "expired_token",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "expired_token",
+          "message": "The code has run out. Start again."
+        }
+      },
+      "game": "expired"
+    },
+    {
+      "name": "access_denied",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "access_denied",
+          "message": "A grown-up said this isn't their game."
+        }
+      },
+      "game": "refused"
+    },
+    {
+      "name": "not_linkable",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "not_linkable",
+          "message": "A grown-up needs to check this learner's settings on the website."
+        }
+      },
+      "game": "not_linkable"
+    },
+    {
+      "name": "account_suspended",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "account_suspended",
+          "message": "Syncing is paused for now. Your game keeps working and keeps your progress. Ask a grown-up."
+        }
+      },
+      "game": "suspended"
+    },
+    {
+      "name": "rate_limited",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
+      "status": 429,
+      "headers": {
+        "Retry-After": "12"
+      },
+      "response": {
+        "error": {
+          "code": "rate_limited",
+          "message": "Too many requests. Please wait a moment and try again."
+        }
+      },
+      "game": "busy"
+    },
+    {
+      "name": "start_rate_limited",
+      "method": "POST",
+      "path": "/api/v1/link/start",
+      "request": {
+        "code_challenge": "Sjgj3RsoM1cFRvzTRlJbAUCekLTVbU3Vi0ROXlMz4yE"
+      },
+      "status": 429,
+      "headers": {
+        "Retry-After": "60"
+      },
+      "response": {
+        "error": {
+          "code": "rate_limited",
+          "message": "Too many games are waiting. Try again in a minute."
+        }
+      },
+      "game": "busy"
+    },
+    {
+      "name": "link_off",
+      "method": "POST",
+      "path": "/api/v1/link/start",
+      "request": {
+        "code_challenge": "Sjgj3RsoM1cFRvzTRlJbAUCekLTVbU3Vi0ROXlMz4yE"
+      },
+      "status": 404,
+      "response": {
+        "error": {
+          "code": "link_off",
+          "message": "Linking by QR code isn't set up on this server. Type a grown-up's code instead."
+        }
+      },
+      "game": "off"
+    },
+    {
+      "name": "link_off_poll",
+      "method": "POST",
+      "path": "/api/v1/link/token",
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
+      "status": 404,
+      "response": {
+        "error": {
+          "code": "link_off",
+          "message": "Linking by QR code isn't set up on this server. Type a grown-up's code instead."
+        }
+      },
+      "game": "off"
     }
   ]
 }

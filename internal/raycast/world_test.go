@@ -59,7 +59,7 @@ func TestWorldViewsPinned(t *testing.T) {
 		"Lava Forge":         "76d6836391d70e2352e0f8b3aed7ebc46621af8394e3248554dc0fa666b55216",
 		"Amethyst Vaults":    "5850ded99ce7c91afd30a27999098d235b534c5bd8142e13953aaecafb07b8da",
 		"Clockwork Workshop": "b2fb2fa9c38f8e5b09e0ebe0cc30069eb5b8469b209e2317a3e01f0bdfc4aaa3",
-		"Sky Garden":         "de5e690d2e81a374c515f808f85a980de858969f395043ea9fb1c5ef892df036",
+		"Sky Garden":         "aa48fe1ede673e1713547e2f60c0170905015596db56a872ecdb91b33e024811",
 		"Sandstone Tomb":     "a3ddaae900e8270884f12bb4d441449cc238f0536aaa9d7ea81f78d73a492f6a",
 		"Whispering Library": "99e87f859289de08f6383156a705531f04d3d83610d6f07d892bc746bd5404c3",
 	}
@@ -87,7 +87,7 @@ var fusedWant = map[string]string{
 	"Lava Forge":         "76d6836391d70e2352e0f8b3aed7ebc46621af8394e3248554dc0fa666b55216",
 	"Amethyst Vaults":    "3c2ebb0b92c5bfd2ef008309514ee998261a2e097e8081ff892bfe727db12a5a",
 	"Clockwork Workshop": "b2fb2fa9c38f8e5b09e0ebe0cc30069eb5b8469b209e2317a3e01f0bdfc4aaa3",
-	"Sky Garden":         "de5e690d2e81a374c515f808f85a980de858969f395043ea9fb1c5ef892df036",
+	"Sky Garden":         "aa48fe1ede673e1713547e2f60c0170905015596db56a872ecdb91b33e024811",
 	"Sandstone Tomb":     "a3ddaae900e8270884f12bb4d441449cc238f0536aaa9d7ea81f78d73a492f6a",
 	"Whispering Library": "2fc86663f754fbf0a22edd13ed0aa658b271bb77f5310e398c5b62d671ab2c1d",
 }

@@ -7,6 +7,12 @@ version as its release notes.
 
 ### Added
 
+- **Boss Raid grading knows the other words.** `pkg/raid` has a new
+  `GradeAmong(typed, entry, others, langCode, usedBackspace)`, the shared
+  package's `Grade` with the game's rule that a one-letter slip that is the
+  answer to another word is a Miss, not a Graze (#71). `Grade` is unchanged;
+  halpwords-server should pass the raid list's entries.
+
 - **Type a word list in the game.** On the Word Lists screen, N opens a quick
   editor: a title, a language and one `english = answer` word per line,
   checked as you type, with a one-screen format hint. E edits one of your own
@@ -51,6 +57,20 @@ version as its release notes.
   and the door image halpwords-server draws, are byte for byte what they
   were. `pkg/maps` keeps its six themes, so hand-made maps and older games
   are unaffected.
+- `pkg/proc`: other packages can build their own worlds. The types of
+  `Surface.Paint`, `Surface.Mods`, `Surface.Anim` and `Theme.Variants` are
+  exported as `Painter`, `Modifier` and `Animator`, and so are the
+  families, modifiers and animations (`WallBricks`, `FloorLava`,
+  `CeilPipes`, `ModMoss`, `AnimRipples` and the rest). A surface with no
+  `Paint` uses The Crypt's family, so a `Theme` with only the four ramps
+  still draws. No family, `StairsTexture` or `StairsTex` panics on a short
+  or empty ramp: a short ramp repeats its lightest colour, and an empty
+  `Accent` borrows `Base`. Every texture is unchanged, byte for byte.
+- `pkg/proc`: `Theme.SpriteSwap` draws one sprite colour as another in a
+  world (the Ice Halls draw the bat's purple body pink), and
+  `SpriteMinLight` now always returns a value in [0,1]. The Sky Garden's
+  sky gradient no longer runs in straight dither stripes. Nothing else
+  changes; The Crypt and the server's door image are untouched.
 
 - **Hear the word after a miss.** A game linked to an account whose plan
   includes pronunciation downloads an audio pack for each assigned list,
@@ -184,6 +204,15 @@ version as its release notes.
   writes the new lines too.
 
 ### Fixed
+
+- **English contractions in Reverse puzzles.** `I'm` now matches `I am`,
+  `don't` matches `do not`, and so on, in either direction. Shared package
+  `pkg/words`: `Grade` with `words.English` expands contractions on both the
+  typed text and the answer; no API change, so halpwords-server needs no
+  change.
+- **Riddles that gave the answer away or fitted two words.** Reworded
+  `battle`, `war`, `I say`, `I teach`, `son`, `daughter`, `sister`,
+  `brother`, `man` and `woman`. (#45)
 
 - **A server-ended link no longer leaves old play to be sent.** When the
   server answers 401 `invalid_token` to a refresh (a grown-up unlinked the

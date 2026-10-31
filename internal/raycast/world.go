@@ -40,6 +40,15 @@ func (r *Renderer) SetWorld(t *proc.Theme) {
 	r.spriteLevel = int(r.spriteLight * (levels - 1))
 	r.spriteShade = r.shade
 	r.liftSprites(tint, fog, mainColour(t.WallTex(0, 0)), mainColour(t.FloorTex(0)))
+	// Swapped colours shade as their replacement. The swaps read the
+	// shades as lifted, so one swap never feeds another.
+	lifted := r.spriteShade
+	for _, sw := range t.SpriteSwap {
+		from, to := pal.Index(sw[0]), pal.Index(sw[1])
+		for lv := range levels {
+			r.spriteShade[lv][from] = lifted[lv][to]
+		}
+	}
 }
 
 // shadeColour is colour c under light of the given tint at strength k in

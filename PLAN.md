@@ -1193,7 +1193,11 @@ and `GET /choices` are allowed, no sync, no AI token, no upload on
 quit. N unlinks and keeps everything here. Esc on "Is this you?" or on
 the notice keeps the link held: the status line and the title screen say
 to open Account, and Account shows *Finish linking*. Recorded session:
-`internal/link/testdata/session-link-qr.json`.
+`internal/link/testdata/session-link-qr.json`, with each error answer
+as a case (expired, refused, not linkable, suspended, 429 with
+`Retry-After` to start and to a poll, `link_off` to start and to a
+poll), replayed by the game and checked by the server from the game
+module (#109).
 
 ## 11. Cross-platform build and distribution
 

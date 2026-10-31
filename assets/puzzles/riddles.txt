@@ -46,8 +46,8 @@ room = I have four walls, a floor and a ceiling. A house has lots of us.
 
 ## people
 friend = I play with you, help you, and keep your secrets. Who am I?
-sister = I am a girl with the same mother and father as you.
-brother = I am a boy with the same mother and father as you.
+sister = I am your parents' daughter, and I share a home with you. We might argue about the bathroom.
+brother = I am your parents' son, and I share a home with you. We might argue about the remote.
 mother = I am your mum. I looked after you from the day you were born.
 father = I am your dad. I am married to your mum.
 girl = I am a young female person. I am not yet a woman.
@@ -63,10 +63,10 @@ master = I am in charge. The servants of the house must obey me.
 grandmother = I am your mum's mum or your dad's mum. You might call me Granny.
 grandfather = I am your mum's dad or your dad's dad. You might call me Grandad.
 baby = I am tiny and new to the world. I cry, sleep and drink milk.
-son = I am a boy. To my mum and dad, I am their child.
-daughter = I am a girl. To my mum and dad, I am their child.
-man = I am a grown-up boy. I might have a beard.
-woman = I am a grown-up girl. I might be a mother, an aunt or a queen.
+son = I am the male child of my mum and dad. One day I may be a father myself.
+daughter = I am the female child of my mum and dad. One day I may be a mother myself.
+man = I am a grown-up male person. I might have a beard.
+woman = I am a grown-up female person. I might be a mother, an aunt or a queen.
 soldier = I march in an army, wear armour and follow my general's orders.
 knight = I wear shining armour, ride a horse and serve the king.
 
@@ -105,18 +105,18 @@ gift = I come wrapped in paper on your birthday. Someone gives me to you.
 water = You drink me when you are thirsty. Rain and rivers are made of me.
 sun = I rise in the east, shine all day and set in the west.
 word = I am made of letters. You are learning lots of us right now.
-war = I am a great fight between armies or countries. Peace is my opposite.
+war = Whole countries fight for years in me, with armies, ships and planes. Peace is my opposite.
 fire = I am hot and bright. I crackle and burn wood in the hearth.
 ship = I sail across the sea, carrying people and cargo.
 money = Coins and banknotes. You pay for things with me.
 monster = I am a scary creature from stories. I lurk in the dungeon.
 ghost = I am see-through and float through walls. I say "Boo!"
-battle = I am a fight between two armies on a battlefield.
+battle = I am one single clash between two armies, over in a day. A war is made of many of me.
 
 ## verbs
 I have = Say that something belongs to you: "____ a dog."
 I write = Say what you do with a pen: "____ a letter."
-I say = Say what you do when you speak words: "____ hello."
+I say = Fill the gap with what you do aloud when you greet a friend: "____ hello!"
 I love = Say how you feel about your best friend or your family: "____ you."
 I see = Say what you do with your eyes: "____ a dragon!"
 I am = Say who you are: "____ a hero."
@@ -141,7 +141,7 @@ I fight = Say what a knight does in battle: "____ the dragon!"
 I come = Say what you do when someone calls you: "____ at once!"
 I give = Say what you do with a present: "____ it to my friend."
 I release = Say what you do when you untie a rope or set a bird free: "____ it."
-I teach = Say what a teacher does in class: "____ the pupils."
+I teach = Say what a person with chalk and a whiteboard does in class: "____ the pupils."
 I learn = Say what you do at school: "____ new words."
 I send = Say what you do with a letter at the post office: "____ it."
 I eat = Say what you do with your dinner: "____ it all up."

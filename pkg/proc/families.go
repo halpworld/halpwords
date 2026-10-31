@@ -14,30 +14,39 @@ import (
 // these, not new code.
 
 // Look is the palette a surface paints with. Each ramp runs dark to light.
+// Families read up to about four colours of Base and, for details, of
+// Accent (book spines read Accent in dark and light pairs). Shorter ramps
+// are fine: a family repeats a short ramp's lightest colour, uses Base for
+// an empty Accent, and a grey stone ramp when both are empty. Ramps of
+// four or more colours look best.
 type Look struct {
 	Base   []color.RGBA // the material; Base[0] is the darkest (mortar, gaps)
 	Accent []color.RGBA // details: moss, book spines, flowers, glyphs, brass
 }
 
-// painter paints a whole surface family. Painters must tile seamlessly.
-type painter func(m *Indexed, l Look, seed uint64)
+// Painter paints a whole surface family. Painters must tile seamlessly.
+type Painter func(m *Indexed, l Look, seed uint64)
 
-// modifier draws something over a painted surface.
-type modifier func(m *Indexed, l Look, seed uint64)
+// Modifier draws something over a painted surface.
+type Modifier func(m *Indexed, l Look, seed uint64)
 
-// animator redraws part of a painted surface for animation frame 0 to 3,
+// Animator redraws part of a painted surface for animation frame 0 to 3,
 // such as ripples on water. Frame 0 is the still look.
-type animator func(m *Indexed, l Look, seed uint64, frame int)
+type Animator func(m *Indexed, l Look, seed uint64, frame int)
 
 // Frames is the number of animation frames of an animated surface.
 const Frames = 4
 
-// Surface is a family, its palette, and modifiers applied in order.
+// Surface is a family, its palette, and modifiers applied in order. Make
+// and Frame need Paint; a Theme fills in a missing one (see Theme). The
+// exported Wall*, Floor*, Ceil*, Mod* and Anim* functions are the families,
+// modifiers and animations the game's worlds are built from, so other
+// packages can mix their own.
 type Surface struct {
-	Paint painter
+	Paint Painter
 	Look  Look
-	Mods  []modifier
-	Anim  animator // nil for a still surface
+	Mods  []Modifier
+	Anim  Animator // nil for a still surface
 }
 
 // Make paints the surface's first frame.
@@ -122,15 +131,52 @@ func pick(r []color.RGBA, f float64) color.RGBA {
 	return r[min(len(r)-1, max(0, int(f*float64(len(r)))))]
 }
 
+// need returns l with at least nb Base and na Accent colours, so a family
+// never reads past the end of a ramp. A ramp that is long enough is
+// returned as it is, so the game's worlds paint exactly as before. A short
+// ramp repeats its lightest colour; an empty Accent borrows Base, and an
+// empty Base borrows Accent, or a grey stone ramp if both are empty.
+func (l Look) need(nb, na int) Look {
+	if nb > 0 && len(l.Base) == 0 {
+		l.Base = l.Accent
+		if len(l.Base) == 0 {
+			l.Base = stoneRamp
+		}
+	}
+	if na > 0 && len(l.Accent) == 0 {
+		l.Accent = l.Base
+		if len(l.Accent) == 0 {
+			l.Accent = stoneRamp
+		}
+	}
+	l.Base, l.Accent = padRamp(l.Base, nb), padRamp(l.Accent, na)
+	return l
+}
+
+// padRamp returns r, lengthened to n colours by repeating its last one.
+func padRamp(r []color.RGBA, n int) []color.RGBA {
+	if len(r) >= n {
+		return r
+	}
+	out := make([]color.RGBA, n)
+	copy(out, r)
+	for i := len(r); i < n; i++ {
+		out[i] = r[len(r)-1]
+	}
+	return out
+}
+
 // Wall families.
 
-// wallBricks is the classic staggered brick wall of The Crypt.
-func wallBricks(m *Indexed, l Look, seed uint64) {
+// WallBricks is the classic staggered brick wall of The Crypt.
+func WallBricks(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	copy(m.Pix, ToIndexed(BrickWall(TexSize, TexSize, l.Base, seed)).Pix)
 }
 
-// wallCave is rough rock: rounded lumps with dark crevices.
-func wallCave(m *Indexed, l Look, seed uint64) {
+// WallCave is rough rock: rounded lumps with dark crevices.
+func WallCave(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	pts := cellPoints(8, seed)
 	for y := range TexSize {
 		for x := range TexSize {
@@ -151,8 +197,9 @@ func wallCave(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// wallIce is big ice blocks with bright edges and diagonal glints.
-func wallIce(m *Indexed, l Look, seed uint64) {
+// WallIce is big ice blocks with bright edges and diagonal glints.
+func WallIce(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	rows := [...]int{0, 11, 22, TexSize}
 	for r := range len(rows) - 1 {
 		y0, bh := rows[r], rows[r+1]-rows[r]
@@ -183,8 +230,9 @@ func wallIce(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// wallBasalt is dark faceted stone columns with cross cracks.
-func wallBasalt(m *Indexed, l Look, seed uint64) {
+// WallBasalt is dark faceted stone columns with cross cracks.
+func WallBasalt(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	edges := [...]int{0, 7, 15, 21, 27, TexSize}
 	for c := range len(edges) - 1 {
 		x0, w := edges[c], edges[c+1]-edges[c]
@@ -211,8 +259,9 @@ func wallBasalt(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// wallMetal is riveted, bevelled metal plates.
-func wallMetal(m *Indexed, l Look, seed uint64) {
+// WallMetal is riveted, bevelled metal plates.
+func WallMetal(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	for y := range TexSize {
 		for x := range TexSize {
 			lx, ly := x%16, y%16
@@ -238,8 +287,9 @@ func wallMetal(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// wallCrystal is big diamond-shaped facets with lit and shaded edges.
-func wallCrystal(m *Indexed, l Look, seed uint64) {
+// WallCrystal is big diamond-shaped facets with lit and shaded edges.
+func WallCrystal(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	const s = 16
 	for y := range TexSize {
 		for x := range TexSize {
@@ -262,8 +312,9 @@ func wallCrystal(m *Indexed, l Look, seed uint64) {
 // stoneRamp colours pebbles stuck in earth walls.
 var stoneRamp = []color.RGBA{pal.Night, pal.Granite, pal.Stone, pal.Ash}
 
-// wallEarth is packed earth with stones and roots growing down through it.
-func wallEarth(m *Indexed, l Look, seed uint64) {
+// WallEarth is packed earth with stones and roots growing down through it.
+func WallEarth(m *Indexed, l Look, seed uint64) {
+	l = l.need(4, 0)
 	stones := cellPoints(9, seed+5)
 	for y := range TexSize {
 		for x := range TexSize {
@@ -318,9 +369,10 @@ func glyphAt(g [8]uint8, x, y int) bool {
 	return x >= 0 && y >= 0 && x < 8 && y < 8 && g[y]>>(7-x)&1 == 1
 }
 
-// wallSandstone is large sandstone blocks, each carved with a glyph. About
+// WallSandstone is large sandstone blocks, each carved with a glyph. About
 // half the glyphs are inlaid with glowing Accent paint.
-func wallSandstone(m *Indexed, l Look, seed uint64) {
+func WallSandstone(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	for y := range TexSize {
 		row := y / 16
 		off := row * 8
@@ -357,9 +409,10 @@ func wallSandstone(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// wallBooks is a bookcase with two shelves of book spines. Accent holds
+// WallBooks is a bookcase with two shelves of book spines. Accent holds
 // spine colours in pairs (dark, light).
-func wallBooks(m *Indexed, l Look, seed uint64) {
+func WallBooks(m *Indexed, l Look, seed uint64) {
+	l = l.need(3, 2)
 	for y := range TexSize {
 		for x := range TexSize {
 			switch ly := y % 16; ly {
@@ -408,8 +461,9 @@ func book(m *Indexed, x0, y0, w, h int, dark, light, shadow color.RGBA, gilded b
 	}
 }
 
-// wallHedge is a clipped hedge of small leaves.
-func wallHedge(m *Indexed, l Look, seed uint64) {
+// WallHedge is a clipped hedge of small leaves.
+func WallHedge(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 0)
 	pts := cellPoints(46, seed)
 	for y := range TexSize {
 		for x := range TexSize {
@@ -425,8 +479,9 @@ func wallHedge(m *Indexed, l Look, seed uint64) {
 
 // Floor families.
 
-// floorFlagstones is four big stones with ragged seams.
-func floorFlagstones(m *Indexed, l Look, seed uint64) {
+// FloorFlagstones is four big stones with ragged seams.
+func FloorFlagstones(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	ramp := l.Base
 	seamX := 16 + int(hash2(1, 0, seed)*6) - 3
 	for y := range TexSize {
@@ -460,8 +515,9 @@ func floorFlagstones(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// floorCobbles is small round stones; Accent, if any, grows in the gaps.
-func floorCobbles(m *Indexed, l Look, seed uint64) {
+// FloorCobbles is small round stones; Accent, if any, grows in the gaps.
+func FloorCobbles(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	pts := cellPoints(16, seed)
 	for y := range TexSize {
 		for x := range TexSize {
@@ -480,8 +536,9 @@ func floorCobbles(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// floorSand is rippled sand with specks.
-func floorSand(m *Indexed, l Look, seed uint64) {
+// FloorSand is rippled sand with specks.
+func FloorSand(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 0)
 	for y := range TexSize {
 		for x := range TexSize {
 			n := tileNoise(float64(x), float64(y), 4, seed)
@@ -495,9 +552,10 @@ func floorSand(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// floorWater is dark, still water with a few glints. animRipples moves
+// FloorWater is dark, still water with a few glints. AnimRipples moves
 // ripples across it.
-func floorWater(m *Indexed, l Look, seed uint64) {
+func FloorWater(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 0)
 	for y := range TexSize {
 		for x := range TexSize {
 			v := 0.25 + 0.25*(tileNoise(float64(x), float64(y), 8, seed+1)-0.5)
@@ -510,9 +568,10 @@ func floorWater(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// animRipples draws wavy ripple highlights (Accent) on water. Each frame
+// AnimRipples draws wavy ripple highlights (Accent) on water. Each frame
 // moves them a quarter of their spacing, so four frames loop.
-func animRipples(m *Indexed, l Look, seed uint64, frame int) {
+func AnimRipples(m *Indexed, l Look, seed uint64, frame int) {
+	l = l.need(1, 1)
 	const spacing = 16
 	shift := float64(frame * spacing / Frames)
 	for y := range TexSize {
@@ -532,12 +591,13 @@ func animRipples(m *Indexed, l Look, seed uint64, frame int) {
 	}
 }
 
-// lavaCracks are the cell points of the lava floor, shared by floorLava and
-// animLava so they agree.
+// lavaCracks are the cell points of the lava floor, shared by FloorLava and
+// AnimLava so they agree.
 func lavaCracks(seed uint64) [][2]float64 { return cellPoints(7, seed) }
 
-// floorLava is dark crusted plates with glowing lava (Accent) between them.
-func floorLava(m *Indexed, l Look, seed uint64) {
+// FloorLava is dark crusted plates with glowing lava (Accent) between them.
+func FloorLava(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 2)
 	pts := lavaCracks(seed)
 	for y := range TexSize {
 		for x := range TexSize {
@@ -573,8 +633,9 @@ func lavaGlow(ramp []color.RGBA, gap float64, heat int) color.RGBA {
 // lavaCore is the half-width of the hottest line down a lava crack.
 const lavaCore = 0.25
 
-// animLava makes a slow wave of heat flow along the lava cracks.
-func animLava(m *Indexed, l Look, seed uint64, frame int) {
+// AnimLava makes a slow wave of heat flow along the lava cracks.
+func AnimLava(m *Indexed, l Look, seed uint64, frame int) {
+	l = l.need(0, 2)
 	pts := lavaCracks(seed)
 	for y := range TexSize {
 		for x := range TexSize {
@@ -592,8 +653,9 @@ func animLava(m *Indexed, l Look, seed uint64, frame int) {
 	}
 }
 
-// floorSnow is soft snow with drifts and a few sparkles.
-func floorSnow(m *Indexed, l Look, seed uint64) {
+// FloorSnow is soft snow with drifts and a few sparkles.
+func FloorSnow(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 0)
 	for y := range TexSize {
 		for x := range TexSize {
 			v := 0.5 + 0.6*(tileNoise(float64(x), float64(y), 4, seed)-0.5) + 0.2*(tileNoise(float64(x), float64(y), 16, seed+1)-0.5)
@@ -606,8 +668,9 @@ func floorSnow(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// floorGrass is grass with blades; Accent adds a few tiny flowers.
-func floorGrass(m *Indexed, l Look, seed uint64) {
+// FloorGrass is grass with blades; Accent adds a few tiny flowers.
+func FloorGrass(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	for y := range TexSize {
 		for x := range TexSize {
 			v := 0.4 + 0.4*(tileNoise(float64(x), float64(y), 8, seed)-0.5)
@@ -626,8 +689,9 @@ func floorGrass(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// floorPlanks is wooden floorboards with grain and nails.
-func floorPlanks(m *Indexed, l Look, seed uint64) {
+// FloorPlanks is wooden floorboards with grain and nails.
+func FloorPlanks(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	for y := range TexSize {
 		p, ly := y/8, y%8
 		end := int(hash2(p, 0, seed) * TexSize)
@@ -653,8 +717,9 @@ func floorPlanks(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// floorChecker is polished square tiles alternating Base and Accent.
-func floorChecker(m *Indexed, l Look, seed uint64) {
+// FloorChecker is polished square tiles alternating Base and Accent.
+func FloorChecker(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 1)
 	for y := range TexSize {
 		for x := range TexSize {
 			lx, ly := x%16, y%16
@@ -678,8 +743,9 @@ func floorChecker(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// floorGrate is a metal grating over a dark pit.
-func floorGrate(m *Indexed, l Look, seed uint64) {
+// FloorGrate is a metal grating over a dark pit.
+func FloorGrate(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	for y := range TexSize {
 		for x := range TexSize {
 			lx, ly := x%16, y%16
@@ -709,9 +775,10 @@ func floorGrate(m *Indexed, l Look, seed uint64) {
 
 // Ceiling families.
 
-// ceilBeams is dark stone blocks crossed by a timber beam. Accent is the
+// CeilBeams is dark stone blocks crossed by a timber beam. Accent is the
 // wood, four colours dark to light.
-func ceilBeams(m *Indexed, l Look, seed uint64) {
+func CeilBeams(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 4)
 	wood := l.Accent
 	for y := range TexSize {
 		for x := range TexSize {
@@ -759,14 +826,16 @@ func tips(m *Indexed, ramp []color.RGBA, n int, seed uint64) {
 	}
 }
 
-// ceilRock is rough rock with stalactite tips.
-func ceilRock(m *Indexed, l Look, seed uint64) {
-	wallCave(m, l, seed)
+// CeilRock is rough rock with stalactite tips.
+func CeilRock(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
+	WallCave(m, l, seed)
 	tips(m, l.Base, 3, seed+9)
 }
 
-// ceilIce is pale ice with icicle tips coloured by Accent.
-func ceilIce(m *Indexed, l Look, seed uint64) {
+// CeilIce is pale ice with icicle tips coloured by Accent.
+func CeilIce(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 2)
 	for y := range TexSize {
 		for x := range TexSize {
 			v := 0.45 + 0.5*(tileNoise(float64(x), float64(y), 4, seed)-0.5)
@@ -776,8 +845,9 @@ func ceilIce(m *Indexed, l Look, seed uint64) {
 	tips(m, l.Accent, 4, seed+9)
 }
 
-// ceilPipes is a dark ceiling with flanged pipes (Accent).
-func ceilPipes(m *Indexed, l Look, seed uint64) {
+// CeilPipes is a dark ceiling with flanged pipes (Accent).
+func CeilPipes(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 1)
 	for y := range TexSize {
 		for x := range TexSize {
 			v := 0.3 + 0.2*(tileNoise(float64(x), float64(y), 8, seed)-0.5)
@@ -812,14 +882,16 @@ func pipe(m *Indexed, ramp []color.RGBA, y0, w int) {
 	}
 }
 
-// ceilCrystal is crystal facets with glowing veins.
-func ceilCrystal(m *Indexed, l Look, seed uint64) {
-	wallCrystal(m, l, seed)
-	modVeins(m, l, seed+5)
+// CeilCrystal is crystal facets with glowing veins.
+func CeilCrystal(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 2)
+	WallCrystal(m, l, seed)
+	ModVeins(m, l, seed+5)
 }
 
-// ceilSlabs is long stone slabs.
-func ceilSlabs(m *Indexed, l Look, seed uint64) {
+// CeilSlabs is long stone slabs.
+func CeilSlabs(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	for y := range TexSize {
 		for x := range TexSize {
 			ly := y % 11
@@ -839,9 +911,10 @@ func ceilSlabs(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// ceilCoffers is a coffered wooden ceiling: Base panels framed by Accent
+// CeilCoffers is a coffered wooden ceiling: Base panels framed by Accent
 // beams.
-func ceilCoffers(m *Indexed, l Look, seed uint64) {
+func CeilCoffers(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 1)
 	for y := range TexSize {
 		for x := range TexSize {
 			lx, ly := x%16, y%16
@@ -870,8 +943,9 @@ func ceilCoffers(m *Indexed, l Look, seed uint64) {
 
 // Modifiers.
 
-// modMoss grows moss (Accent) up from the bottom half.
-func modMoss(m *Indexed, l Look, seed uint64) {
+// ModMoss grows moss (Accent) up from the bottom half.
+func ModMoss(m *Indexed, l Look, seed uint64) {
+	l = l.need(0, 1)
 	for y := TexSize / 2; y < TexSize; y++ {
 		for x := range TexSize {
 			v := ValueNoise(float64(x), float64(y), 4, seed+9) + float64(y-TexSize/2)/TexSize
@@ -882,8 +956,9 @@ func modMoss(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modCrack draws a dark crack down the surface.
-func modCrack(m *Indexed, l Look, seed uint64) {
+// ModCrack draws a dark crack down the surface.
+func ModCrack(m *Indexed, l Look, seed uint64) {
+	l = l.need(2, 0)
 	rng := NewRand(seed)
 	x := 8 + rng.IntN(16)
 	for y := 2; y < TexSize-4; y++ {
@@ -893,8 +968,8 @@ func modCrack(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modCobweb spins a web in the top left corner.
-func modCobweb(m *Indexed, l Look, seed uint64) {
+// ModCobweb spins a web in the top left corner.
+func ModCobweb(m *Indexed, l Look, seed uint64) {
 	for i := range 5 {
 		a := float64(i) * math.Pi / 8
 		for r := 0.0; r < 12; r += 0.5 {
@@ -908,8 +983,8 @@ func modCobweb(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modFrost frosts the top edge.
-func modFrost(m *Indexed, l Look, seed uint64) {
+// ModFrost frosts the top edge.
+func ModFrost(m *Indexed, l Look, seed uint64) {
 	for y := range 12 {
 		for x := range TexSize {
 			if tileNoise(float64(x), float64(y), 8, seed)-float64(y)/14 > 0.15 {
@@ -924,8 +999,9 @@ func modFrost(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modDrips streaks water (Accent) down the wall.
-func modDrips(m *Indexed, l Look, seed uint64) {
+// ModDrips streaks water (Accent) down the wall.
+func ModDrips(m *Indexed, l Look, seed uint64) {
+	l = l.need(0, 1)
 	rng := NewRand(seed)
 	for range 4 {
 		x, n := rng.IntN(TexSize), 8+rng.IntN(20)
@@ -936,8 +1012,9 @@ func modDrips(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modVeins draws glowing veins (Accent) across the surface.
-func modVeins(m *Indexed, l Look, seed uint64) {
+// ModVeins draws glowing veins (Accent) across the surface.
+func ModVeins(m *Indexed, l Look, seed uint64) {
+	l = l.need(0, 2)
 	rng := NewRand(seed)
 	for range 2 {
 		x := float64(rng.IntN(TexSize))
@@ -956,8 +1033,9 @@ func modVeins(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modGear draws a big gear (Accent) in the middle.
-func modGear(m *Indexed, l Look, seed uint64) {
+// ModGear draws a big gear (Accent) in the middle.
+func ModGear(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 1)
 	const cx, cy = 16.0, 15.5
 	for y := range TexSize {
 		for x := range TexSize {
@@ -989,8 +1067,9 @@ func modGear(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modPipe runs a vertical pipe (Accent) down the right side.
-func modPipe(m *Indexed, l Look, seed uint64) {
+// ModPipe runs a vertical pipe (Accent) down the right side.
+func ModPipe(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 1)
 	for y := range TexSize {
 		for x := 22; x < 27; x++ {
 			v := 0.95 - 1.1*math.Abs(float64(x-22)/4-0.3)
@@ -1003,8 +1082,9 @@ func modPipe(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modFlowers dots the surface with little flowers (Accent).
-func modFlowers(m *Indexed, l Look, seed uint64) {
+// ModFlowers dots the surface with little flowers (Accent).
+func ModFlowers(m *Indexed, l Look, seed uint64) {
+	l = l.need(0, 1)
 	rng := NewRand(seed)
 	for range 9 {
 		x, y := rng.IntN(TexSize-2), 3+rng.IntN(TexSize-5)
@@ -1017,9 +1097,10 @@ func modFlowers(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modRaggedTop makes the top edge leafy and see-through, for walls under an
+// ModRaggedTop makes the top edge leafy and see-through, for walls under an
 // open sky.
-func modRaggedTop(m *Indexed, l Look, seed uint64) {
+func ModRaggedTop(m *Indexed, l Look, seed uint64) {
+	l = l.need(1, 0)
 	for x := range TexSize {
 		h := int(1.5 + 3*math.Abs(math.Sin(float64(x)*6*math.Pi/TexSize+hash2(0, 0, seed)*6)) + hash2(x, 0, seed)*1.5)
 		for y := range h {
@@ -1029,8 +1110,9 @@ func modRaggedTop(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modVines hangs leafy vines (Accent) from the top.
-func modVines(m *Indexed, l Look, seed uint64) {
+// ModVines hangs leafy vines (Accent) from the top.
+func ModVines(m *Indexed, l Look, seed uint64) {
+	l = l.need(0, 1)
 	rng := NewRand(seed)
 	for i := range 3 {
 		x := 3 + i*10 + rng.IntN(5)
@@ -1045,8 +1127,8 @@ func modVines(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modSoot blackens the top of the wall.
-func modSoot(m *Indexed, l Look, seed uint64) {
+// ModSoot blackens the top of the wall.
+func ModSoot(m *Indexed, l Look, seed uint64) {
 	for y := range 16 {
 		for x := range TexSize {
 			if tileNoise(float64(x), float64(y), 8, seed)-float64(y)/18 > 0.2 && bayer4[y&3][x&3] < 0.6 {
@@ -1056,8 +1138,9 @@ func modSoot(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modGlowCracks breaks the surface with glowing cracks (Accent).
-func modGlowCracks(m *Indexed, l Look, seed uint64) {
+// ModGlowCracks breaks the surface with glowing cracks (Accent).
+func ModGlowCracks(m *Indexed, l Look, seed uint64) {
+	l = l.need(0, 1)
 	rng := NewRand(seed)
 	x := 6 + rng.IntN(20)
 	for y := range TexSize {
@@ -1069,8 +1152,8 @@ func modGlowCracks(m *Indexed, l Look, seed uint64) {
 	}
 }
 
-// modSandDrift piles sand against the bottom of the wall.
-func modSandDrift(m *Indexed, l Look, seed uint64) {
+// ModSandDrift piles sand against the bottom of the wall.
+func ModSandDrift(m *Indexed, l Look, seed uint64) {
 	for x := range TexSize {
 		h := 3 + int(4*tileNoise(float64(x), 0, 4, seed))
 		for y := TexSize - h; y < TexSize; y++ {

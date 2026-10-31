@@ -232,7 +232,7 @@ the user's folder itself.
 | `adventure.json` | learner | The one save slot: the last Save Shrine and an optional suspend point. It stores the seed and the run's random generator, the hero, the changed state of floors, the Director's scripts, and the quest if one is played. It has a `Version` (2 now). |
 | `words/*.txt` | learner | Their own word lists. |
 | `quests/` | learner | Quests and maps dropped on the window. |
-| `assigned/` | learner | Lists a grown-up assigned, as the server sent them, and `<list>.audio` packs. |
+| `assigned/` | learner | Lists a grown-up assigned, as the server sent them, and `<list>.audio` packs. Not moved with the web game to a new address (`move.Exportable`); fetched again once linked there. |
 | `link.json` | learner | The link's tokens (private). |
 | `link-queue.json`, `link-parked.json` | learner | Events waiting to be sent, and events kept for the same learner to link again. |
 

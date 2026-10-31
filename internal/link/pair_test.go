@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -22,28 +23,29 @@ import (
 // the server's internal/api/schema_test.go validates the same file
 // against its schemas.
 type session struct {
-	Exchanges []struct {
-		Name     string          `json:"name"`
-		Method   string          `json:"method"`
-		Path     string          `json:"path"`
-		Request  map[string]any  `json:"request"`
-		Status   int             `json:"status"`
-		Response json.RawMessage `json:"response"`
-	} `json:"exchanges"`
+	Exchanges []exchange `json:"exchanges"`
+	// Cases are the other answers, each replayed on its own.
+	Cases []exchange `json:"cases"`
+}
+
+// exchange is one recorded request and answer.
+type exchange struct {
+	Name     string            `json:"name"`
+	Method   string            `json:"method"`
+	Path     string            `json:"path"`
+	Request  map[string]any    `json:"request"`
+	Status   int               `json:"status"`
+	Headers  map[string]string `json:"headers"`
+	Response json.RawMessage   `json:"response"`
+	// Game is what the game makes of a case's answer.
+	Game string `json:"game"`
 }
 
 // TestPairRecordedSession replays the recorded session against the
 // client: the requests the game makes have the recorded shape, and it
 // takes each answer as it should.
 func TestPairRecordedSession(t *testing.T) {
-	data, err := os.ReadFile("testdata/session-link-qr.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var s session
-	if err := json.Unmarshal(data, &s); err != nil {
-		t.Fatal(err)
-	}
+	s := loadSession(t)
 	if names := []string{"start", "pending", "slow_down", "tokens"}; len(s.Exchanges) != len(names) {
 		t.Fatalf("%d exchanges", len(s.Exchanges))
 	} else {
@@ -156,6 +158,137 @@ func TestPairRecordedSession(t *testing.T) {
 	c3 := Open(Options{Store: st, Server: srv.URL, Now: clk.now})
 	if c3.Status().Unconfirmed {
 		t.Fatal("the confirmation wasn't kept")
+	}
+}
+
+// loadSession reads testdata/session-link-qr.json.
+func loadSession(t *testing.T) session {
+	t.Helper()
+	data, err := os.ReadFile("testdata/session-link-qr.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s session
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// TestPairRecordedCases replays each recorded error answer on its own: an
+// answer to start after nothing, an answer to a poll after the recorded
+// start. The game makes of each what the case's game says, and keeps or
+// forgets the code as it should (halpwords#109).
+func TestPairRecordedCases(t *testing.T) {
+	s := loadSession(t)
+	want := []string{"expired_token", "access_denied", "not_linkable", "account_suspended", "rate_limited",
+		"start_rate_limited", "link_off", "link_off_poll"}
+	var names []string
+	for _, x := range s.Cases {
+		names = append(names, x.Name)
+	}
+	if !slices.Equal(names, want) {
+		t.Fatalf("cases %v, want %v", names, want)
+	}
+	start := s.Exchanges[0]
+	for _, x := range s.Cases {
+		t.Run(x.Name, func(t *testing.T) {
+			var mu sync.Mutex
+			var asked []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				asked = append(asked, r.URL.Path)
+				var body map[string]any
+				json.NewDecoder(r.Body).Decode(&body)
+				answer := x
+				if r.URL.Path != x.Path {
+					answer = start
+				}
+				if r.Method != answer.Method || r.URL.Path != answer.Path || fieldNames(body) != fieldNames(answer.Request) {
+					t.Errorf("%s %s with %v, recorded %s %s with %v", r.Method, r.URL.Path, fieldNames(body),
+						answer.Method, answer.Path, fieldNames(answer.Request))
+				}
+				for k, v := range answer.Headers {
+					w.Header().Set(k, v)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(answer.Status)
+				w.Write(answer.Response)
+			}))
+			defer srv.Close()
+			clk := &clock{t: time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC)}
+			c := Open(Options{Store: newMemStore(), Server: srv.URL, Now: clk.now, Name: "Halpwords on Windows"})
+			c.sleep = func(time.Duration) {}
+			ctx := context.Background()
+			var err error
+			_, err = c.StartPair(ctx)
+			if x.Path == start.Path {
+				if c.PendingPair() != nil {
+					t.Error("a code kept after a refused start")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("start: %v", err)
+				}
+				err = c.PollPair(ctx)
+			}
+			var e *Error
+			switch x.Game {
+			case "expired":
+				if !errors.Is(err, ErrPairExpired) {
+					t.Errorf("err %v", err)
+				}
+			case "refused":
+				if !errors.Is(err, ErrPairRefused) {
+					t.Errorf("err %v", err)
+				}
+			case "not_linkable":
+				if !errors.Is(err, ErrNotLinkable) {
+					t.Errorf("err %v", err)
+				}
+			case "suspended":
+				if !errors.Is(err, ErrSuspended) {
+					t.Errorf("err %v", err)
+				}
+			case "busy":
+				// Too many tries: wait; the scene offers the typed code
+				// (#108). A poll keeps its code for the next try.
+				secs, _ := strconv.Atoi(x.Headers["Retry-After"])
+				if !errors.Is(err, ErrSSOBusy) || !errors.As(err, &e) || secs == 0 || e.RetryAfter != time.Duration(secs)*time.Second {
+					t.Errorf("err %v", err)
+				}
+				if x.Path != start.Path && c.PendingPair() == nil {
+					t.Error("the code was dropped after a rate limit")
+				}
+			case "off":
+				if !errors.Is(err, ErrPairOff) {
+					t.Errorf("err %v", err)
+				}
+			default:
+				t.Fatalf("game %q", x.Game)
+			}
+			if x.Game != "busy" && c.PendingPair() != nil {
+				t.Error("the code was kept after the link ended")
+			}
+			if c.Linked() {
+				t.Error("linked")
+			}
+			if x.Name == "link_off" {
+				// The server can't link by QR code: the game stops asking.
+				mu.Lock()
+				n := len(asked)
+				mu.Unlock()
+				if _, err := c.StartPair(ctx); !errors.Is(err, ErrPairOff) {
+					t.Errorf("second start: %v", err)
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if len(asked) != n {
+					t.Error("asked again after link_off")
+				}
+			}
+		})
 	}
 }
 

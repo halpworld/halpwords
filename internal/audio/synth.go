@@ -85,13 +85,19 @@ func (t Tone) render(mix []float64, rate int, seed uint32) {
 	phase := 0.0
 	noise := 0.0
 	rng := seed | 1
+	// A steady pitch needs working out once, not every sample: long
+	// music notes are most of the work of rendering a loop.
+	steady := t.Slide == 0 && t.Vibrato == 0
+	f := max(20, min(nyquist, t.Freq))
 	for i := 0; i < n && start+i < len(mix); i++ {
 		secs := float64(i) / float64(rate)
-		f := t.Freq * math.Exp2(t.Slide*secs)
-		if t.Vibrato != 0 {
-			f *= math.Exp2(t.Vibrato / 12 * math.Sin(2*math.Pi*t.VibratoHz*secs))
+		if !steady {
+			f = t.Freq * math.Exp2(t.Slide*secs)
+			if t.Vibrato != 0 {
+				f *= math.Exp2(t.Vibrato / 12 * math.Sin(2*math.Pi*t.VibratoHz*secs))
+			}
+			f = max(20, min(nyquist, f))
 		}
-		f = max(20, min(nyquist, f))
 
 		var v float64
 		switch t.Wave {
