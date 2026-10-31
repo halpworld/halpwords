@@ -60,7 +60,7 @@ every package below, and also `assets`.
 | `pkg/words` | The word list format (`Parse`, `Format`, `LoadFS`), languages, answer grading and its tiers, Unicode matching, the Leitner word memory and `Deck`, mistake kinds, the Grimoire's numbers, Greek typing keys. |
 | `pkg/compete` | Game modes (Adventure, Hardcore, Daily), the Hardcore score, seed and share codes, the Daily Dungeon, the Hall of Fame. |
 | `pkg/puzzle` | The ten door and chest puzzles (reverse rune, odd one out, anagram, missing letters, spelling, pair matching, riddle, tumbler lock, crossword, gap fill) and their generators. |
-| `pkg/proc` | Procedural pixel art: textures, the ten worlds ([worlds.md](worlds.md)), monsters, the hero, props, the picture set for sign-in, the app icon. |
+| `pkg/proc` | Procedural pixel art: textures, the fourteen worlds ([worlds.md](worlds.md)), monsters, the hero, props, the picture set for sign-in, the app icon. |
 | `pkg/safety` | The family-safe policy that starts every AI request, and the filter for text that comes back. |
 | `pkg/settings` | Per-language settings (grading rules, highlights, timer) that a grown-up can lock. |
 | `pkg/maps` | The `.hwmap` and `.hwquest` formats and the checks a map must pass. |

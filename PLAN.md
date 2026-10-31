@@ -337,7 +337,14 @@ quarter turn at a time.
   *Now (#72, done):* every floor is its own world, ten in a fixed order
   (`proc.FloorOrder`): The Crypt, Mossy Cellars, Flooded Caves, Lava Forge,
   Ice Halls, Whispering Library, Sky Garden, Clockwork Workshop, Amethyst
-  Vaults, Sandstone Tomb. From floor 11 the order repeats as a remix
+  Vaults, Sandstone Tomb. *Now (#74, done):* four more follow, floors 11 to
+  14: Sunken Temple, Candy Caverns, Mushroom Forest and Star Observatory
+  (appended to `proc.Themes`; floors 1 to 10 are unchanged), so the order
+  repeats as a remix from floor 15, not 11. Teacher maps can choose all
+  fourteen (`maps.Themes`, #77): the game sends `X-Halpwords-Map-Themes`
+  with how many it knows, so the server can hide the rest from an older
+  game (server #184 first; the web game live before server #198). The
+  original text: from floor 11 the order repeats as a remix
   (`proc.Lap`): the same names, other wall variants and more props. Reaching
   a floor shows an arrival card (world name, a tagline, "Space to skip";
   Space or Enter skips it, Esc skips it and opens the menu). Director floors
@@ -412,6 +419,9 @@ accuracy    = Perfect 1.0 | Correct 0.85 | Accent slip 0.6 | Graze 0.3 | Miss 0
 combo       = 1 + 0.1 × streak (max 2.0)       # streak of Perfect/Correct answers
 damage      = ATK × accuracy × speed × combo × (CRIT 1.5 if Perfect and speed ≥ 1.5)
 ```
+*Now (#59, done):* the crit is judged on the real speed (as the HUD shows
+it), not a class's boosted speed: `combat.Damage(atk, tier, speed, real,
+streak)`. The Scribe's bonus still scales the damage.
 - **Dodge:** Perfect or Correct → full dodge (a "Counter!" bonus if very fast);
   Accent slip or Graze → half damage; Miss or timeout → full damage.
 - **Miss penalty:** the monster gets a free hit, your combo resets, the word
@@ -839,7 +849,11 @@ embedding exception.
   *Now (#72, done):* each world also has a procedural ambient sound bed
   (`internal/audio/ambience.go`: crickets, dripping water, a rumble, wind,
   page rustle, birdsong, ticking, chimes), mixed under the floor music.
-  Music itself is still per floor, not per world.
+  *Now (#75, done):* the music is per world too (`internal/audio/worlds.go`,
+  `audio.World`, `Track.World`). Each world has its key, scale, tempo
+  range, progressions, lead, bass and drums; Delve takes all of it, Fight
+  and Boss play in the world's key with its lead, and the title, camp and
+  lament are unchanged. The floor's seed still writes the tune.
 
 **AI art overrides:** if `overrides/monster_<family>.png` or
 `overrides/title.png` exists, it is used instead of the procedural version. AI

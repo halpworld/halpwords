@@ -568,7 +568,7 @@ only when the screen opens, and each works once, for 15 minutes. A grown-up
 scans the QR code with their phone, or goes to `/link` on the website and
 types the code, then presses *Link* next to the child. Press T to type a
 code from the website instead; with an older server the game goes straight
-there. Once linked, the game asks "Is this you?": Y yes, N unlinks, Esc
+there. Once linked, the game asks "Is this you?" (with "(school)" or "(family)" after the name when the server says which, never anything more): Y yes, N unlinks, Esc
 later. It then shows who can see the progress. Nothing is sent until the
 child says yes. Esc keeps the link held, and Account shows *Finish linking*
 until they answer.
@@ -1011,7 +1011,7 @@ pkg/words/         word lists, languages, grading, spaced repetition, mistake ki
 pkg/settings/      per-language settings (grading rules, highlights, timer) a grown-up can lock
 pkg/compete/       Hardcore score, seed and share codes, Daily Dungeon, Hall of Fame
 pkg/puzzle/        door and chest word puzzles
-pkg/proc/          procedural pixel art, the ten worlds and the app icon
+pkg/proc/          procedural pixel art, the fourteen worlds and the app icon
 pkg/safety/        family-safe policy and filter for generated text
 pkg/maps/          the quest and map formats (.hwquest, .hwmap) and their checks
 pkg/race/          the rules of a Race in Play Together
