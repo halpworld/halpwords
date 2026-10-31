@@ -102,6 +102,7 @@ func Fetch(ctx context.Context, client *http.Client, u *url.URL) (*maps.Quest, e
 		return nil, ErrBadAddress
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set(maps.ThemesHeader, maps.ThemesHeaderValue())
 	browserOptions(req)
 	c := *client
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }

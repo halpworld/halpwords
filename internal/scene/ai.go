@@ -11,7 +11,6 @@ import (
 	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/llm"
 	"github.com/halpworld/halpwords/internal/pal"
-	"github.com/halpworld/halpwords/pkg/maps"
 	"github.com/halpworld/halpwords/pkg/proc"
 	"github.com/halpworld/halpwords/pkg/puzzle"
 	"github.com/halpworld/halpwords/pkg/words"
@@ -416,12 +415,17 @@ func (r *run) themeFor() *proc.Theme {
 	return proc.ThemeFor(r.depth)
 }
 
+// originalMapThemes is how many themes maps had before the other worlds
+// (#72): maps.Themes has more since #77, but a map with no theme still
+// cycles through these.
+const originalMapThemes = 6
+
 // questTheme is the look of a quest map that names no theme: the one such
 // maps always had, cycling through the six map themes every two levels,
 // so teachers' maps keep looking as they did before every floor got its
 // own world.
 func questTheme(level int) *proc.Theme {
-	return &proc.Themes[((max(level, 1)-1)/2)%len(maps.Themes)]
+	return &proc.Themes[((max(level, 1)-1)/2)%originalMapThemes]
 }
 
 // floorName is the name the floor's banner shows.

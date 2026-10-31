@@ -50,6 +50,10 @@ version as its release notes.
   names, but different wall variants and more props. The Crypt looks
   exactly as before. Monsters, doors and stairs are no harder to see in
   any world.
+- **Teacher maps can choose the new worlds.** A map's theme can be any of
+  the ten worlds. A map with no theme looks as it always did. The game
+  tells the server how many worlds it knows, and the server leaves the
+  rest out of the quests it sends.
 - **Arrival card.** Reaching a new floor shows the world's name and a
   short line about it, with "Space to skip". Space or Enter skips it, and
   Esc skips it and opens the menu.

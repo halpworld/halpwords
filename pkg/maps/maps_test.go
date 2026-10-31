@@ -2,6 +2,7 @@ package maps_test
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -24,12 +25,14 @@ func TestThemesMatchTheGame(t *testing.T) {
 	}
 }
 
-// The first six themes keep their names and indices: saved maps and
-// Director scripts store them, and the server reads them.
+// The themes keep their names and indices: saved maps and Director
+// scripts store them, and the server reads them. The list may grow at
+// the end; the first ten are pinned here.
 func TestThemesPinned(t *testing.T) {
-	want := []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Ice Halls", "Lava Forge", "Amethyst Vaults"}
-	if !slices.Equal(maps.Themes, want) {
-		t.Errorf("maps.Themes is %v, want %v", maps.Themes, want)
+	want := []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Ice Halls", "Lava Forge", "Amethyst Vaults",
+		"Clockwork Workshop", "Sky Garden", "Sandstone Tomb", "Whispering Library"}
+	if len(maps.Themes) < len(want) || !slices.Equal(maps.Themes[:len(want)], want) {
+		t.Errorf("maps.Themes is %v, want it to start with %v", maps.Themes, want)
 	}
 	for i, name := range want {
 		if proc.Themes[i].Name != name {
@@ -103,6 +106,15 @@ func TestGoodMap(t *testing.T) {
 	m.Theme = "ice halls"
 	if m.ThemeIndex() != 3 {
 		t.Error("themes are matched ignoring case")
+	}
+	for i, name := range maps.Themes {
+		m.Theme = name
+		if m.ThemeIndex() != i {
+			t.Errorf("ThemeIndex of %q = %d, want %d", name, m.ThemeIndex(), i)
+		}
+		if ps := m.Check(starter(t)); len(ps) > 0 {
+			t.Errorf("theme %q: %v", name, ps)
+		}
 	}
 }
 
@@ -307,5 +319,11 @@ func TestQuest(t *testing.T) {
 	}
 	if _, err := maps.ParseQuest([]byte(`{"format":"hwquest","version":1,"maps":[{"format":"hwmap","version":9}]}`)); err == nil {
 		t.Error("a quest with a too-new map parsed")
+	}
+}
+
+func TestThemesHeader(t *testing.T) {
+	if got := maps.ThemesHeaderValue(); got != strconv.Itoa(len(maps.Themes)) {
+		t.Errorf("ThemesHeaderValue = %q for %d themes", got, len(maps.Themes))
 	}
 }

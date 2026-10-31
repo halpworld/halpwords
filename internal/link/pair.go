@@ -363,6 +363,46 @@ func (c *Client) PairedLearner(ctx context.Context) (string, error) {
 	return me.Learner.DisplayName, nil
 }
 
+// LinkedTo is where the learner a game was linked to by QR code
+// belongs, as the server says in its answer (halpwords#110): the
+// family's own child (Kind "family") or a school's learner the family is
+// connected to (Kind "school"). Only the kind: a name the server might
+// send is never read (owner, 2026-10-31). Servers from before it leave
+// it out.
+type LinkedTo struct {
+	Kind string `json:"kind"`
+}
+
+// The kinds of LinkedTo.
+const (
+	LinkedFamily = "family"
+	LinkedSchool = "school"
+)
+
+// clean is l when its kind is one the game knows, or nil.
+func (l *LinkedTo) clean() *LinkedTo {
+	if l == nil || l.Kind != LinkedFamily && l.Kind != LinkedSchool {
+		return nil
+	}
+	return &LinkedTo{Kind: l.Kind}
+}
+
+// PairedWhere is where the learner a game linked by QR code belongs, in
+// a word for "Is this you?": "family", "school", or "" when the server
+// didn't say (an older one), or the child has confirmed or unlinked.
+func (c *Client) PairedWhere() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	l := c.st.LinkedTo.clean() // link.json may have been edited
+	if l == nil || !c.st.Unconfirmed || !c.st.linked() {
+		return ""
+	}
+	return l.Kind
+}
+
 // ConfirmPair is the child saying the learner the game was linked to by
 // QR code is them, once they have seen the child-link notice if one is
 // due: syncing starts. It reports whether the game was waiting for it,
@@ -378,6 +418,7 @@ func (c *Client) ConfirmPair() bool {
 		return false
 	}
 	c.st.Unconfirmed = false
+	c.st.LinkedTo = nil // only for "Is this you?"
 	if errors.Is(c.err, ErrUnconfirmed) {
 		c.err = nil
 	}

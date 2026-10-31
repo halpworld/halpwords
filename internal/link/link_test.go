@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/halpworld/halpwords/internal/profile"
+	"github.com/halpworld/halpwords/pkg/maps"
 	"github.com/halpworld/halpwords/pkg/settings"
 	"github.com/halpworld/halpwords/pkg/words"
 )
@@ -395,6 +396,9 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		if f.noMaps {
 			writeErr(w, 404, "not_found")
 			return
+		}
+		if got := r.Header.Get(maps.ThemesHeader); got != maps.ThemesHeaderValue() {
+			f.t.Errorf("%s is %q, want %q", maps.ThemesHeader, got, maps.ThemesHeaderValue())
 		}
 		w.Header().Set("ETag", f.mapsETag)
 		if r.Header.Get("If-None-Match") == f.mapsETag && f.mapsETag != "" {
