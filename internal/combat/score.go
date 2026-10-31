@@ -51,10 +51,13 @@ func Combo(streak int) float64 {
 
 // Damage returns the damage of an attack by a hero with attack power atk,
 // and whether it was a critical hit. A perfect answer typed very fast
-// (speed 1.5 or more) is critical and deals half as much again.
-func Damage(atk int, tier words.Tier, speed float64, streak int) (int, bool) {
+// (real speed 1.5 or more) is critical and deals half as much again.
+// speed is the multiplier that scales the damage, which a class may boost
+// (the Scribe); real is the speed as Speed gave it and as the HUD shows it,
+// and is what the critical hit is judged on (PLAN §6).
+func Damage(atk int, tier words.Tier, speed, real float64, streak int) (int, bool) {
 	d := float64(atk) * Accuracy(tier) * speed * Combo(streak)
-	crit := tier == words.Perfect && speed >= 1.5
+	crit := tier == words.Perfect && real >= 1.5
 	if crit {
 		d *= 1.5
 	}
