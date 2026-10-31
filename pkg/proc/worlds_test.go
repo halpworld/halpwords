@@ -401,3 +401,15 @@ func TestSpriteMinLightClamped(t *testing.T) {
 		}
 	}
 }
+
+// Every world names its wall, floor and ceiling families. The nil default
+// (The Crypt's families) is for other packages' themes, so a world that
+// forgot one would silently look like The Crypt.
+func TestWorldsNameTheirFamilies(t *testing.T) {
+	for i := range Themes {
+		th := &Themes[i]
+		if th.Walls.Paint == nil || th.Floors.Paint == nil || th.Ceiling.Paint == nil {
+			t.Errorf("%s: a surface has no Paint", th.Name)
+		}
+	}
+}

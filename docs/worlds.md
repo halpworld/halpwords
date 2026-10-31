@@ -154,9 +154,13 @@ Where the shipped code differs from the design above:
   (M4) 0.29 to 0.31 ms, Sky Garden 0.17 ms; wasm 1.36 to 1.43 ms, Sky Garden
   0.84 ms. Budgets were 0.6 and 3.0 ms. The web build holds 60 fps in the
   browser.
-- **Exported but not usable elsewhere:** `Theme.Variants` and
-  `Surface.Paint`, `Mods` and `Anim` have unexported types, so other packages
-  cannot build worlds yet.
+- **Other packages can build worlds** (#76): the painter, modifier and
+  animator types are exported as `proc.Painter`, `proc.Modifier` and
+  `proc.Animator`, and so are the families themselves (`WallBricks` …
+  `WallHedge`, `FloorFlagstones` … `FloorGrate`, `CeilBeams` …
+  `CeilCoffers`, `ModMoss` … `ModSandDrift`, `AnimRipples`, `AnimLava`). A
+  surface with no `Paint` uses The Crypt's family, so a theme with only the
+  four ramps still draws.
 
 Follow-ups are tracked from #72.
 
