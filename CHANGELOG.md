@@ -16,6 +16,18 @@ version as its release notes.
   Teacher maps can choose all four new worlds: `maps.Themes` gains
   "Sunken Temple", "Candy Caverns", "Mushroom Forest" and "Star
   Observatory", so the game's `X-Halpwords-Map-Themes` header says 14.
+  **Deploy order:** halpwords-server#184 (its CORS allows the header and it
+  strips themes an older game doesn't know) before this game; and the web
+  game with this change live before halpwords-server#198 lets its editor
+  offer the new worlds.
+- **Each world has its own music.** A world has its own key, scale, tempo
+  range and instruments, so the music tells you where you are. The floor's
+  seed still writes the tune: floors in one world share a key and sound but
+  keep their own melody, chords and tempo. Battle and boss music play in the
+  world's key with its lead. The title, campfire and lament music are as
+  before. `internal/audio`: `World`, `Worlds`, `WorldNamed`, and a `World`
+  field on `Track`. `make sounds` also writes each world's delve and fight
+  loops.
 - **Two new worlds: the Sunken Temple and the Candy Caverns.** They are
   floors 11 and 12, after the Sandstone Tomb. Each has its own walls,
   props, particles (rising bubbles, sugar sprinkles), background sound and
@@ -226,6 +238,24 @@ version as its release notes.
 
 ### Fixed
 
+- **One tab of the web game plays at a time.** Two tabs shared one local
+  storage, so a second tab could fork a suspended Hardcore run, take over
+  another tab's QR pairing, or write old link tokens over fresh ones (which
+  looked like a lost link). The game now takes a Web Lock before it reads or
+  writes anything. A second tab says "Halpwords is open in another tab" and
+  starts by itself when the first closes. Desktop builds are unchanged.
+- **Assigned lists stay behind when the web game moves.** A teacher's or
+  grown-up's assigned lists (and their audio) are no longer carried to the
+  new address, where they sat unused; the moved game fetches them again
+  once it is linked. The *We've moved* page says so. (`move.Exportable`)
+- **"Is this you?" says where the learner belongs.** After a QR link it
+  reads "Linked to Aoife (school)." or "(family)" when the server says
+  which, and never shows a name beyond the learner's own. It works with or
+  without the server change, so deploy order doesn't matter.
+- **A Scribe's critical hit is judged on the real speed.** `combat.Damage`
+  took only the Scribe's boosted speed, so a crit could land at about x1.34
+  while the HUD showed x1.3. It now takes both and judges the crit on the
+  real one, as PLAN says. Knight and Rogue are unchanged. (#59)
 - **English contractions in Reverse puzzles.** `I'm` now matches `I am`,
   `don't` matches `do not`, and so on, in either direction. Shared package
   `pkg/words`: `Grade` with `words.English` expands contractions on both the

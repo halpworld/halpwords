@@ -142,7 +142,7 @@ Where the shipped code differs from the design above:
   table and `hypot` is plain Go, so amd64 matches wasm. Dungeon generation
   and the textures have one set of hashes.
 - **`ThemeFor` now goes floor by floor.** It follows `FloorOrder` instead of a
-  new theme every two floors, and from floor 11 returns the lap remix
+  new theme every two floors, and from floor 15 returns the lap remix (floor 11 when written)
   (`World(i, lap)`, `Theme.Remix`). `ThemeFor(1)` is still The Crypt.
 - **`questTheme`.** A quest map that names no theme keeps the old two floors
   per theme, so hand-made quests look as they did. Director floors get the
@@ -153,7 +153,10 @@ Where the shipped code differs from the design above:
 - **Calm effects also covers floor animation.** It stops particles, water and
   lava animation and torch flicker. Flicker is at most 1 Hz and under 15%.
 - **Ambience** is `internal/audio/ambience.go`, one bed per world, mixed under
-  the floor music. Music is still per floor.
+  the floor music. Music is per world since #75 (`internal/audio/worlds.go`:
+  key, scale, tempo range, chords, lead, bass and drums for each of the
+  worlds; the floor's seed still writes the melody). Title, camp and lament
+  are unchanged.
 - **Visual code never uses the dungeon RNG or `run.rng`.** Props and particles
   use their own salted seeds. Props are `raycast.Decor`: visual only, never
   in the level or saves, and they block nothing. Particles draw behind
@@ -242,9 +245,9 @@ per frame on desktop and 1.4 ms on wasm (node), with 0 allocations.
 
 ## Contract impact
 
-- **AI Director:** the game sends all ten names. A server not yet bumped
+- **AI Director:** the game sends all fourteen names. A server not yet bumped
   drops the names it doesn't know, so its Director picks only from the old
-  six. After the server's `go.mod` bump it picks from all ten. `MaxThemes`
+  six. After the server's `go.mod` bump it picks from all fourteen. `MaxThemes`
   (24) has room.
 - **Teacher maps:** can choose all ten worlds since #77, and all fourteen
   since #74 (`maps.Themes`).
