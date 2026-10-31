@@ -41,8 +41,8 @@ func TestNonContractionApostrophes(t *testing.T) {
 		{"the dog's bone", "the dog's bone", Perfect},
 		{"dogs bone", "dog's bone", Graze}, // one letter off, as before
 		{"it's", "its", Miss},              // "its" is not "it is"
-		{"its", "it's", Miss},
-		{"y'all", "you all", Miss}, // not in the table
+		{"its", "it's", Graze},             // a missing apostrophe is one letter off, as before
+		{"y'all", "you all", Miss},         // not in the table
 		{"ma'am", "ma'am", Perfect},
 	} {
 		if got := gradeEN(tc.typed, tc.answer); got != tc.want {
