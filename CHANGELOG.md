@@ -51,6 +51,11 @@ version as its release notes.
   and the door image halpwords-server draws, are byte for byte what they
   were. `pkg/maps` keeps its six themes, so hand-made maps and older games
   are unaffected.
+- `pkg/proc`: `Theme.SpriteSwap` draws one sprite colour as another in a
+  world (the Ice Halls draw the bat's purple body pink), and
+  `SpriteMinLight` now always returns a value in [0,1]. The Sky Garden's
+  sky gradient no longer runs in straight dither stripes. Nothing else
+  changes; The Crypt and the server's door image are untouched.
 
 - **Hear the word after a miss.** A game linked to an account whose plan
   includes pronunciation downloads an audio pack for each assigned list,
