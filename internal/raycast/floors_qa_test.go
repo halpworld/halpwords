@@ -25,6 +25,15 @@ var mainFrames = []string{
 	"14511dc81c6f96f5a907347d2fc586a12a8c12525ee0b17463fb179f4c4a4bdb",
 }
 
+// fusedFrames are the hashes of the floors that differ where multiply-adds
+// fuse (arm64), by floor: the others are the same everywhere. They are
+// measured on macOS arm64 CI, as for TestWorldViewsPinned.
+var fusedFrames = map[int]string{
+	3: "b667a83185d0df6bedcbdce4893a10dcf781d327eb2ab9e2658c599eb68461af",
+	6: "4838104011f2a8aafa28af695600357e3c2a5996d0a35fdd9c71f7a1c7a67d92",
+	8: "40422d575a717e61697e879cb87b55d8c880d7374000443002f4562471213994",
+}
+
 func floorFrame(depth int) []byte {
 	l := dungeon.Generate(5, depth)
 	th := proc.ThemeFor(depth)
@@ -38,6 +47,9 @@ func floorFrame(depth int) []byte {
 
 func TestQAFloorsOneToTenRenderAsOnMain(t *testing.T) {
 	for d, want := range mainFrames {
+		if f, ok := fusedFrames[d+1]; ok && fusedMultiplyAdd {
+			want = f
+		}
 		if got := fmt.Sprintf("%x", sha256.Sum256(floorFrame(d+1))); got != want {
 			t.Errorf("floor %d renders differently from main: %s", d+1, got)
 		}
