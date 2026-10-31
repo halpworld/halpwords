@@ -40,7 +40,7 @@ func TestNonContractionApostrophes(t *testing.T) {
 		{"John is book", "John's book", Miss}, // a possessive is not "is"
 		{"the dog's bone", "the dog's bone", Perfect},
 		{"dogs bone", "dog's bone", Graze}, // one letter off, as before
-		{"it's", "its", Miss}, // "its" is not "it is"
+		{"it's", "its", Miss},              // "its" is not "it is"
 		{"its", "it's", Miss},
 		{"y'all", "you all", Miss}, // not in the table
 		{"ma'am", "ma'am", Perfect},

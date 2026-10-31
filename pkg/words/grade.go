@@ -50,11 +50,12 @@ const (
 // usedBackspace downgrades a Perfect to Correct.
 //
 // For English, contractions are expanded on both sides ("I'm" is "I am"),
-// unless the rules are case sensitive. The plain forms are graded too and the
+// but when the rules are case sensitive only lower-case contractions
+// expand ("i'm" is not "I'm"). The plain forms are graded too and the
 // better result kept, so a missing apostrophe ("dont") is still a Graze.
 func Grade(typed string, e Entry, lang *Language, rules Rules, usedBackspace bool) Result {
 	r := grade(typed, e, lang, rules, usedBackspace, false)
-	if lang != nil && lang.Code == English.Code && !rules.CaseSensitive {
+	if lang != nil && lang.Code == English.Code {
 		if x := grade(typed, e, lang, rules, usedBackspace, true); x.Tier > r.Tier {
 			r = x
 		}
@@ -70,7 +71,7 @@ func grade(typed string, e Entry, lang *Language, rules Rules, usedBackspace, ex
 	}
 	prep := func(s string) string {
 		if expand {
-			s = expandContractions(s)
+			s = expandContractionsCase(s, rules.CaseSensitive)
 		}
 		if !rules.ArticlesRequired {
 			s = stripArticle(s, lang)
@@ -280,13 +281,21 @@ var contractions = map[string]string{
 
 // expandContractions writes out the English contractions in s ("i'm" as
 // "i am"). s is already normalised: straight apostrophes.
-func expandContractions(s string) string {
+func expandContractions(s string) string { return expandContractionsCase(s, false) }
+
+// expandContractionsCase is expandContractions; with exact set, only
+// lower-case contractions match.
+func expandContractionsCase(s string, exact bool) string {
 	if !strings.ContainsAny(s, "'") && !strings.Contains(strings.ToLower(s), "cannot") {
 		return s
 	}
 	f := strings.Fields(s)
 	for i, w := range f {
-		if long, ok := contractions[strings.ToLower(w)]; ok {
+		key := w
+		if !exact {
+			key = strings.ToLower(w)
+		}
+		if long, ok := contractions[key]; ok {
 			f[i] = long
 		}
 	}
