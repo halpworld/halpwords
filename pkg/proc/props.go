@@ -190,3 +190,29 @@ func PropLollipop(seed uint64) *Indexed {
 	c.ellipse(25, 28, 4, 3, partBody)
 	return shadeProp(&c, []color.RGBA{pal.Plum, pal.Rose, pal.Pink, pal.Skin}, [2]color.RGBA{pal.Tan, pal.Skin}, pal.Pink)
 }
+
+// PropToadstool is a big spotted toadstool with a small one beside it.
+func PropToadstool(seed uint64) *Indexed {
+	var c canvas
+	c.ellipse(15, 15, 12, 8, partBody)
+	c.rect(2, 16, 28, 8, partNone) // the cap's flat underside
+	c.rect(12, 16, 6, 15, partAccent)
+	c.disc(10, 11, 1.6, partWhite)
+	c.disc(17, 9, 1.9, partWhite)
+	c.disc(22, 13, 1.4, partWhite)
+	c.rect(25, 26, 2, 5, partAccent)
+	c.ellipse(26, 26, 4, 2.5, partBody)
+	return shadeProp(&c, []color.RGBA{pal.Plum, pal.Red, pal.Rose, pal.Pink}, [2]color.RGBA{pal.Tan, pal.Skin}, pal.Cyan)
+}
+
+// PropTelescope is a brass telescope on a tripod, pointing at the sky.
+func PropTelescope(seed uint64) *Indexed {
+	var c canvas
+	c.line(16, 18, 9, 31, 1, partAccent)
+	c.line(16, 18, 23, 31, 1, partAccent)
+	c.line(16, 18, 16, 31, 1, partAccent)
+	c.line(7, 22, 26, 8, 3.2, partBody)
+	c.disc(26, 8, 2.4, partBody)
+	c.disc(7, 22, 1.6, partDark)
+	return shadeProp(&c, []color.RGBA{pal.Mahogany, pal.Bronze, pal.Tan, pal.Yellow}, [2]color.RGBA{pal.Night, pal.Slate}, pal.Yellow)
+}

@@ -7,6 +7,15 @@ version as its release notes.
 
 ### Added
 
+- **Two more worlds: the Mushroom Forest and the Star Observatory.** They
+  are floors 13 and 14, with glowing spores and twinkling stars, frogs in
+  the night and faint glints of starlight, and their own music. The
+  remixed second lap now starts at floor 15. `pkg/proc`: `Themes` gains
+  "Mushroom Forest" (index 12) and "Star Observatory" (13), with
+  `PropToadstool`, `PropTelescope`, `ParticleSpores` and `ParticleStars`.
+  Teacher maps can choose all four new worlds: `maps.Themes` gains
+  "Sunken Temple", "Candy Caverns", "Mushroom Forest" and "Star
+  Observatory", so the game's `X-Halpwords-Map-Themes` header says 14.
 - **Two new worlds: the Sunken Temple and the Candy Caverns.** They are
   floors 11 and 12, after the Sandstone Tomb. Each has its own walls,
   props, particles (rising bubbles, sugar sprinkles), background sound and
@@ -14,7 +23,6 @@ version as its release notes.
   at floor 13. `pkg/proc`: `Themes` gains "Sunken Temple" (index 10) and
   "Candy Caverns" (11), appended, with `PropPillar`, `PropLollipop`,
   `ParticleBubbles` and `ParticleSprinkles`; `FloorOrder` gains two slots.
-  `maps.Themes` is unchanged.
 
 - **Boss Raid grading knows the other words.** `pkg/raid` has a new
   `GradeAmong(typed, entry, others, langCode, usedBackspace)`, the shared

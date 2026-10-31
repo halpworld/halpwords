@@ -237,7 +237,8 @@ func (m *Map) Level() int { return max(1, m.Depth) }
 // the end. The first six are the original ones; the server strips the
 // rest from maps it serves to a game that doesn't know them (#77).
 var Themes = []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Ice Halls", "Lava Forge", "Amethyst Vaults",
-	"Clockwork Workshop", "Sky Garden", "Sandstone Tomb", "Whispering Library"}
+	"Clockwork Workshop", "Sky Garden", "Sandstone Tomb", "Whispering Library",
+	"Sunken Temple", "Candy Caverns", "Mushroom Forest", "Star Observatory"}
 
 // ThemesHeader is the request header a game sends when it asks the server
 // for quests (GET /api/v1/maps, a play-test file): the number of

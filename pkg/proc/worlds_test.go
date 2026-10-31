@@ -16,7 +16,7 @@ func TestFloorOrder(t *testing.T) {
 	want := []string{
 		"The Crypt", "Mossy Cellars", "Flooded Caves", "Lava Forge", "Ice Halls",
 		"Whispering Library", "Sky Garden", "Clockwork Workshop", "Amethyst Vaults", "Sandstone Tomb",
-		"Sunken Temple", "Candy Caverns",
+		"Sunken Temple", "Candy Caverns", "Mushroom Forest", "Star Observatory",
 	}
 	for i, name := range want {
 		if got := ThemeFor(i + 1).Name; got != name {
@@ -269,6 +269,8 @@ func TestWorldTexturesPinned(t *testing.T) {
 		"Whispering Library": "2da9cfb946d95448db0c85408396b69be168c7840225f59acf5dc72d1bc6dfc1",
 		"Sunken Temple":      "cb4458f007594967907e6fadedcd2a7817c12beaa05b40d39a0dd20fff3a0d0f",
 		"Candy Caverns":      "160fb7e932aaa0c04ebf731662745616ff79840810640308dc642589162cbc1e",
+		"Mushroom Forest":    "ffe7453ade5992deaca9449d3c1f11600f6ebabf26b5fc8ca161ffaea60d33ac",
+		"Star Observatory":   "421e2bc9ef3aa97de1f39fe9d5cdef687bd45913de567ca19acd71cec013b5ce",
 	}
 	for i := range Themes {
 		th := &Themes[i]

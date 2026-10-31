@@ -99,7 +99,7 @@ Garden never follows the Ice Halls.
 | 10 | 8 | Sandstone Tomb | glyph blocks (glowing turquoise glyphs) / rippled sand / slabs | cool dusk, not orange | urn, drifting sand, soft wind |
 
 After the last world the order repeats as a **second lap** (from floor 11
-when this was written; from floor 13 now, see below). Each world returns
+when this was written; from floor 15 now, see below). Each world returns
 with its other wall variants as the base, a denser prop layer and a slightly
 shifted fog, so a floor on the second lap never looks exactly like its
 first-lap floor. `proc.Lap(depth)` gives the lap.
@@ -119,6 +119,8 @@ music palette (`internal/audio/worlds.go`); tests fail if one is missing.
 |---|---|---|---|---|---|
 | 11 | 10 | Sunken Temple | teal temple bricks with seaweed / teal flagstones / slabs, tall; gold door frames | deep sea green | broken pillar, rising bubbles, bubbles and a deep hum |
 | 12 | 11 | Candy Caverns | pink rock candy with icing drips / gumdrop cobbles / candy rock; dark door frames | dark raspberry | lollipop, sugar sprinkles, fizz |
+| 13 | 12 | Mushroom Forest | dark foliage with glowing flowers and vines / dim grass / a giant cap's pink gills, tall | night blue-green | toadstool, glowing spores, frogs and crickets |
+| 14 | 13 | Star Observatory | night-blue blocks with gold star signs / polished tiles / a dark dome with constellations, tall; brass door frames | deep night blue | telescope, twinkling stars, a hush and faint glints |
 
 ## As built
 
@@ -244,7 +246,8 @@ per frame on desktop and 1.4 ms on wasm (node), with 0 allocations.
   drops the names it doesn't know, so its Director picks only from the old
   six. After the server's `go.mod` bump it picks from all ten. `MaxThemes`
   (24) has room.
-- **Teacher maps:** can choose all ten worlds since #77 (`maps.Themes`).
+- **Teacher maps:** can choose all ten worlds since #77, and all fourteen
+  since #74 (`maps.Themes`).
   The server strips themes from maps served to a game that doesn't know
   them (`GetMaps` and the play-test file, by the `X-Halpwords-Map-Themes` header
   the game sends: how many `maps.Themes` it knows; none means six), so merge the

@@ -157,7 +157,7 @@ func TestWorldMusicIsDeterministic(t *testing.T) {
 var worldAmb = map[World]Ambience{
 	Crypt: Dust, Cellars: Crickets, Caves: Drips, Forge: Rumble, Ice: Wind,
 	Library: Pages, Garden: Birds, Workshop: Ticking, Vaults: Chimes, Tomb: Sand,
-	Temple: Bubbles, Candy: Fizz,
+	Temple: Bubbles, Candy: Fizz, Mushroom: Frogs, Observatory: Starlight,
 }
 
 func rms(s []float32) float64 {

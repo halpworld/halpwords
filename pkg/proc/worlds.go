@@ -70,6 +70,8 @@ const (
 	ParticleLetters
 	ParticleBubbles   // rising bubbles, in the Sunken Temple
 	ParticleSprinkles // falling sugar sprinkles, in the Candy Caverns
+	ParticleSpores    // glowing spores drifting up, in the Mushroom Forest
+	ParticleStars     // twinkling motes of starlight, in the Star Observatory
 )
 
 func rgb(r, g, b uint8) color.RGBA { return color.RGBA{r, g, b, 0xff} }
@@ -376,6 +378,66 @@ var Themes = []Theme{
 		Prop:  PropLollipop, PropSize: 0.4, PropRooms: 0.6,
 		Particles: ParticleSprinkles,
 	},
+	{
+		Name:  "Mushroom Forest",
+		Wall:  []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy, pal.Teal, pal.Cyan},
+		Floor: []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Teal, pal.Forest},
+		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Purple},
+		Moss:  []color.RGBA{pal.Cyan, pal.Lime},
+		// A night forest under one giant mushroom cap: dark foliage with
+		// glowing flowers and vines, dim grass, and the cap's pink gills
+		// overhead.
+		Walls: Surface{Paint: WallHedge, Look: Look{
+			Base:   []color.RGBA{pal.Night, pal.Indigo, pal.Navy, pal.Teal},
+			Accent: []color.RGBA{pal.Cyan, pal.Lime, pal.Pink},
+		}},
+		Variants: [2][]Modifier{{ModFlowers}, {ModVines}},
+		Floors: Surface{Paint: FloorGrass, Look: Look{
+			Base:   []color.RGBA{pal.Indigo, pal.Forest, pal.Teal, pal.Green},
+			Accent: []color.RGBA{pal.Cyan, pal.Pink},
+		}},
+		Ceiling: Surface{Paint: CeilBeams, Look: Look{
+			Base:   []color.RGBA{pal.Black, pal.Night, pal.Plum},
+			Accent: []color.RGBA{pal.Plum, pal.Purple, pal.Pink, pal.Skin},
+		}},
+		Frame:  []color.RGBA{pal.Black, pal.Mahogany, pal.Brown, pal.Tan, pal.Skin, pal.White},
+		Fog:    rgb(18, 24, 40),
+		Light:  rgb(210, 255, 235),
+		Reach:  1.25,
+		Height: 1.3,
+		Prop:   PropToadstool, PropSize: 0.4, PropRooms: 0.7,
+		Particles: ParticleSpores,
+	},
+	{
+		Name:  "Star Observatory",
+		Wall:  []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy, pal.Steel, pal.Ice},
+		Floor: []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy, pal.Steel},
+		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy},
+		Moss:  []color.RGBA{pal.Yellow, pal.White},
+		// Night-blue blocks inlaid with glowing gold star signs, brass
+		// instruments, polished tiles and a dark dome traced with
+		// constellations.
+		Walls: Surface{Paint: WallSandstone, Look: Look{
+			Base:   []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy, pal.Steel},
+			Accent: []color.RGBA{pal.Yellow, pal.White},
+		}},
+		Variants: [2][]Modifier{{ModCrack}, {ModSoot}},
+		Floors: Surface{Paint: FloorChecker, Look: Look{
+			Base:   []color.RGBA{pal.Night, pal.Indigo, pal.Navy, pal.Slate},
+			Accent: []color.RGBA{pal.Indigo, pal.Navy, pal.Blue, pal.Steel},
+		}},
+		Ceiling: Surface{Paint: CeilCrystal, Look: Look{
+			Base:   []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy},
+			Accent: []color.RGBA{pal.Yellow, pal.White, pal.Ice},
+		}},
+		Frame:  []color.RGBA{pal.Black, pal.Mahogany, pal.Bronze, pal.Tan, pal.Yellow, pal.White},
+		Fog:    rgb(14, 14, 38),
+		Light:  rgb(225, 228, 255),
+		Reach:  1.2,
+		Height: 1.6,
+		Prop:   PropTelescope, PropSize: 0.4, PropRooms: 0.5,
+		Particles: ParticleStars,
+	},
 }
 
 // FloorOrder gives the world (an index into Themes) for floors 1, 2, 3 and
@@ -383,7 +445,7 @@ var Themes = []Theme{
 // Sky Garden never follows the Ice Halls. New worlds join at the end, so
 // floors 1 to 10 keep their worlds. Past the end the order repeats as
 // another lap.
-var FloorOrder = []int{0, 1, 2, 4, 3, 9, 7, 6, 5, 8, 10, 11}
+var FloorOrder = []int{0, 1, 2, 4, 3, 9, 7, 6, 5, 8, 10, 11, 12, 13}
 
 // Lap returns how many times the floor order has repeated by depth: 0 on
 // the first len(FloorOrder) floors, 1 on the next len(FloorOrder), and so

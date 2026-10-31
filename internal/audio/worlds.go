@@ -23,31 +23,35 @@ const (
 	Tomb
 	Temple
 	Candy
+	Mushroom
+	Observatory
 	numWorlds
 )
 
 // Worlds lists every world with its own music, for tests and tools.
-var Worlds = []World{Crypt, Cellars, Caves, Forge, Ice, Library, Garden, Workshop, Vaults, Tomb, Temple, Candy}
+var Worlds = []World{Crypt, Cellars, Caves, Forge, Ice, Library, Garden, Workshop, Vaults, Tomb, Temple, Candy, Mushroom, Observatory}
 
 // worldNames are the names of the worlds in pkg/proc, so the game can pick
 // a world's music by its name. A test checks they match proc.Themes.
 var worldNames = [numWorlds]string{
-	NoWorld:  "",
-	Crypt:    "The Crypt",
-	Cellars:  "Mossy Cellars",
-	Caves:    "Flooded Caves",
-	Forge:    "Lava Forge",
-	Ice:      "Ice Halls",
-	Library:  "Whispering Library",
-	Garden:   "Sky Garden",
-	Workshop: "Clockwork Workshop",
-	Vaults:   "Amethyst Vaults",
-	Tomb:     "Sandstone Tomb",
-	Temple:   "Sunken Temple",
-	Candy:    "Candy Caverns",
+	NoWorld:     "",
+	Crypt:       "The Crypt",
+	Cellars:     "Mossy Cellars",
+	Caves:       "Flooded Caves",
+	Forge:       "Lava Forge",
+	Ice:         "Ice Halls",
+	Library:     "Whispering Library",
+	Garden:      "Sky Garden",
+	Workshop:    "Clockwork Workshop",
+	Vaults:      "Amethyst Vaults",
+	Tomb:        "Sandstone Tomb",
+	Temple:      "Sunken Temple",
+	Candy:       "Candy Caverns",
+	Mushroom:    "Mushroom Forest",
+	Observatory: "Star Observatory",
 }
 
-var worldIDs = [numWorlds]string{"none", "crypt", "cellars", "caves", "forge", "ice", "library", "garden", "workshop", "vaults", "tomb", "temple", "candy"}
+var worldIDs = [numWorlds]string{"none", "crypt", "cellars", "caves", "forge", "ice", "library", "garden", "workshop", "vaults", "tomb", "temple", "candy", "mushroom", "observatory"}
 
 func (w World) String() string {
 	if w >= numWorlds {
@@ -196,6 +200,22 @@ var palettes = [numWorlds]palette{
 		progs: [][]int{{0, 4, 5, 3}, {0, 3, 4, 0}, {0, 5, 3, 4}},
 		lead:  Square, leadV: 0.24, leadDuty: 0.25, busy: 0.38,
 		arp: Triangle, arpV: 0.12, arpEvery: 1, bass: 1, drums: 1,
+	},
+	// Whimsical and a little mysterious: a minor pentatonic, a hopping
+	// triangle lead, a soft sine arpeggio in eighths over a walking bass
+	// and a light beat.
+	Mushroom: {
+		root: -3, scale: pentMinor, bpm: [2]float64{86, 92}, progs: pentChords,
+		lead: Triangle, leadV: 0.34, busy: 0.3,
+		arp: Sine, arpV: 0.15, arpEvery: 2, bass: 1, drums: 1,
+	},
+	// Wonder: slow and spacious Lydian under a held sine pad, a triangle
+	// lead with a gentle shimmer, no drums.
+	Observatory: {
+		root: -3, scale: lydian, bpm: [2]float64{72, 76},
+		progs: [][]int{{0, 1, 4, 0}, {0, 4, 1, 5}, {0, 5, 1, 0}},
+		lead:  Triangle, leadV: 0.34, busy: 0.18, vibrato: 0.3,
+		pad: true, padW: Sine, arpV: 0.12, bass: 0, drums: 0,
 	},
 }
 
