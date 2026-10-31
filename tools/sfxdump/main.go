@@ -45,7 +45,17 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	log.Printf("wrote %d sounds, %d pieces of music and %d ambiences to %s", audio.Count, len(audio.Moods), len(audio.Ambiences), *out)
+	for _, w := range audio.Worlds {
+		// Each world's own exploring and battle music, without ambience.
+		for _, m := range []audio.Mood{audio.Delve, audio.Fight} {
+			loop := audio.RenderLoop(audio.Compose(audio.Track{Mood: m, Seed: *seed, World: w}), audio.SampleRate, nil)
+			path := filepath.Join(*out, "world-"+w.String()+"-"+m.String()+".wav")
+			if err := os.WriteFile(path, wav(append(loop, loop...)), 0o644); err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+	log.Printf("wrote %d sounds, %d pieces of music, %d ambiences and %d worlds' music to %s", audio.Count, len(audio.Moods), len(audio.Ambiences), len(audio.Worlds), *out)
 }
 
 // wav encodes mono samples as a 16-bit PCM WAV file.
