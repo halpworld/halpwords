@@ -1204,6 +1204,7 @@ module (#109).
 | Windows amd64/arm64 | `GOOS=windows GOARCH=amd64 go build …` from a Mac, with no cgo needed. |
 | Linux amd64/arm64 | Needs cgo plus X11/GL dev libs. Build on a GitHub Actions Ubuntu runner (or Docker). |
 | Web (WASM) | `GOOS=js GOARCH=wasm`. LLM calls from the browser need CORS (Anthropic supports direct browser access with a header, but the user supplies the key). |
+| Web tabs | One tab plays: the game takes a Web Lock (`navigator.locks`, `halpwords-saves`, held for the page's life) before it reads or writes anything; a second tab shows "Halpwords is open in another tab" and starts by itself once the first closes (#111, `game.Start`, `browser.HoldTab`). Chromium keeps a page that holds a lock out of the back-forward cache, so there a restored old tab can't write stale tokens either (not checked in Firefox or Safari). Without Web Locks (old browsers) the game plays unguarded, as before. Play-tests keep files in memory and need no lock. |
 | Mobile (later) | `ebitenmobile`. Typing on phones needs an on-screen keyboard flow. |
 
 - A `Makefile` (or `mage`) with targets: `run`, `test`, `build-mac`,

@@ -28,7 +28,9 @@ func main() {
 	}
 	ebiten.SetWindowIcon(icons) // macOS shows the app's own icon instead
 
-	g, err := game.New(firstScene())
+	// In a web game open in another tab, this one waits for it to close
+	// (halpwords#111); elsewhere it is game.New.
+	g, err := game.Start(firstScene())
 	if err != nil {
 		game.Crash(err, nil)
 		log.Fatal(err)

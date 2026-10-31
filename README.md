@@ -599,7 +599,10 @@ do the lists assigned through it (`assigned/`, licensed teacher lists
 among them): the game fetches them again at the next sync after linking there.
 `HALPWORDS_SERVER` points the game at
 another server, such as a test one. In a web browser, all of this is kept
-in the page's local storage.
+in the page's local storage. Only one tab plays at a time: a second tab of
+the web game says "Halpwords is open in another tab" and starts by itself
+once the first one closes, so two tabs never write over each other's saves
+or link.
 
 **What the web game keeps in the browser, and who can read it.** In a web
 browser the files above (`link.json` with the tokens, `link-queue.json` with
