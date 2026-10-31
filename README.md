@@ -594,7 +594,9 @@ never arrived, or a game not online for so long that its link ran out),
 they wait in `link-parked.json`, also readable only by you, for that
 learner to link the game again; they are thrown away after 30 days. Each learner's files,
 these included, are in their own folder and are deleted when the learner
-is removed; the link files never move with the web game to a new address.
+is removed; the link files never move with the web game to a new address, and neither
+do the lists assigned through it (`assigned/`, licensed teacher lists
+among them): the game fetches them again at the next sync after linking there.
 `HALPWORDS_SERVER` points the game at
 another server, such as a test one. In a web browser, all of this is kept
 in the page's local storage.
@@ -618,8 +620,9 @@ folder, as files in the user's folder.
 Moving the web game to a new address carries the saves, `learners.json` and
 each learner's `identity.json` (the learners' names, class names and the
 hashes of their locks) to the new
-address, but never `link.json`, `link-queue.json`, `link-parked.json` or
-`ai.json`, in any learner's folder.
+address, but never `link.json`, `link-queue.json`, `link-parked.json`,
+`ai.json` or the `assigned/` lists (fetched again once linked), in any
+learner's folder.
 
 **What the learner lock protects.** A learner who signs in at school gets a
 lock on that computer, a login card's code or three pictures out of nine,
