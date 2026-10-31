@@ -39,6 +39,11 @@ type Theme struct {
 	// away, so they never sink into the fog; 0 means 0.35.
 	SpriteLight float64
 
+	// SpriteSwap recolours sprites in this world: each pair's first colour
+	// is drawn as the second, before light and fog. It lifts a monster
+	// colour that is lost in the world's air.
+	SpriteSwap [][2]color.RGBA
+
 	Prop      func(seed uint64) *Indexed // a decoration standing on the floor
 	PropSize  float64                    // its height in wall heights, at most 0.4
 	PropRooms float64                    // props per room, on average
@@ -157,8 +162,10 @@ var Themes = []Theme{
 		Light:  rgb(220, 235, 255),
 		Reach:  1.15,
 		Height: 1.5,
-		// The bat and other dark monsters stay clear of the blue fog.
+		// The bat and other dark monsters stay clear of the blue fog; the
+		// purple bat body is drawn pink, which stands out from the indigo.
 		SpriteLight: 0.45,
+		SpriteSwap:  [][2]color.RGBA{{pal.Purple, pal.Pink}},
 		Prop:        PropIce, PropSize: 0.4, PropRooms: 0.5,
 		Particles: ParticleSnow,
 	},
@@ -403,10 +410,17 @@ func (t *Theme) CeilHeight() float64 {
 	return t.Height
 }
 
-// SpriteMinLight is the least light a sprite gets in this world.
+// SpriteMinLight is the least light a sprite gets in this world, in
+// [0,1]: 0.35 when SpriteLight is unset, and SpriteLight clamped to [0,1]
+// otherwise (NaN counts as 0 light).
 func (t *Theme) SpriteMinLight() float64 {
-	if t.SpriteLight == 0 {
+	switch {
+	case t.SpriteLight == 0:
 		return 0.35
+	case !(t.SpriteLight > 0): // negative or NaN
+		return 0
+	case t.SpriteLight > 1:
+		return 1
 	}
 	return t.SpriteLight
 }
@@ -489,7 +503,8 @@ const (
 )
 
 // SkyTex paints the world's sky panorama, from the top of the sky down to
-// the horizon, with soft clouds that thin out towards the horizon. It
+// the horizon, with soft clouds that thin out towards the horizon and a
+// gradient whose bands waver instead of running in stripes. It
 // returns nil for a world with a ceiling.
 func (t *Theme) SkyTex(seed uint64) *Indexed {
 	if len(t.Sky) == 0 {
@@ -502,7 +517,12 @@ func (t *Theme) SkyTex(seed uint64) *Indexed {
 			fx, fy := float64(x), float64(y)*3 // clouds are wide and flat
 			n := 0.65*wrapNoise(fx, fy, SkyW, 16, seed) + 0.35*wrapNoise(fx, fy, SkyW, 48, seed+1)
 			n -= 0.3 * f * f
-			c := Dither(t.Sky, f, x, y)
+			// The gradient's bands waver with a slow noise, so its dither
+			// doesn't run in straight stripes across the whole sky. The
+			// conversion keeps arm64 from fusing the multiply-add, so the
+			// sky is the same on every platform.
+			g := f + float64(0.15*(wrapNoise(fx, float64(y)*4, SkyW, 16, seed+2)-0.5))
+			c := Dither(t.Sky, g, x, y)
 			switch {
 			case n > 0.62:
 				c = pal.Ice
