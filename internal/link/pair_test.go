@@ -131,6 +131,9 @@ func TestPairRecordedSession(t *testing.T) {
 	if !c.Status().Unconfirmed {
 		t.Fatal("linked by QR code without asking the child")
 	}
+	if w := c.PairedWhere(); w != "family" {
+		t.Errorf("linked_to: %q, want family", w)
+	}
 	// Nothing syncs before the child says it is them.
 	if err := c.Sync(ctx); !errors.Is(err, ErrUnconfirmed) {
 		t.Fatalf("sync before confirming: %v", err)
@@ -309,6 +312,7 @@ type pairServer struct {
 	challenge   string
 	paths       []string
 	verifyURL   string
+	linkedTo    any // linked_to in the tokens answer; nil leaves it out
 }
 
 func (f *pairServer) serve(w http.ResponseWriter, r *http.Request) {
@@ -344,8 +348,12 @@ func (f *pairServer) serve(w http.ResponseWriter, r *http.Request) {
 		case !f.approved:
 			writeErr(w, http.StatusBadRequest, codeAuthorizationPending)
 		default:
-			writeJSON(w, http.StatusOK, map[string]any{"device_id": "dev_1", "token_type": "Bearer", "access_token": "hwd_1",
-				"expires_in": 3600, "refresh_token": "hwr_1", "refresh_expires_in": 86400})
+			t := map[string]any{"device_id": "dev_1", "token_type": "Bearer", "access_token": "hwd_1",
+				"expires_in": 3600, "refresh_token": "hwr_1", "refresh_expires_in": 86400}
+			if f.linkedTo != nil {
+				t["linked_to"] = f.linkedTo
+			}
+			writeJSON(w, http.StatusOK, t)
 		}
 	case "/api/v1/me":
 		writeJSON(w, http.StatusOK, map[string]any{"learner": map[string]any{"id": "lrn_1", "display_name": "Aoife"}})
@@ -767,5 +775,70 @@ func TestPairStartBusy(t *testing.T) {
 	f.startStatus, f.startCode = 0, ""
 	if _, err := c.StartPair(ctx); err != nil || f.starts != n+1 {
 		t.Fatalf("after a 429: %v, %d starts", err, f.starts-n)
+	}
+}
+
+// "Is this you?" says where the learner belongs when the server does
+// (linked_to, halpwords#110): "school" or "family", the kind only (owner,
+// 2026-10-31): a name the server might send is never read. An older
+// server leaves it out and the game says only the name. It is kept
+// across a restart while the link is held, and forgotten once the child
+// confirms.
+func TestPairedWhere(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		linkedTo any
+		want     string
+	}{
+		{"older server", nil, ""},
+		{"family", map[string]any{"kind": "family"}, "family"},
+		{"school", map[string]any{"kind": "school"}, "school"},
+		{"school with a name", map[string]any{"kind": "school", "name": "St Mary's"}, "school"},
+		{"family with a name", map[string]any{"kind": "family", "name": "The Byrnes"}, "family"},
+		{"unknown kind", map[string]any{"kind": "club", "name": "Chess"}, ""},
+		{"kind in capitals", map[string]any{"kind": "School"}, ""},
+		{"not an object", "St Mary's", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f, cl, st, clk, url := pairSetup(t)
+			f.mu.Lock()
+			f.approved, f.linkedTo = true, c.linkedTo
+			f.mu.Unlock()
+			ctx := context.Background()
+			if _, err := cl.StartPair(ctx); err != nil {
+				t.Fatal(err)
+			}
+			err := cl.PollPair(ctx)
+			if c.name == "not an object" {
+				// A body the game can't read is no link at all.
+				if err == nil {
+					t.Fatal("linked with a broken answer")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := cl.PairedWhere(); got != c.want {
+				t.Errorf("PairedWhere %q, want %q", got, c.want)
+			}
+			raw := string(st.files[stateFile])
+			if strings.Contains(raw, "St Mary") || strings.Contains(raw, "Byrnes") || strings.Contains(raw, "Chess") {
+				t.Errorf("link.json keeps a name: %s", raw)
+			}
+			cl.Close()
+			c2 := Open(Options{Store: st, Server: url, Now: clk.now})
+			if got := c2.PairedWhere(); got != c.want {
+				t.Errorf("after a restart %q, want %q", got, c.want)
+			}
+			c2.ConfirmPair()
+			if got := c2.PairedWhere(); got != "" {
+				t.Errorf("after confirming %q", got)
+			}
+			if strings.Contains(string(st.files[stateFile]), "LinkedTo") {
+				t.Errorf("link.json keeps where the learner belongs after confirming: %s", st.files[stateFile])
+			}
+			c2.Close()
+		})
 	}
 }

@@ -42,6 +42,8 @@ func (c *Client) syncMaps(ctx context.Context, gen int) error {
 	}
 	c.mu.Unlock()
 	hdr := http.Header{}
+	// Say which map themes this game knows; the server leaves out the rest.
+	hdr.Set(maps.ThemesHeader, maps.ThemesHeaderValue())
 	if etag != "" {
 		hdr.Set("If-None-Match", etag)
 	}

@@ -287,6 +287,10 @@ type state struct {
 	// learner it linked to is them (ConfirmPair): nothing syncs until
 	// then.
 	Unconfirmed bool `json:",omitempty"`
+	// LinkedTo is where the learner belongs (its kind only), as the
+	// server said when it linked the game by QR code, kept only until
+	// the child confirms (PairedWhere).
+	LinkedTo *LinkedTo `json:",omitempty"`
 	// Runs are finished scored runs waiting to be sent for the rankings,
 	// and Boards the rankings the learner is on (ranks.go).
 	Runs   []qRun  `json:",omitempty"`

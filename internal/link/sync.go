@@ -127,6 +127,9 @@ func (c *Client) signedInHeld(t tokens, way string, unconfirmed bool) {
 	c.releasePending()
 	c.gen++
 	c.st = state{NextSeq: c.st.NextSeq, Kept: c.st.Kept, LinkedAt: c.now(), Way: way, Unconfirmed: unconfirmed}
+	if unconfirmed {
+		c.st.LinkedTo = t.LinkedTo.clean()
+	}
 	c.q = queue{}
 	c.dirty = true
 	// Used even if it can't be saved: the code is spent, and the game
