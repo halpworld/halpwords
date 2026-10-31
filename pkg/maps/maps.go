@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/halpworld/halpwords/pkg/puzzle"
@@ -237,6 +238,16 @@ func (m *Map) Level() int { return max(1, m.Depth) }
 // rest from maps it serves to a game that doesn't know them (#77).
 var Themes = []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Ice Halls", "Lava Forge", "Amethyst Vaults",
 	"Clockwork Workshop", "Sky Garden", "Sandstone Tomb", "Whispering Library"}
+
+// ThemesHeader is the request header a game sends when it asks the server
+// for quests (GET /api/v1/maps, a play-test file): the number of
+// Themes it knows, such as "10". The server leaves out the themes beyond
+// that, as a game rejects a whole quest with a theme it doesn't know. A
+// game that sends none knows the original six.
+const ThemesHeader = "X-Halpwords-Map-Themes"
+
+// ThemesHeaderValue is the value of ThemesHeader for this game.
+func ThemesHeaderValue() string { return strconv.Itoa(len(Themes)) }
 
 // ThemeIndex returns the index in Themes of the map's theme, ignoring
 // case, or -1 when it has none: the floor then has the usual look for its

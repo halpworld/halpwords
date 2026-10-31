@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/halpworld/halpwords/pkg/maps"
 )
 
 const page = "https://play.example/halpwords/"
@@ -79,6 +81,9 @@ func TestFetch(t *testing.T) {
 		case "/ok":
 			if r.Method != http.MethodGet || r.Header.Get("Cookie") != "" {
 				t.Errorf("%s with cookie %q", r.Method, r.Header.Get("Cookie"))
+			}
+			if got := r.Header.Get(maps.ThemesHeader); got != maps.ThemesHeaderValue() {
+				t.Errorf("%s is %q, want %q", maps.ThemesHeader, got, maps.ThemesHeaderValue())
 			}
 			w.Write(quest)
 		case "/gone":

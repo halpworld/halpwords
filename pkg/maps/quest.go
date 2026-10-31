@@ -77,7 +77,10 @@ func Single(m *Map) *Quest {
 }
 
 // Encode writes q as indented JSON, with its and its maps' formats and
-// versions set.
+// versions set. The server re-encodes quests for older games (it leaves
+// out themes they don't know), so an older game must still read the
+// result: raise Version only with a change older games cannot read, and
+// never add a field they would reject.
 func (q *Quest) Encode() ([]byte, error) {
 	c := *q
 	c.Format, c.Version = QuestFormat, Version

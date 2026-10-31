@@ -234,7 +234,8 @@ per frame on desktop and 1.4 ms on wasm (node), with 0 allocations.
   (24) has room.
 - **Teacher maps:** can choose all ten worlds since #77 (`maps.Themes`).
   The server strips themes from maps served to a game that doesn't know
-  them (`GetMaps`, using the game version it already sees), so merge the
+  them (`GetMaps` and the play-test file, by the `X-Halpwords-Map-Themes` header
+  the game sends: how many `maps.Themes` it knows; none means six), so merge the
   server change first and bump its `go.mod` before its editor offers them.
 - **Server art:** `DoorTexture(ThemeFor(1))` is unchanged byte for byte.
 - **Server:** bump `go.mod` after the game merge and run its `make check`.

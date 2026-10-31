@@ -2,6 +2,7 @@ package maps_test
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -318,5 +319,11 @@ func TestQuest(t *testing.T) {
 	}
 	if _, err := maps.ParseQuest([]byte(`{"format":"hwquest","version":1,"maps":[{"format":"hwmap","version":9}]}`)); err == nil {
 		t.Error("a quest with a too-new map parsed")
+	}
+}
+
+func TestThemesHeader(t *testing.T) {
+	if got := maps.ThemesHeaderValue(); got != strconv.Itoa(len(maps.Themes)) {
+		t.Errorf("ThemesHeaderValue = %q for %d themes", got, len(maps.Themes))
 	}
 }
