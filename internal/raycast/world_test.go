@@ -96,9 +96,8 @@ var fusedWant = map[string]string{
 	"Whispering Library": "2fc86663f754fbf0a22edd13ed0aa658b271bb77f5310e398c5b62d671ab2c1d",
 	"Sunken Temple":      "34c53f9625aae9ddcd16bc4025bb464f5c186cc825281d6dc90e5034f8c72731",
 	"Candy Caverns":      "beb6b8622e91a5b9461e18d6b1d8a58680983c0284c02451c940697a9165f7a8",
-	// Not yet confirmed on arm64: the amd64 hashes until macOS CI reports.
-	"Mushroom Forest":  "63ab23b261cb5858af04f080e9a864bcd35be2c8f93b41709d7060aa7ba8d5ed",
-	"Star Observatory": "b4d45d6c6ed6c8c8e44acff83e2a5805a4401ece1b4d6ea8b1a97cde3fef33d1",
+	"Mushroom Forest":    "63ab23b261cb5858af04f080e9a864bcd35be2c8f93b41709d7060aa7ba8d5ed",
+	"Star Observatory":   "b4d45d6c6ed6c8c8e44acff83e2a5805a4401ece1b4d6ea8b1a97cde3fef33d1",
 }
 
 // A monster's body stays readable in every world, at the least light a
