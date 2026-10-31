@@ -172,8 +172,9 @@ Follow-ups are tracked from #72.
     **byte-identical**: the server draws `DoorTexture(ThemeFor(1), 7, true)`
     on its web pages.
   - The old exported generators keep their signatures.
-- `pkg/maps`: `maps.Themes` stays the original six. `TestThemesMatchTheGame`
-  becomes "maps.Themes is a prefix of proc.Themes".
+- `pkg/maps`: `maps.Themes` is a prefix of `proc.Themes` (`TestThemesMatchTheGame`);
+  it had the original six until #77 added the other four. A map with no theme
+  still cycles through the original six.
 - `internal/raycast`:
   - `SetWorld`: a per-world shade table with fog colour, tint and reach.
   - Ceiling height, sky panorama, see-through wall pixels (hedge tops), and
@@ -227,9 +228,10 @@ per frame on desktop and 1.4 ms on wasm (node), with 0 allocations.
   drops the names it doesn't know, so its Director picks only from the old
   six. After the server's `go.mod` bump it picks from all ten. `MaxThemes`
   (24) has room.
-- **Teacher maps:** unchanged in this release (the original six only).
-  Follow-up: the server strips new themes from maps served to old games,
-  using the game version it already sees, before the editor offers them.
+- **Teacher maps:** can choose all ten worlds since #77 (`maps.Themes`).
+  The server strips themes from maps served to a game that doesn't know
+  them (`GetMaps`, using the game version it already sees), so merge the
+  server change first and bump its `go.mod` before its editor offers them.
 - **Server art:** `DoorTexture(ThemeFor(1))` is unchanged byte for byte.
 - **Server:** bump `go.mod` after the game merge and run its `make check`.
   No other server code change is needed.
