@@ -38,10 +38,14 @@ var Moods = []Mood{Title, Delve, Fight, Boss, Camp, Lament}
 // moods ignore it). Track stays comparable, so it still works as a cache
 // key: the same world is the same track and is not rendered again, and a
 // new world is a new track that the sound player cross-fades to.
+//
+// World gives the music the world's key, scale, tempo and instruments
+// (see World); NoWorld leaves it as the mood alone would write it.
 type Track struct {
 	Mood     Mood
 	Seed     uint64
 	Ambience Ambience
+	World    World
 }
 
 // Song is a composed track: one loop of notes, ready to render.
@@ -73,21 +77,25 @@ var (
 
 // style is how a mood is arranged.
 type style struct {
-	bpm    [2]float64 // the tempo range
-	scales [][]int
-	progs  [][]int // chord progressions, as scale degrees from 0, one chord a bar
-	bars   int
-	lead   Wave
-	leadV  float64 // lead volume
-	busy   float64 // how many sixteenths start a lead note, about
-	rest   bool    // the lead sits out every other phrase
-	arp    Wave    // the wave of the arpeggio, or Noise for none
-	arpV   float64
-	pad    bool // hold each chord as a soft pad instead
-	bass   int  // 0 long notes, 1 eighths, 2 pumping octaves
-	bassV  float64
-	drums  int // 0 none, 1 soft hats, 2 a full kit
-	lower  int // semitones the whole song is lowered by
+	bpm      [2]float64 // the tempo range
+	scales   [][]int
+	progs    [][]int // chord progressions, as scale degrees from 0, one chord a bar
+	bars     int
+	lead     Wave
+	leadV    float64 // lead volume
+	leadDuty float64 // a square lead's pulse width; 0 means 0.25
+	vibrato  float64 // semitones of vibrato on long lead notes; 0 means 0.25
+	busy     float64 // how many sixteenths start a lead note, about
+	rest     bool    // the lead sits out every other phrase
+	arp      Wave    // the wave of the arpeggio, or Noise for none
+	arpV     float64
+	arpEvery int  // sixteenths per arpeggio note; 0 picks by tempo
+	pad      bool // hold each chord as a soft pad instead
+	padW     Wave // the pad's wave
+	bass     int  // 0 long notes, 1 eighths, 2 pumping octaves
+	bassV    float64
+	drums    int // 0 none, 1 soft hats, 2 a full kit, 3 hammer blows, 4 a frame drum
+	lower    int // semitones the whole song is lowered by
 }
 
 var styles = [numMoods]style{
@@ -125,7 +133,7 @@ var styles = [numMoods]style{
 		bpm: [2]float64{62, 68}, scales: [][]int{minor, harmonic},
 		progs: [][]int{{0, 5, 3, 4}, {0, 3, 5, 4}},
 		bars:  4, lead: Triangle, leadV: 0.4, busy: 0.2,
-		arp: Noise, pad: true, arpV: 0.12, bass: 0, bassV: 0.45, lower: 3,
+		arp: Noise, pad: true, padW: Triangle, arpV: 0.12, bass: 0, bassV: 0.45, lower: 3,
 	},
 }
 
@@ -138,7 +146,8 @@ func Compose(t Track) Song {
 	if t.Mood == Quiet || t.Mood >= numMoods {
 		return Song{BPM: 120, Bars: 1}
 	}
-	st := &styles[t.Mood]
+	ws, root, keyed := worldStyle(styles[t.Mood], t.Mood, t.World)
+	st := &ws
 	rng := rand.New(rand.NewPCG(t.Seed, uint64(t.Mood)*0x9e3779b97f4a7c15+1))
 	s := Song{
 		BPM:   st.bpm[0] + rng.Float64()*(st.bpm[1]-st.bpm[0]),
@@ -146,6 +155,9 @@ func Compose(t Track) Song {
 		Root:  rng.IntN(7) - 3 - st.lower, // around A4
 		Scale: st.scales[rng.IntN(len(st.scales))],
 		Seed:  t.Seed,
+	}
+	if keyed {
+		s.Root = root
 	}
 	if t.Mood == Delve {
 		s.Ambience = t.Ambience
@@ -225,7 +237,7 @@ func (c *composer) harmony(bar, chord int) {
 	tones := chordTones(chord)
 	if st.pad {
 		for _, d := range tones {
-			c.add(Triangle, c.pitch(d)-12, at, stepsPerBar, st.arpV, 0)
+			c.add(st.padW, c.pitch(d)-12, at, stepsPerBar, st.arpV, 0.25)
 		}
 		return
 	}
@@ -234,9 +246,12 @@ func (c *composer) harmony(bar, chord int) {
 	}
 	// An arpeggio up and down the chord: sixteenths in quick songs,
 	// eighths in slow ones.
-	every := 1
-	if c.BPM < 100 {
-		every = 2
+	every := st.arpEvery
+	if every == 0 {
+		every = 1
+		if c.BPM < 100 {
+			every = 2
+		}
 	}
 	order := []int{0, 1, 2, 3, 2, 1}
 	for i, s := 0, 0; s < stepsPerBar; i, s = i+1, s+every {
@@ -272,6 +287,31 @@ func (c *composer) drums(bar int) {
 			c.Notes = append(c.Notes,
 				Tone{Wave: Noise, Freq: 3500, Slide: -1, Delay: t(s), Attack: 0.001, Hold: 0.01, Release: 0.1, Volume: 0.3},
 				Tone{Wave: Triangle, Freq: 190, Slide: -2, Delay: t(s), Attack: 0.001, Hold: 0.01, Release: 0.06, Volume: 0.3})
+		}
+	case 3:
+		// A hammer on an anvil on beats one and three: a low thud and a
+		// short metal clang, falling away.
+		for _, s := range []float64{0, 8} {
+			c.Notes = append(c.Notes,
+				Tone{Wave: Sine, Freq: 110, Slide: -3, Delay: t(s), Attack: 0.001, Hold: 0.02, Release: 0.15, Volume: 0.45},
+				Tone{Wave: Square, Freq: 1320, Slide: -0.5, Duty: 0.3, Delay: t(s), Attack: 0.001, Hold: 0.004, Release: 0.08, Volume: 0.07})
+		}
+		hat(12, 0.06)
+	case 4:
+		// A frame drum: low doums and light teks, a desert rhythm.
+		doum := func(s, vol float64) {
+			c.Notes = append(c.Notes, Tone{Wave: Sine, Freq: 120, Slide: -2, Delay: t(s), Attack: 0.002, Hold: 0.02, Release: 0.18, Volume: vol})
+		}
+		tek := func(s, vol float64) {
+			c.Notes = append(c.Notes, Tone{Wave: Noise, Freq: 5000, Slide: -1, Delay: t(s), Attack: 0.001, Hold: 0.004, Release: 0.05, Volume: vol})
+		}
+		doum(0, 0.4)
+		tek(4, 0.14)
+		tek(6, 0.1)
+		doum(8, 0.32)
+		tek(12, 0.14)
+		if bar%2 == 1 {
+			doum(14, 0.22)
 		}
 	}
 }
@@ -327,13 +367,20 @@ func (c *composer) melody(prog []int) {
 func (c *composer) addLead(k int, step, steps float64) {
 	st := c.st
 	hold := max(0.02, steps*c.step*0.8-0.02)
+	duty := st.leadDuty
+	if duty == 0 {
+		duty = 0.25
+	}
 	t := Tone{
-		Wave: st.lead, Freq: note(float64(k)), Duty: 0.25,
+		Wave: st.lead, Freq: note(float64(k)), Duty: duty,
 		Delay: step * c.step, Attack: 0.01, Hold: hold, Release: min(0.15, steps*c.step*0.6),
 		Volume: st.leadV,
 	}
 	if steps*c.step > 0.3 {
 		t.Vibrato, t.VibratoHz = 0.25, 5.5 // long notes sing
+		if st.vibrato > 0 {
+			t.Vibrato = st.vibrato
+		}
 	}
 	c.Notes = append(c.Notes, t)
 }

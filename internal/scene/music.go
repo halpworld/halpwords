@@ -5,9 +5,15 @@ import "github.com/halpworld/halpwords/internal/audio"
 // The scenes' music. Scenes without a Music method play the title music.
 
 // Music implements game.Musical: the floor's own tune while exploring,
-// drums in a battle, and something calm by a fire or in a shop.
+// drums in a battle, and something calm by a fire or in a shop. The
+// world sets the key, scale and instruments of the exploring and battle
+// music; the floor's seed writes the tune.
 func (c *Crawl) Music() audio.Track {
 	seed := c.run.seed*31 + uint64(c.run.depth)
+	var world audio.World
+	if c.theme != nil {
+		world = audio.WorldNamed(c.theme.Name)
+	}
 	m := c.mode
 	if m == modePause || m == modeQuit {
 		m = c.resume
@@ -17,13 +23,13 @@ func (c *Crawl) Music() audio.Track {
 		return lamentMusic
 	case modeBattle:
 		if c.battle != nil && c.battle.m.Kind.Boss() {
-			return audio.Track{Mood: audio.Boss, Seed: seed}
+			return audio.Track{Mood: audio.Boss, Seed: seed, World: world}
 		}
-		return audio.Track{Mood: audio.Fight, Seed: seed}
+		return audio.Track{Mood: audio.Fight, Seed: seed, World: world}
 	case modeCampfire, modeShop, modeShrine:
 		return campMusic
 	}
-	t := audio.Track{Mood: audio.Delve, Seed: seed}
+	t := audio.Track{Mood: audio.Delve, Seed: seed, World: world}
 	if c.theme != nil {
 		t.Ambience = worldAmbience[c.theme.Name]
 	}
