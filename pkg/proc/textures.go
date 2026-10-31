@@ -30,12 +30,12 @@ func ToIndexed(img *image.RGBA) *Indexed {
 // Variant 1 adds moss, variant 2 a crack. The Crypt's walls in the 3D view
 // are still exactly these.
 func WallTexture(t *Theme, seed uint64, variant int) *Indexed {
-	s := Surface{Paint: wallBricks, Look: Look{Base: t.Wall, Accent: t.Moss}}
+	s := Surface{Paint: WallBricks, Look: Look{Base: t.Wall, Accent: t.Moss}}
 	switch variant {
 	case 1:
-		s.Mods = []modifier{modMoss}
+		s.Mods = []Modifier{ModMoss}
 	case 2:
-		s.Mods = []modifier{modCrack}
+		s.Mods = []Modifier{ModCrack}
 	}
 	return s.Make(seed)
 }
@@ -173,7 +173,7 @@ func arch(x, y, x0, y0, x1 int) bool {
 
 // FloorTexture draws flagstones.
 func FloorTexture(t *Theme, seed uint64) *Indexed {
-	return Surface{Paint: floorFlagstones, Look: Look{Base: t.Floor}}.Make(seed)
+	return Surface{Paint: FloorFlagstones, Look: Look{Base: t.Floor}}.Make(seed)
 }
 
 // beamWood colours the timber beams of the old ceilings, dark to light.
@@ -181,7 +181,7 @@ var beamWood = []color.RGBA{pal.Black, pal.Plum, pal.Mahogany, pal.Brown}
 
 // CeilingTexture draws dark stone blocks with a timber beam.
 func CeilingTexture(t *Theme, seed uint64) *Indexed {
-	return Surface{Paint: ceilBeams, Look: Look{Base: t.Ceil, Accent: beamWood}}.Make(seed)
+	return Surface{Paint: CeilBeams, Look: Look{Base: t.Ceil, Accent: beamWood}}.Make(seed)
 }
 
 // StairsTexture draws stairs going down into the dark, seen from above.
@@ -190,7 +190,8 @@ func StairsTexture(t *Theme, seed uint64) *Indexed {
 }
 
 // stairsOn cuts a stairwell into a floor texture, its steps coloured from
-// ramp. The stairs look the same in every world.
+// ramp. The stairs look the same in every world. A ramp shorter than six
+// colours repeats its darkest one for the deepest steps.
 func stairsOn(m *Indexed, ramp []color.RGBA) *Indexed {
 	for step := range 6 {
 		in := 3 + step*2
@@ -202,7 +203,7 @@ func stairsOn(m *Indexed, ramp []color.RGBA) *Indexed {
 		}
 		// A lit front edge on each step.
 		for x := in; x < TexSize-in; x++ {
-			m.Set(x, in, ramp[min(len(ramp)-1, len(ramp)-1-step)])
+			m.Set(x, in, ramp[max(0, len(ramp)-1-step)])
 		}
 	}
 	m.Rect(15, TexSize-6, 2, 3, pal.Black)

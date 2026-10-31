@@ -51,6 +51,14 @@ version as its release notes.
   and the door image halpwords-server draws, are byte for byte what they
   were. `pkg/maps` keeps its six themes, so hand-made maps and older games
   are unaffected.
+- `pkg/proc`: other packages can build their own worlds. The types of
+  `Surface.Paint`, `Surface.Mods`, `Surface.Anim` and `Theme.Variants` are
+  exported as `Painter`, `Modifier` and `Animator`, and so are the
+  families, modifiers and animations (`WallBricks`, `FloorLava`,
+  `CeilPipes`, `ModMoss`, `AnimRipples` and the rest). A surface with no
+  `Paint` uses The Crypt's family, so a `Theme` with only the four ramps
+  still draws. `StairsTexture` and `StairsTex` no longer panic on a ramp
+  shorter than six colours. Every texture is unchanged, byte for byte.
 
 - **Hear the word after a miss.** A game linked to an account whose plan
   includes pronunciation downloads an audio pack for each assigned list,
