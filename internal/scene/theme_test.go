@@ -7,7 +7,7 @@ import (
 )
 
 // A quest map that names no theme looks as such maps always did: two
-// levels per theme, through the six map themes.
+// levels per theme, through the original six map themes.
 func TestQuestThemeIsTheOldOne(t *testing.T) {
 	for level, want := range map[int]string{
 		0: "The Crypt", 1: "The Crypt", 2: "The Crypt", 3: "Mossy Cellars", 5: "Flooded Caves",
