@@ -5,7 +5,9 @@
       "name": "start",
       "method": "POST",
       "path": "/api/v1/link/start",
-      "request": {"code_challenge": "Sjgj3RsoM1cFRvzTRlJbAUCekLTVbU3Vi0ROXlMz4yE"},
+      "request": {
+        "code_challenge": "Sjgj3RsoM1cFRvzTRlJbAUCekLTVbU3Vi0ROXlMz4yE"
+      },
       "status": 200,
       "response": {
         "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
@@ -20,23 +22,45 @@
       "name": "pending",
       "method": "POST",
       "path": "/api/v1/link/token",
-      "request": {"device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG", "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY", "name": "Halpwords on Windows"},
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
       "status": 400,
-      "response": {"error": {"code": "authorization_pending", "message": "Waiting for a grown-up to approve this game."}}
+      "response": {
+        "error": {
+          "code": "authorization_pending",
+          "message": "Waiting for a grown-up to approve this game."
+        }
+      }
     },
     {
       "name": "slow_down",
       "method": "POST",
       "path": "/api/v1/link/token",
-      "request": {"device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG", "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY", "name": "Halpwords on Windows"},
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
       "status": 400,
-      "response": {"error": {"code": "slow_down", "message": "Polling too often: wait longer between polls."}}
+      "response": {
+        "error": {
+          "code": "slow_down",
+          "message": "Polling too often: wait longer between polls."
+        }
+      }
     },
     {
       "name": "tokens",
       "method": "POST",
       "path": "/api/v1/link/token",
-      "request": {"device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG", "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY", "name": "Halpwords on Windows"},
+      "request": {
+        "device_code": "hwlr_KDMV4XQZ7RJ2NA5WBTCE6HYPLG",
+        "code_verifier": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+        "name": "Halpwords on Windows"
+      },
       "status": 200,
       "response": {
         "device_id": "dev_01JQRCODE0000000000000000",
@@ -44,7 +68,10 @@
         "access_token": "hwd_fakeAccessTokenForTheRecordedSession0001",
         "expires_in": 3600,
         "refresh_token": "hwr_fakeRefreshTokenForTheRecordedSession001",
-        "refresh_expires_in": 7776000
+        "refresh_expires_in": 7776000,
+        "linked_to": {
+          "kind": "family"
+        }
       }
     }
   ]

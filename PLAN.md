@@ -1184,7 +1184,10 @@ out isn't kept in `link.json`. T types a grown-up's code (the old flow);
 an older server (any 404 or 405 on start) goes straight there for the
 session. Once a grown-up approves, the link is held (`Unconfirmed` in
 `link.json`): the game asks "Linked to {name}. Is this you?" (from
-`GET /api/v1/me`), then shows the child-link notice, and only then
+`GET /api/v1/me`; with "({school})" or "(family)" when the server's
+token answer says where the learner belongs, `linked_to`, #110, kept
+in `link.json` only until the child confirms), then shows the
+child-link notice, and only then
 syncs. Until then the link sends nothing of the game's: only `GET /me`
 and `GET /choices` are allowed, no sync, no AI token, no upload on
 quit. N unlinks and keeps everything here. Esc on "Is this you?" or on
