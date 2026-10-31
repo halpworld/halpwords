@@ -290,7 +290,7 @@ func TestQAWorldLaps(t *testing.T) {
 		}
 	}
 	for d := 1; d <= 60; d++ {
-		if proc.ThemeFor(d) != proc.World(proc.FloorOrder[(d-1)%10], proc.Lap(d)) {
+		if proc.ThemeFor(d) != proc.World(proc.FloorOrder[(d-1)%len(proc.FloorOrder)], proc.Lap(d)) {
 			t.Errorf("depth %d: ThemeFor and World disagree", d)
 		}
 	}

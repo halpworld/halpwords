@@ -287,6 +287,8 @@ var particleStyles = [...]particleStyle{
 	proc.ParticlePetals:    {n: 16, fall: -0.05, drift: 0.12, wobble: 0.25, flutter: 0.15, cols: []color.RGBA{pal.Pink, pal.Rose, pal.White}, big: true, ceilZ: 1},
 	proc.ParticleSand:      {n: 20, fall: -0.01, drift: 0.35, wobble: 0.1, cols: []color.RGBA{pal.Tan, pal.Skin}, floorZ: 0, ceilZ: 0.5},
 	proc.ParticleLetters:   {n: 10, fall: 0.03, wobble: 0.3, flutter: 0.2, cols: []color.RGBA{pal.Skin, pal.Tan, pal.Ice}, big: true, floorZ: 0.2, ceilZ: 1},
+	proc.ParticleBubbles:   {n: 14, fall: 0.12, wobble: 0.12, flutter: 0.1, cols: []color.RGBA{pal.Cyan, pal.Ice}, big: true, ceilZ: 1},
+	proc.ParticleSprinkles: {n: 16, fall: -0.05, drift: 0.04, wobble: 0.15, flutter: 0.1, cols: []color.RGBA{pal.Pink, pal.Yellow, pal.Lime, pal.Cyan, pal.White}, ceilZ: 1},
 }
 
 // particleIdx holds each style's colours as palette indices.

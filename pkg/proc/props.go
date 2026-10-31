@@ -163,3 +163,30 @@ func PropBooks(seed uint64) *Indexed {
 	outline(m)
 	return m
 }
+
+// PropPillar is a broken temple column with seaweed growing up it.
+func PropPillar(seed uint64) *Indexed {
+	var c canvas
+	c.rect(10, 9, 12, 19, partBody)
+	c.rect(8, 27, 16, 4, partBody)
+	c.tri(10, 9, 22, 9, 22, 4, partBody) // the broken top
+	for x := 13.0; x < 21; x += 3 {
+		c.line(x, 11, x, 25, 0.5, partDark) // flutes
+	}
+	c.line(9, 30, 7, 17, 1.2, partAccent)
+	c.line(23, 30, 25, 20, 1.2, partAccent)
+	return shadeProp(&c, []color.RGBA{pal.Slate, pal.Granite, pal.Stone, pal.Ash, pal.Steel}, [2]color.RGBA{pal.Forest, pal.Green}, pal.Cyan)
+}
+
+// PropLollipop is a big swirled lollipop beside a gumdrop.
+func PropLollipop(seed uint64) *Indexed {
+	var c canvas
+	c.rect(15, 17, 2, 14, partAccent)
+	c.disc(16, 11, 8, partBody)
+	for i := range 26 {
+		a, r := float64(i)*0.55, float64(i)*0.27
+		c.disc(16+r*math.Cos(a), 11+r*math.Sin(a), 0.7, partWhite)
+	}
+	c.ellipse(25, 28, 4, 3, partBody)
+	return shadeProp(&c, []color.RGBA{pal.Plum, pal.Rose, pal.Pink, pal.Skin}, [2]color.RGBA{pal.Tan, pal.Skin}, pal.Pink)
+}

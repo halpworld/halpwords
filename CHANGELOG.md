@@ -7,6 +7,15 @@ version as its release notes.
 
 ### Added
 
+- **Two new worlds: the Sunken Temple and the Candy Caverns.** They are
+  floors 11 and 12, after the Sandstone Tomb. Each has its own walls,
+  props, particles (rising bubbles, sugar sprinkles), background sound and
+  music. Floors 1 to 10 are as before; the remixed second lap now starts
+  at floor 13. `pkg/proc`: `Themes` gains "Sunken Temple" (index 10) and
+  "Candy Caverns" (11), appended, with `PropPillar`, `PropLollipop`,
+  `ParticleBubbles` and `ParticleSprinkles`; `FloorOrder` gains two slots.
+  `maps.Themes` is unchanged.
+
 - **Boss Raid grading knows the other words.** `pkg/raid` has a new
   `GradeAmong(typed, entry, others, langCode, usedBackspace)`, the shared
   package's `Grade` with the game's rule that a one-letter slip that is the

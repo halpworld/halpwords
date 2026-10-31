@@ -68,6 +68,8 @@ const (
 	ParticlePetals
 	ParticleSand
 	ParticleLetters
+	ParticleBubbles   // rising bubbles, in the Sunken Temple
+	ParticleSprinkles // falling sugar sprinkles, in the Candy Caverns
 )
 
 func rgb(r, g, b uint8) color.RGBA { return color.RGBA{r, g, b, 0xff} }
@@ -319,21 +321,78 @@ var Themes = []Theme{
 		Prop:   PropBooks, PropSize: 0.3, PropRooms: 0.5,
 		Particles: ParticleLetters,
 	},
+	{
+		Name:  "Sunken Temple",
+		Wall:  []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Navy, pal.Teal, pal.Cyan},
+		Floor: []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Navy, pal.Teal},
+		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Navy},
+		Moss:  []color.RGBA{pal.Forest, pal.Green},
+		// Old temple stones under the sea, with seaweed (Accent) growing
+		// up them and gold-framed doors.
+		Walls: Surface{Paint: WallBricks, Mods: []Modifier{ModMoss}, Look: Look{
+			Base:   []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Teal, pal.Cyan},
+			Accent: []color.RGBA{pal.Forest, pal.Green},
+		}},
+		Variants: [2][]Modifier{{ModVines}, {ModVines, ModCrack}},
+		Floors: Surface{Paint: FloorFlagstones, Look: Look{
+			Base: []color.RGBA{pal.Night, pal.Slate, pal.Navy, pal.Teal, pal.Cyan},
+		}},
+		Ceiling: Surface{Paint: CeilSlabs, Look: Look{
+			Base: []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Navy, pal.Teal},
+		}},
+		Frame:  []color.RGBA{pal.Black, pal.Mahogany, pal.Bronze, pal.Tan, pal.Yellow, pal.White},
+		Fog:    rgb(8, 36, 44),
+		Light:  rgb(200, 255, 240),
+		Reach:  1.15,
+		Height: 1.4,
+		Prop:   PropPillar, PropSize: 0.4, PropRooms: 0.5,
+		Particles: ParticleBubbles,
+	},
+	{
+		Name:  "Candy Caverns",
+		Wall:  []color.RGBA{pal.Plum, pal.Purple, pal.Rose, pal.Pink, pal.Skin, pal.White},
+		Floor: []color.RGBA{pal.Plum, pal.Purple, pal.Rose, pal.Pink, pal.Skin},
+		Ceil:  []color.RGBA{pal.Night, pal.Plum, pal.Purple, pal.Rose},
+		Moss:  []color.RGBA{pal.Lime, pal.Yellow},
+		// Pink rock candy with white icing dripping down it, sugar
+		// sprinkles and gumdrop cobbles. Dark frames keep doors clear of
+		// the bright walls.
+		Walls: Surface{Paint: WallCave, Mods: []Modifier{ModDrips}, Look: Look{
+			Base:   []color.RGBA{pal.Plum, pal.Purple, pal.Rose, pal.Pink, pal.Skin, pal.White},
+			Accent: []color.RGBA{pal.Skin, pal.White, pal.Ice},
+		}},
+		Variants: [2][]Modifier{{ModFlowers}, {ModVeins}},
+		Floors: Surface{Paint: FloorCobbles, Look: Look{
+			Base:   []color.RGBA{pal.Plum, pal.Purple, pal.Rose, pal.Pink, pal.Skin},
+			Accent: []color.RGBA{pal.Green, pal.Lime},
+		}},
+		Ceiling: Surface{Paint: CeilRock, Look: Look{
+			Base: []color.RGBA{pal.Night, pal.Plum, pal.Purple, pal.Rose, pal.Pink},
+		}},
+		Frame: []color.RGBA{pal.Black, pal.Black, pal.Night, pal.Plum, pal.Night, pal.Plum},
+		Fog:   rgb(56, 20, 48),
+		Light: rgb(255, 232, 244),
+		Reach: 1.1,
+		Prop:  PropLollipop, PropSize: 0.4, PropRooms: 0.6,
+		Particles: ParticleSprinkles,
+	},
 }
 
 // FloorOrder gives the world (an index into Themes) for floors 1, 2, 3 and
 // so on. Neighbouring floors differ in hue and brightness, and the bright
-// Sky Garden never follows the Ice Halls. Past the end the order repeats as
+// Sky Garden never follows the Ice Halls. New worlds join at the end, so
+// floors 1 to 10 keep their worlds. Past the end the order repeats as
 // another lap.
-var FloorOrder = []int{0, 1, 2, 4, 3, 9, 7, 6, 5, 8}
+var FloorOrder = []int{0, 1, 2, 4, 3, 9, 7, 6, 5, 8, 10, 11}
 
-// Lap returns how many times the floor order has repeated by depth: 0 for
-// floors 1 to 10, 1 for floors 11 to 20, and so on.
+// Lap returns how many times the floor order has repeated by depth: 0 on
+// the first len(FloorOrder) floors, 1 on the next len(FloorOrder), and so
+// on.
 func Lap(depth int) int { return max(depth-1, 0) / len(FloorOrder) }
 
 // ThemeFor returns the world for a floor depth. Floor 1 is always The Crypt.
-// From the second lap on, it returns the world's remix (see Remix), so
-// floor 11 never looks exactly like floor 1.
+// From the second lap on, it returns the world's remix (see Remix), so a
+// floor on the second lap never looks exactly like its floor on the first.
 func ThemeFor(depth int) *Theme {
 	return World(FloorOrder[max(depth-1, 0)%len(FloorOrder)], Lap(depth))
 }

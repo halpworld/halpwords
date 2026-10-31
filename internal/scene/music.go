@@ -49,6 +49,8 @@ var worldAmbience = map[string]audio.Ambience{
 	"Clockwork Workshop": audio.Ticking,
 	"Amethyst Vaults":    audio.Chimes,
 	"Sandstone Tomb":     audio.Sand,
+	"Sunken Temple":      audio.Bubbles,
+	"Candy Caverns":      audio.Fizz,
 }
 
 var (

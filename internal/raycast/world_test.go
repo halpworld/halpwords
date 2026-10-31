@@ -62,6 +62,8 @@ func TestWorldViewsPinned(t *testing.T) {
 		"Sky Garden":         "aa48fe1ede673e1713547e2f60c0170905015596db56a872ecdb91b33e024811",
 		"Sandstone Tomb":     "a3ddaae900e8270884f12bb4d441449cc238f0536aaa9d7ea81f78d73a492f6a",
 		"Whispering Library": "99e87f859289de08f6383156a705531f04d3d83610d6f07d892bc746bd5404c3",
+		"Sunken Temple":      "7a0c437f3fbce498c8dac28682ab74ffdd9a65a422e144be94be770de8204fe6",
+		"Candy Caverns":      "cf69421b285cd628038735836e8f8399f36bcc87c42ba1b719d5cb59d7d28199",
 	}
 	if fusedMultiplyAdd {
 		want = fusedWant
@@ -90,6 +92,8 @@ var fusedWant = map[string]string{
 	"Sky Garden":         "aa48fe1ede673e1713547e2f60c0170905015596db56a872ecdb91b33e024811",
 	"Sandstone Tomb":     "a3ddaae900e8270884f12bb4d441449cc238f0536aaa9d7ea81f78d73a492f6a",
 	"Whispering Library": "2fc86663f754fbf0a22edd13ed0aa658b271bb77f5310e398c5b62d671ab2c1d",
+	"Sunken Temple":      "34c53f9625aae9ddcd16bc4025bb464f5c186cc825281d6dc90e5034f8c72731",
+	"Candy Caverns":      "beb6b8622e91a5b9461e18d6b1d8a58680983c0284c02451c940697a9165f7a8",
 }
 
 // A monster's body stays readable in every world, at the least light a
@@ -244,7 +248,7 @@ func TestCalmStopsParticles(t *testing.T) {
 // nearest they are drawn, in a 192-pixel view.
 func TestSlowFall(t *testing.T) {
 	k := 192 / (2 * 0.75) // pixels per unit of height at distance 1
-	for _, p := range []proc.Particles{proc.ParticleSnow, proc.ParticlePetals} {
+	for _, p := range []proc.Particles{proc.ParticleSnow, proc.ParticlePetals, proc.ParticleSprinkles} {
 		st := particleStyles[p]
 		speed := (-st.fall + st.flutter*0.1*1.3) * k / particleNear
 		if speed >= 20 {

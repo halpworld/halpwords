@@ -23,7 +23,8 @@ import (
 )
 
 var arrivalWorlds = []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Ice Halls", "Lava Forge",
-	"Amethyst Vaults", "Clockwork Workshop", "Sky Garden", "Sandstone Tomb", "Whispering Library"}
+	"Amethyst Vaults", "Clockwork Workshop", "Sky Garden", "Sandstone Tomb", "Whispering Library",
+	"Sunken Temple", "Candy Caverns"}
 
 func arrivalTexts(ls []arrivalLine) []string {
 	var out []string
