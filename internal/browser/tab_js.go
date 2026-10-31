@@ -189,6 +189,17 @@ func checkHold(locks js.Value) {
 	})
 }
 
+// jsString is v when it is a string, or "": syscall/js turns undefined
+// and null into "<undefined>" and "<null>", which would make a browser
+// that doesn't give LockInfo a clientId match every holder with every
+// other ("still ours" after a restore, when another tab has the lock).
+func jsString(v js.Value) string {
+	if v.Type() != js.TypeString {
+		return ""
+	}
+	return v.String()
+}
+
 // heldLock is one held lock, as navigator.locks.query() lists it.
 type heldLock struct{ name, client string }
 
@@ -204,7 +215,7 @@ func onQuery(locks js.Value, f func([]heldLock)) {
 		var out []heldLock
 		for i := 0; i < hs.Length(); i++ {
 			l := hs.Index(i)
-			out = append(out, heldLock{name: l.Get("name").String(), client: l.Get("clientId").String()})
+			out = append(out, heldLock{name: jsString(l.Get("name")), client: jsString(l.Get("clientId"))})
 		}
 		f(out)
 		return nil
