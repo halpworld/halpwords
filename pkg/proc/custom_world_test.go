@@ -74,3 +74,51 @@ func TestStairsShortRamp(t *testing.T) {
 		}
 	}
 }
+
+// families lists every exported family, modifier and animation, with the
+// animations at frame 2.
+var families = map[string]proc.Painter{
+	"WallBricks": proc.WallBricks, "WallCave": proc.WallCave, "WallIce": proc.WallIce,
+	"WallBasalt": proc.WallBasalt, "WallMetal": proc.WallMetal, "WallCrystal": proc.WallCrystal,
+	"WallEarth": proc.WallEarth, "WallSandstone": proc.WallSandstone, "WallBooks": proc.WallBooks,
+	"WallHedge":       proc.WallHedge,
+	"FloorFlagstones": proc.FloorFlagstones, "FloorCobbles": proc.FloorCobbles, "FloorSand": proc.FloorSand,
+	"FloorWater": proc.FloorWater, "FloorLava": proc.FloorLava, "FloorSnow": proc.FloorSnow,
+	"FloorGrass": proc.FloorGrass, "FloorPlanks": proc.FloorPlanks, "FloorChecker": proc.FloorChecker,
+	"FloorGrate": proc.FloorGrate,
+	"CeilBeams":  proc.CeilBeams, "CeilRock": proc.CeilRock, "CeilIce": proc.CeilIce,
+	"CeilPipes": proc.CeilPipes, "CeilCrystal": proc.CeilCrystal, "CeilSlabs": proc.CeilSlabs,
+	"CeilCoffers": proc.CeilCoffers,
+	"ModMoss":     proc.ModMoss, "ModCrack": proc.ModCrack, "ModCobweb": proc.ModCobweb,
+	"ModFrost": proc.ModFrost, "ModDrips": proc.ModDrips, "ModVeins": proc.ModVeins,
+	"ModGear": proc.ModGear, "ModPipe": proc.ModPipe, "ModFlowers": proc.ModFlowers,
+	"ModRaggedTop": proc.ModRaggedTop, "ModVines": proc.ModVines, "ModSoot": proc.ModSoot,
+	"ModGlowCracks": proc.ModGlowCracks, "ModSandDrift": proc.ModSandDrift,
+	"AnimRipples": func(m *proc.Indexed, l proc.Look, seed uint64) { proc.AnimRipples(m, l, seed, 2) },
+	"AnimLava":    func(m *proc.Indexed, l proc.Look, seed uint64) { proc.AnimLava(m, l, seed, 2) },
+}
+
+// No exported family panics on a short or empty ramp: Base of 0, 1 or 2
+// colours with no Accent, and the other way round.
+func TestFamiliesTakeShortRamps(t *testing.T) {
+	ramp := []color.RGBA{{40, 30, 50, 255}, {120, 90, 60, 255}, {200, 180, 150, 255}}
+	if len(families) != 43 {
+		t.Fatalf("%d families listed, want 43", len(families))
+	}
+	for name, f := range families {
+		for n := range 3 {
+			for _, l := range []proc.Look{{Base: ramp[:n]}, {Accent: ramp[:n]}, {Base: ramp[:n], Accent: ramp[:1]}} {
+				for seed := range uint64(40) {
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								t.Fatalf("%s with %d Base and %d Accent colours, seed %d: %v", name, len(l.Base), len(l.Accent), seed, r)
+							}
+						}()
+						f(proc.NewIndexed(proc.TexSize, proc.TexSize), l, seed)
+					}()
+				}
+			}
+		}
+	}
+}

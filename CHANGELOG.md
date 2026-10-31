@@ -63,8 +63,9 @@ version as its release notes.
   families, modifiers and animations (`WallBricks`, `FloorLava`,
   `CeilPipes`, `ModMoss`, `AnimRipples` and the rest). A surface with no
   `Paint` uses The Crypt's family, so a `Theme` with only the four ramps
-  still draws. `StairsTexture` and `StairsTex` no longer panic on a ramp
-  shorter than six colours. Every texture is unchanged, byte for byte.
+  still draws. No family, `StairsTexture` or `StairsTex` panics on a short
+  or empty ramp: a short ramp repeats its lightest colour, and an empty
+  `Accent` borrows `Base`. Every texture is unchanged, byte for byte.
 - `pkg/proc`: `Theme.SpriteSwap` draws one sprite colour as another in a
   world (the Ice Halls draw the bat's purple body pink), and
   `SpriteMinLight` now always returns a value in [0,1]. The Sky Garden's
