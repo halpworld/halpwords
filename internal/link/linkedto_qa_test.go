@@ -2,80 +2,49 @@ package link
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
-	"unicode/utf8"
 )
 
-// Hostile and odd names are made fit to show: no control or format
-// characters (bidi overrides, zero-width, tags), never above maxWhere
-// characters, never an invalid string, and a school with nothing left to
-// show is no school.
-func TestQALinkedToCleanHostileNames(t *testing.T) {
-	school := func(n string) *LinkedTo { return &LinkedTo{Kind: LinkedSchool, Name: n} }
-	long := strings.Repeat("x", 200)
+// Only the kind is ever read: whatever name, hostile or not, a server
+// might send with linked_to is dropped (owner, 2026-10-31), and a kind
+// the game doesn't know, spelt in any other way, is no kind at all.
+func TestQALinkedToKindOnly(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		in   *LinkedTo
+		body string
 		want string // "-": dropped
 	}{
-		{"nil", nil, "-"},
-		{"unknown kind", school("A"), "A"},
-		{"kind in capitals", &LinkedTo{Kind: "School", Name: "A"}, "-"},
-		{"kind with space", &LinkedTo{Kind: "school ", Name: "A"}, "-"},
-		{"empty kind", &LinkedTo{Name: "A"}, "-"},
-		{"school, no name", school(""), "-"},
-		{"school, only controls", school("\x00\x01\x1b\x7f\u0085"), "-"},
-		{"school, only spaces and zero-width", school(" ​‍\ufeff  "), "-"},
-		{"right-to-left override", school("‮St Mary‬"), "St Mary"},
-		{"isolates and marks", school("⁦St⁩ ‎Mary‏"), "St Mary"},
-		{"tag characters", school("St\U000E0041\U000E007F Mary"), "St Mary"},
-		{"zero-width inside a word", school("Sa​int"), "Sa int"},
-		{"newline and tab", school("St\nMary\t's"), "St Mary 's"},
-		{"emoji", school("St Mary 🎓"), "St Mary 🎓"},
-		{"family", &LinkedTo{Kind: LinkedFamily}, ""},
-		{"family with a name", &LinkedTo{Kind: LinkedFamily, Name: "  The‮ Byrnes "}, "The Byrnes"},
-		{"family, only controls", &LinkedTo{Kind: LinkedFamily, Name: "\x00"}, ""},
+		{"family", `{"kind":"family"}`, "family"},
+		{"school", `{"kind":"school"}`, "school"},
+		{"school with a name", `{"kind":"school","name":"St Mary's"}`, "school"},
+		{"family with a hostile name", `{"kind":"family","name":"\u202eThe Byrnes\u0000"}`, "family"},
+		{"kind in capitals", `{"kind":"School"}`, "-"},
+		{"kind with space", `{"kind":"school "}`, "-"},
+		{"empty kind", `{"name":"A"}`, "-"},
+		{"unknown kind", `{"kind":"club"}`, "-"},
 	} {
-		got := tc.in.clean()
-		if tc.want == "-" {
-			if got != nil {
-				t.Errorf("%s: kept %+v", tc.name, got)
+		var l LinkedTo
+		if err := json.Unmarshal([]byte(tc.body), &l); err != nil {
+			t.Fatal(err)
+		}
+		got := l.clean()
+		switch {
+		case tc.want == "-" && got != nil:
+			t.Errorf("%s: kept %+v", tc.name, got)
+		case tc.want != "-" && (got == nil || got.Kind != tc.want):
+			t.Errorf("%s: %+v, want %q", tc.name, got, tc.want)
+		}
+		if got != nil {
+			if b, _ := json.Marshal(got); string(b) != `{"kind":"`+tc.want+`"}` {
+				t.Errorf("%s: kept as %s", tc.name, b)
 			}
-			continue
-		}
-		if got == nil || got.Name != tc.want {
-			t.Errorf("%s: %+v, want name %q", tc.name, got, tc.want)
 		}
 	}
-	// Long names, of every width of character, are cut to maxWhere runes
-	// in valid UTF-8.
-	for _, n := range []string{long, strings.Repeat("Ó", 200), strings.Repeat("漢", 200), strings.Repeat("🎓", 200),
-		strings.Repeat("é", 200), strings.Repeat("a ", 200), " " + long + " "} {
-		got := school(n).clean()
-		if got == nil {
-			t.Fatalf("%.20q dropped", n)
-		}
-		if !utf8.ValidString(got.Name) || utf8.RuneCountInString(got.Name) > maxWhere {
-			t.Errorf("%.20q cleaned to %d runes, valid=%v", n, utf8.RuneCountInString(got.Name), utf8.ValidString(got.Name))
-		}
-		if got.Name != strings.TrimSpace(got.Name) {
-			t.Errorf("%.20q cleaned to %q with spaces at an end", n, got.Name)
-		}
-	}
-	// Exactly maxWhere runes is kept whole; one more is cut with an ellipsis.
-	if got := school(strings.Repeat("x", maxWhere)).clean(); got.Name != strings.Repeat("x", maxWhere) {
-		t.Errorf("exactly %d kept as %q", maxWhere, got.Name)
-	}
-	if got := school(strings.Repeat("x", maxWhere+1)).clean(); !strings.HasSuffix(got.Name, "…") ||
-		utf8.RuneCountInString(got.Name) != maxWhere {
-		t.Errorf("one over cut as %q", got.Name)
-	}
-	// clean doesn't change its input.
-	in := &LinkedTo{Kind: LinkedSchool, Name: "‮A"}
-	in.clean()
-	if in.Name != "‮A" {
-		t.Error("clean changed its input")
+	var nilL *LinkedTo
+	if nilL.clean() != nil {
+		t.Error("nil")
 	}
 }
 
@@ -85,7 +54,7 @@ func TestQALinkedToIgnoredWithoutQR(t *testing.T) {
 	_, c, st, _, _ := pairSetup(t)
 	c.mu.Lock()
 	c.signedIn(tokens{AccessToken: "a", RefreshToken: "r", ExpiresIn: 3600,
-		LinkedTo: &LinkedTo{Kind: LinkedSchool, Name: "St Mary's"}}, WayCard)
+		LinkedTo: &LinkedTo{Kind: LinkedSchool}}, WayCard)
 	c.mu.Unlock()
 	if c.st.LinkedTo != nil || c.PairedWhere() != "" {
 		t.Errorf("kept %+v / %q", c.st.LinkedTo, c.PairedWhere())
@@ -95,15 +64,14 @@ func TestQALinkedToIgnoredWithoutQR(t *testing.T) {
 	}
 }
 
-// A hostile name through the whole flow (the server's answer, link.json,
-// a restart before confirming): what is stored and shown is clean, and a
-// link.json edited by hand with a hostile name is not trusted blindly:
-// it is shown cleaned or not at all, never as the raw text.
-func TestQALinkedToHostileThroughTheFlow(t *testing.T) {
+// A name sent through the whole flow (the server's answer, link.json, a
+// restart before confirming) is never stored or shown; a link.json
+// edited by hand with an odd kind shows nothing; unlinking clears it.
+func TestQALinkedToNameNeverKept(t *testing.T) {
 	f, c, st, clk, url := pairSetup(t)
 	f.mu.Lock()
 	f.approved = true
-	f.linkedTo = map[string]any{"kind": "school", "name": "‮St​ Mary's\x00 " + strings.Repeat("Z", 100)}
+	f.linkedTo = map[string]any{"kind": "school", "name": "\u202eSt Mary's"}
 	f.mu.Unlock()
 	ctx := context.Background()
 	if _, err := c.StartPair(ctx); err != nil {
@@ -112,24 +80,27 @@ func TestQALinkedToHostileThroughTheFlow(t *testing.T) {
 	if err := c.PollPair(ctx); err != nil {
 		t.Fatal(err)
 	}
-	got := c.PairedWhere()
-	if strings.ContainsAny(got, "‮​\x00") || utf8.RuneCountInString(got) > maxWhere || !strings.HasPrefix(got, "St Mary's") {
+	if got := c.PairedWhere(); got != "school" {
 		t.Errorf("shown %q", got)
 	}
-	if raw := string(st.files[stateFile]); strings.Contains(raw, `‮`) || strings.Contains(raw, "‮") {
-		t.Errorf("hostile characters stored: %s", raw)
+	if raw := string(st.files[stateFile]); strings.Contains(raw, "Mary") || strings.Contains(raw, `"name"`) {
+		t.Errorf("a name stored: %s", raw)
 	}
 	c.Close()
-	// Restart before confirming: still there, and still the same.
 	c2 := Open(Options{Store: st, Server: url, Now: clk.now})
 	defer c2.Close()
-	if c2.PairedWhere() != got {
-		t.Errorf("after a restart %q, want %q", c2.PairedWhere(), got)
+	if c2.PairedWhere() != "school" {
+		t.Errorf("after a restart %q", c2.PairedWhere())
 	}
-	// Not confirmed, not unlinked: no where when the game is unlinked.
-	c2.Unlink()
+	c2.mu.Lock()
+	c2.st.LinkedTo = &LinkedTo{Kind: "St Mary's"} // edited by hand
+	c2.mu.Unlock()
 	if c2.PairedWhere() != "" {
-		t.Errorf("shown after unlinking: %q", c2.PairedWhere())
+		t.Errorf("an edited kind shown: %q", c2.PairedWhere())
+	}
+	c2.Unlink()
+	if c2.PairedWhere() != "" || strings.Contains(string(st.files[stateFile]), "LinkedTo") {
+		t.Errorf("kept after unlinking: %q %s", c2.PairedWhere(), st.files[stateFile])
 	}
 	var nilClient *Client
 	if nilClient.PairedWhere() != "" {

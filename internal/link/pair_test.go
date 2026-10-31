@@ -779,10 +779,11 @@ func TestPairStartBusy(t *testing.T) {
 }
 
 // "Is this you?" says where the learner belongs when the server does
-// (linked_to, halpwords#110): a school's name, or "family" (the family's
-// name is never sent). An older server leaves it out and the game says
-// only the name. It is kept across a restart while the link is held,
-// and forgotten once the child confirms.
+// (linked_to, halpwords#110): "school" or "family", the kind only (owner,
+// 2026-10-31): a name the server might send is never read. An older
+// server leaves it out and the game says only the name. It is kept
+// across a restart while the link is held, and forgotten once the child
+// confirms.
 func TestPairedWhere(t *testing.T) {
 	for _, c := range []struct {
 		name     string
@@ -791,12 +792,11 @@ func TestPairedWhere(t *testing.T) {
 	}{
 		{"older server", nil, ""},
 		{"family", map[string]any{"kind": "family"}, "family"},
-		{"school", map[string]any{"kind": "school", "name": "St Mary's"}, "St Mary's"},
-		{"school, untidy name", map[string]any{"kind": "school", "name": "  Scoil\u200b Mhuire\n\t Átha  Cliath "}, "Scoil Mhuire Átha Cliath"},
-		{"school, long name", map[string]any{"kind": "school", "name": strings.Repeat("Saint Columba ", 6)},
-			strings.TrimSpace(strings.Repeat("Saint Columba ", 3)[:maxWhere-1]) + "…"},
-		{"school, no name", map[string]any{"kind": "school"}, ""},
+		{"school", map[string]any{"kind": "school"}, "school"},
+		{"school with a name", map[string]any{"kind": "school", "name": "St Mary's"}, "school"},
+		{"family with a name", map[string]any{"kind": "family", "name": "The Byrnes"}, "family"},
 		{"unknown kind", map[string]any{"kind": "club", "name": "Chess"}, ""},
+		{"kind in capitals", map[string]any{"kind": "School"}, ""},
 		{"not an object", "St Mary's", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -821,6 +821,10 @@ func TestPairedWhere(t *testing.T) {
 			}
 			if got := cl.PairedWhere(); got != c.want {
 				t.Errorf("PairedWhere %q, want %q", got, c.want)
+			}
+			raw := string(st.files[stateFile])
+			if strings.Contains(raw, "St Mary") || strings.Contains(raw, "Byrnes") || strings.Contains(raw, "Chess") {
+				t.Errorf("link.json keeps a name: %s", raw)
 			}
 			cl.Close()
 			c2 := Open(Options{Store: st, Server: url, Now: clk.now})

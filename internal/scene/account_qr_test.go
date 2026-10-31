@@ -480,7 +480,7 @@ func TestLinkQRBusy(t *testing.T) {
 	}
 }
 
-// "Is this you?" names where the learner belongs when the server says
+// "Is this you?" says where the learner belongs when the server says
 // (halpwords#110), and the longest line still fits two lines of the
 // dialog.
 func TestPairedWho(t *testing.T) {
@@ -488,7 +488,7 @@ func TestPairedWho(t *testing.T) {
 		{"", "St Mary's", "Linked, but no name was set."},
 		{"Aoife", "", "Linked to Aoife."},
 		{"Aoife", "family", "Linked to Aoife (family)."},
-		{"Aoife", "St Mary's", "Linked to Aoife (St Mary's)."},
+		{"Aoife", "school", "Linked to Aoife (school)."},
 	} {
 		if got := pairedWho(c.name, c.where); got != c.want {
 			t.Errorf("pairedWho(%q, %q) = %q, want %q", c.name, c.where, got, c.want)
@@ -500,7 +500,7 @@ func TestPairedWho(t *testing.T) {
 	}
 	f := gfx.NewFont(face)
 	const tw = 480 - 40
-	long := pairedWho(strings.Repeat("Ó", 30), strings.Repeat("Saint Columba ", 3)[:39]+"…")
+	long := pairedWho(strings.Repeat("Ó", 30)+" "+strings.Repeat("Ó", 20), "school")
 	lines := wrap2(f, long, tw)
 	if len(lines) > 2 || strings.Join(lines, " ") != long {
 		t.Errorf("%q wraps to %q", long, lines)

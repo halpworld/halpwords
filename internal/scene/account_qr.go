@@ -518,11 +518,9 @@ func (a *Account) drawPair(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawShadow(dst, hint, dx, dy+h-48-24, 1, pal.Steel)
 }
 
-// drawConfirm draws "Is this you?".
 // pairedWho is the line "Is this you?" asks about: the learner's name,
-// and where they belong when the server said (a school's name, or
-// "family"), so a child with a common name picks the right one
-// (halpwords#110).
+// and where they belong when the server said ("family" or "school"), so
+// a child with the same name in both picks the right one (halpwords#110).
 func pairedWho(name, where string) string {
 	switch {
 	case name == "":
@@ -533,6 +531,7 @@ func pairedWho(name, where string) string {
 	return "Linked to " + name + " (" + where + ")."
 }
 
+// drawConfirm draws "Is this you?".
 func (a *Account) drawConfirm(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
 	p := a.pair

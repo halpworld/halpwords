@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"unicode"
 )
 
 // Linking by QR code (halpwords-server#153): the game asks the server for
@@ -366,12 +365,12 @@ func (c *Client) PairedLearner(ctx context.Context) (string, error) {
 
 // LinkedTo is where the learner a game was linked to by QR code
 // belongs, as the server says in its answer (halpwords#110): the
-// family's own child (Kind "family", no name), or a school's learner the
-// family is connected to (Kind "school", with the school's name).
-// Servers from before it leave it out.
+// family's own child (Kind "family") or a school's learner the family is
+// connected to (Kind "school"). Only the kind: a name the server might
+// send is never read (owner, 2026-10-31). Servers from before it leave
+// it out.
 type LinkedTo struct {
 	Kind string `json:"kind"`
-	Name string `json:"name,omitempty"`
 }
 
 // The kinds of LinkedTo.
@@ -380,48 +379,28 @@ const (
 	LinkedSchool = "school"
 )
 
-// maxWhere is how many characters of a school's name "Is this you?"
-// shows.
-const maxWhere = 40
-
-// clean is l with a kind the game knows and a name fit to show (no
-// control characters, spaces collapsed, at most maxWhere characters), or
-// nil.
+// clean is l when its kind is one the game knows, or nil.
 func (l *LinkedTo) clean() *LinkedTo {
 	if l == nil || l.Kind != LinkedFamily && l.Kind != LinkedSchool {
 		return nil
 	}
-	name := strings.Join(strings.FieldsFunc(l.Name, func(r rune) bool {
-		return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
-	}), " ")
-	if r := []rune(name); len(r) > maxWhere {
-		name = strings.TrimSpace(string(r[:maxWhere-1])) + "…"
-	}
-	if l.Kind == LinkedSchool && name == "" {
-		return nil
-	}
-	return &LinkedTo{Kind: l.Kind, Name: name}
+	return &LinkedTo{Kind: l.Kind}
 }
 
 // PairedWhere is where the learner a game linked by QR code belongs, in
-// a word or a name for "Is this you?": "family", a school's name, or ""
-// when the server didn't say (an older one) or the child has confirmed.
+// a word for "Is this you?": "family", "school", or "" when the server
+// didn't say (an older one), or the child has confirmed or unlinked.
 func (c *Client) PairedWhere() string {
 	if c == nil {
 		return ""
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	l := c.st.LinkedTo
-	switch {
-	case l == nil || !c.st.Unconfirmed || !c.st.linked():
+	l := c.st.LinkedTo.clean() // link.json may have been edited
+	if l == nil || !c.st.Unconfirmed || !c.st.linked() {
 		return ""
-	case l.Kind == LinkedSchool:
-		return l.Name
-	case l.Name != "":
-		return l.Name // a family's name, if a server ever sends one
 	}
-	return "family"
+	return l.Kind
 }
 
 // ConfirmPair is the child saying the learner the game was linked to by

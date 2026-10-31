@@ -9,9 +9,9 @@ import (
 	"github.com/halpworld/halpwords/internal/unifont"
 )
 
-// The widest "Is this you?" lines the cleaned names can make (a learner
-// name as long as the website allows, and the longest school name, of the
-// widest characters) still fit two lines of the dialog, and never draw past it.
+// The widest "Is this you?" lines (a learner name as long as the website
+// allows, of the widest characters, with either kind) still fit two lines
+// of the dialog, and never draw past it.
 func TestQAPairedWhoWorstCases(t *testing.T) {
 	face, err := unifont.ParseBytes(assets.UnifontHex)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestQAPairedWhoWorstCases(t *testing.T) {
 		}
 	}
 	// No panic or odd output for odd inputs.
-	for _, tc := range [][2]string{{"", ""}, {"", "family"}, {"A", "\x00"}, {"‮", "‮"}} {
+	for _, tc := range [][2]string{{"", ""}, {"", "family"}, {"A", "\x00"}, {"\u202e", "\u202e"}} {
 		if s := pairedWho(tc[0], tc[1]); s == "" {
 			t.Errorf("pairedWho(%q, %q) is empty", tc[0], tc[1])
 		}
