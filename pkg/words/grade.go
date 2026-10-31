@@ -48,14 +48,28 @@ const (
 
 // Grade compares typed against the accepted answers of e.
 // usedBackspace downgrades a Perfect to Correct.
+//
+// For English, contractions are expanded on both sides ("I'm" is "I am"),
+// unless the rules are case sensitive. The plain forms are graded too and the
+// better result kept, so a missing apostrophe ("dont") is still a Graze.
 func Grade(typed string, e Entry, lang *Language, rules Rules, usedBackspace bool) Result {
+	r := grade(typed, e, lang, rules, usedBackspace, false)
+	if lang != nil && lang.Code == English.Code && !rules.CaseSensitive {
+		if x := grade(typed, e, lang, rules, usedBackspace, true); x.Tier > r.Tier {
+			r = x
+		}
+	}
+	return r
+}
+
+func grade(typed string, e Entry, lang *Language, rules Rules, usedBackspace, expand bool) Result {
 	in := normalize(typed, rules)
 	best := Result{Tier: Miss, Expected: e.Answers[0]}
 	if in == "" {
 		return best
 	}
 	prep := func(s string) string {
-		if lang != nil && lang.Code == English.Code {
+		if expand {
 			s = expandContractions(s)
 		}
 		if !rules.ArticlesRequired {

@@ -18,6 +18,14 @@ func TestEnglishContractions(t *testing.T) {
 		{"won't", "will not", Perfect},
 		{"I'm", "I was", Miss},
 		{"don't", "do", Miss},
+		{"dont", "don't", Graze},
+		{"cant", "can't", Graze},
+		{"its", "it's", Graze},
+		{"lets", "let's", Graze},
+		{"didnt", "didn't", Graze},
+		{"wont", "won't", Graze},
+		{"isnt", "isn't", Graze},
+		{"youre", "you're", Graze},
 	}
 	for _, c := range cases {
 		e := Entry{Prompt: "x", Answers: []string{c.answer}}
@@ -33,5 +41,17 @@ func TestContractionsOnlyForEnglish(t *testing.T) {
 	e := Entry{Prompt: "x", Answers: []string{"j'ai"}}
 	if got := Grade("j'ai", e, fr, fr.Defaults, false); got.Tier != Perfect {
 		t.Errorf("French j'ai: %v", got.Tier)
+	}
+}
+
+func TestContractionsCaseSensitive(t *testing.T) {
+	r := English.Defaults
+	r.CaseSensitive = true
+	e := Entry{Prompt: "x", Answers: []string{"I'm"}}
+	if got := Grade("i'm", e, English, r, false); got.Tier != Miss {
+		t.Errorf("case-sensitive i'm for I'm: %v, want Miss", got.Tier)
+	}
+	if got := Grade("I'm", e, English, r, false); got.Tier != Perfect {
+		t.Errorf("case-sensitive I'm: %v, want Perfect", got.Tier)
 	}
 }
