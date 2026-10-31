@@ -51,6 +51,8 @@ var worldAmbience = map[string]audio.Ambience{
 	"Sandstone Tomb":     audio.Sand,
 	"Sunken Temple":      audio.Bubbles,
 	"Candy Caverns":      audio.Fizz,
+	"Mushroom Forest":    audio.Frogs,
+	"Star Observatory":   audio.Starlight,
 }
 
 var (

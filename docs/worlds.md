@@ -99,7 +99,7 @@ Garden never follows the Ice Halls.
 | 10 | 8 | Sandstone Tomb | glyph blocks (glowing turquoise glyphs) / rippled sand / slabs | cool dusk, not orange | urn, drifting sand, soft wind |
 
 After the last world the order repeats as a **second lap** (from floor 11
-when this was written; from floor 13 now, see below). Each world returns
+when this was written; from floor 15 now, see below). Each world returns
 with its other wall variants as the base, a denser prop layer and a slightly
 shifted fog, so a floor on the second lap never looks exactly like its
 first-lap floor. `proc.Lap(depth)` gives the lap.
@@ -119,6 +119,8 @@ music palette (`internal/audio/worlds.go`); tests fail if one is missing.
 |---|---|---|---|---|---|
 | 11 | 10 | Sunken Temple | teal temple bricks with seaweed / teal flagstones / slabs, tall; gold door frames | deep sea green | broken pillar, rising bubbles, bubbles and a deep hum |
 | 12 | 11 | Candy Caverns | pink rock candy with icing drips / gumdrop cobbles / candy rock; dark door frames | dark raspberry | lollipop, sugar sprinkles, fizz |
+| 13 | 12 | Mushroom Forest | dark foliage with glowing flowers and vines / dim grass / a giant cap's pink gills, tall | night blue-green | toadstool, glowing spores, frogs and crickets |
+| 14 | 13 | Star Observatory | night-blue blocks with gold star signs / polished tiles / a dark dome with constellations, tall; brass door frames | deep night blue | telescope, twinkling stars, a hush and faint glints |
 
 ## As built
 

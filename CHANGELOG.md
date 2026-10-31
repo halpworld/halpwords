@@ -7,6 +7,12 @@ version as its release notes.
 
 ### Added
 
+- **Two more worlds: the Mushroom Forest and the Star Observatory.** They
+  are floors 13 and 14, with glowing spores and twinkling stars, frogs in
+  the night and faint glints of starlight, and their own music. The
+  remixed second lap now starts at floor 15. `pkg/proc`: `Themes` gains
+  "Mushroom Forest" (index 12) and "Star Observatory" (13), with
+  `PropToadstool`, `PropTelescope`, `ParticleSpores` and `ParticleStars`.
 - **Two new worlds: the Sunken Temple and the Candy Caverns.** They are
   floors 11 and 12, after the Sandstone Tomb. Each has its own walls,
   props, particles (rising bubbles, sugar sprinkles), background sound and

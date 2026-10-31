@@ -9,7 +9,7 @@ import (
 func TestEveryWorldHasAmbience(t *testing.T) {
 	names := []string{"The Crypt", "Mossy Cellars", "Flooded Caves", "Lava Forge", "Ice Halls",
 		"Whispering Library", "Sky Garden", "Clockwork Workshop", "Amethyst Vaults", "Sandstone Tomb",
-		"Sunken Temple", "Candy Caverns"}
+		"Sunken Temple", "Candy Caverns", "Mushroom Forest", "Star Observatory"}
 	if len(worldAmbience) != len(names) {
 		t.Errorf("%d ambiences for %d worlds", len(worldAmbience), len(names))
 	}

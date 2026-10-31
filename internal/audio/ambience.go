@@ -11,23 +11,25 @@ import (
 type Ambience uint8
 
 const (
-	None     Ambience = iota // no ambience: today's music, unchanged
-	Dust                     // low wind in dusty halls
-	Crickets                 // chirps in the dark
-	Drips                    // water dripping
-	Rumble                   // a low rumble and the crackle of fire
-	Wind                     // icy wind
-	Pages                    // rustling pages and a soft candle
-	Birds                    // distant birds
-	Ticking                  // a clock ticking, calmly
-	Chimes                   // soft crystal chimes
-	Sand                     // soft wind over sand
-	Bubbles                  // bubbles rising through still water
-	Fizz                     // fizzing sugar and the odd tiny sparkle
+	None      Ambience = iota // no ambience: today's music, unchanged
+	Dust                      // low wind in dusty halls
+	Crickets                  // chirps in the dark
+	Drips                     // water dripping
+	Rumble                    // a low rumble and the crackle of fire
+	Wind                      // icy wind
+	Pages                     // rustling pages and a soft candle
+	Birds                     // distant birds
+	Ticking                   // a clock ticking, calmly
+	Chimes                    // soft crystal chimes
+	Sand                      // soft wind over sand
+	Bubbles                   // bubbles rising through still water
+	Fizz                      // fizzing sugar and the odd tiny sparkle
+	Frogs                     // frogs croaking softly in a night forest
+	Starlight                 // a hushed hum and faint, high glints
 	numAmbiences
 )
 
-var ambienceNames = [numAmbiences]string{"none", "dust", "crickets", "drips", "rumble", "wind", "pages", "birds", "ticking", "chimes", "sand", "bubbles", "fizz"}
+var ambienceNames = [numAmbiences]string{"none", "dust", "crickets", "drips", "rumble", "wind", "pages", "birds", "ticking", "chimes", "sand", "bubbles", "fizz", "frogs", "starlight"}
 
 func (a Ambience) String() string {
 	if a >= numAmbiences {
@@ -37,7 +39,7 @@ func (a Ambience) String() string {
 }
 
 // Ambiences lists every ambience that makes a sound, for tests and tools.
-var Ambiences = []Ambience{Dust, Crickets, Drips, Rumble, Wind, Pages, Birds, Ticking, Chimes, Sand, Bubbles, Fizz}
+var Ambiences = []Ambience{Dust, Crickets, Drips, Rumble, Wind, Pages, Birds, Ticking, Chimes, Sand, Bubbles, Fizz, Frogs, Starlight}
 
 // ambienceCap is the most the ambience layer may reach, against music that
 // peaks near 0.9: it sits well beneath it.
@@ -80,6 +82,12 @@ func RenderAmbience(s Song, rate int, yield func()) []float32 {
 		l.bubbles(2.4)
 	case Fizz:
 		l.fizz(6)
+	case Frogs:
+		l.frogs(1.6)
+		l.crickets(0.8)
+	case Starlight:
+		l.bed(0.02, 0.003, 2, 0.4, 0.03)
+		l.glints(0.4)
 	}
 	peak := 0.0
 	for i, v := range l.buf {
@@ -341,6 +349,28 @@ func (l *layer) fizz(perSec float64) {
 	}
 	for _, at := range l.times(perSec / 12) {
 		l.ping(at, 2000+l.rng.Float64()*600, 1.1, 0.04, 0.12, 0.015+l.rng.Float64()*0.01)
+	}
+}
+
+// frogs adds soft low croaks, two or three at a time, each falling a
+// little in pitch.
+func (l *layer) frogs(perSec float64) {
+	for _, at := range l.times(perSec / 3) {
+		f := 180 + l.rng.Float64()*90
+		n := 2 + l.rng.IntN(2)
+		amp := 0.04 + l.rng.Float64()*0.03
+		for p := 0; p < n; p++ {
+			l.ping(at+int(float64(p)*0.16*l.rate), f, 0.8, 0.03, 0.11, amp)
+		}
+	}
+}
+
+// glints adds faint high notes that ring for a long while, like light
+// catching a lens.
+func (l *layer) glints(perSec float64) {
+	for _, at := range l.times(perSec) {
+		f := 2200 + l.rng.Float64()*900
+		l.ping(at, f, 1, 0.6, 1.6, 0.01+l.rng.Float64()*0.008)
 	}
 }
 
