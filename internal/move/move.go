@@ -72,7 +72,10 @@ const (
 // moved: ai.json, which holds the player's AI keys, and link.json,
 // link-queue.json and link-parked.json, which hold the link's tokens and
 // the events waiting to be sent (a URL can end up in the browser's
-// history; the game links again at its new address); crash reports; damaged files kept to one side; and
+// history; the game links again at its new address); the lists assigned
+// through the link (assigned/, with their audio: licensed teacher lists
+// don't leave the account, and the game fetches them again once it is
+// linked at the new address, #88); crash reports; damaged files kept to one side; and
 // this package's own files.
 //
 // The names are matched on the last part of the path, because a learner's
@@ -88,10 +91,21 @@ func Exportable(name string) bool {
 		base == "crash.txt",
 		strings.HasSuffix(name, ".bad"),
 		strings.HasPrefix(name, stashDir),
-		isReports(name):
+		isReports(name),
+		isAssigned(name):
 		return false
 	}
 	return true
+}
+
+// isAssigned reports whether name is in the folder of the lists assigned
+// through the link, in a learner's folder or at the root.
+func isAssigned(name string) bool {
+	parts := strings.Split(name, "/")
+	if parts[0] == "profiles" && len(parts) >= 3 {
+		parts = parts[2:]
+	}
+	return len(parts) > 1 && parts[0] == "assigned"
 }
 
 // isReports reports whether name is in the report queue's folder, at the
