@@ -97,3 +97,23 @@ func TestBoss(t *testing.T) {
 		t.Errorf("only %d bosses", len(seen))
 	}
 }
+
+// TestGradeAmong: typing another word's answer is a Miss, not a Graze, and
+// with no other words it is Grade.
+func TestGradeAmong(t *testing.T) {
+	mere := words.Entry{Prompt: "mother", Answers: []string{"mère"}}
+	pere := words.Entry{Prompt: "father", Answers: []string{"père"}}
+	if r := Grade("père", mere, "fr", false); r.Tier != words.Graze {
+		t.Fatalf("plain Grade = %v, want Graze", r.Tier)
+	}
+	r := GradeAmong("père", mere, []words.Entry{mere, pere}, "fr", false)
+	if r.Tier != words.Miss || r.Confused != "père" {
+		t.Errorf("GradeAmong = %+v, want a Miss confused with père", r)
+	}
+	if got, want := GradeAmong("père", mere, nil, "fr", false), Grade("père", mere, "fr", false); got != want {
+		t.Errorf("with no others %+v, want %+v", got, want)
+	}
+	if r := GradeAmong("mère", mere, []words.Entry{pere}, "fr", false); r.Tier != words.Perfect {
+		t.Errorf("right answer = %v", r.Tier)
+	}
+}
