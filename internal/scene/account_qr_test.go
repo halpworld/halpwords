@@ -101,8 +101,7 @@ func qrContext(t *testing.T, site *qrSite) *game.Context {
 	withFont(t, ctx)
 	ctx.Input = &input.State{}
 	store := memFiles{}
-	ctx.Link = link.Open(link.Options{Store: store, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
+	ctx.Link = testLink(t, link.Options{Store: store, Server: srv.URL})
 	qrStores[ctx] = qrOpened{store, srv.URL}
 	return ctx
 }
@@ -219,8 +218,7 @@ func TestLinkQRNothingUntilOpened(t *testing.T) {
 	ctx2 := testContext(t)
 	withFont(t, ctx2)
 	ctx2.Input = &input.State{}
-	ctx2.Link = link.Open(link.Options{Store: qrStore(ctx), Server: qrServer(ctx)})
-	t.Cleanup(ctx2.Link.Close)
+	ctx2.Link = testLink(t, link.Options{Store: qrStore(ctx), Server: qrServer(ctx)})
 	b := NewAccount(ctx2).(*Account)
 	n = len(site.sent())
 	for range 400 {

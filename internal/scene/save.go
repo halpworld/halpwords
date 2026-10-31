@@ -328,10 +328,8 @@ func (c *Crawl) writeSave(ctx *game.Context, suspend bool) bool {
 // An Adventure comes back where it was; a Hardcore or Daily run is a
 // suspend too, and so can be picked up once, like any suspend.
 //
-// Two tabs of the web game would share one save slot, so a Hardcore
-// suspend written by one could be picked up by another and so forked:
-// only the tab holding the save lock plays (game.Start, #111). A browser
-// without Web Locks plays unguarded, as before.
+// Known limit: two tabs of the web game share one save slot, so a Hardcore
+// suspend written by one can be picked up by another and so forked.
 //
 // Nothing is written where the pause menu would not offer Suspend: in a
 // battle or a puzzle, after a fall, or in a race. The save already on disk

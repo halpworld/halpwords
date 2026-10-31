@@ -74,8 +74,7 @@ func signInScreen(t *testing.T, f *slowServer, srv *httptest.Server) (*SignIn, *
 	t.Cleanup(func() { openPage = browser.Open })
 	ctx := testContext(t)
 	ctx.Input = &input.State{}
-	ctx.Link = link.Open(link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
+	ctx.Link = testLink(t, link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
 	t.Cleanup(f.open) // before the link closes, which waits for its requests
 	return NewSignIn(ctx, "").(*SignIn), ctx
 }

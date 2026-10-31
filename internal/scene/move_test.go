@@ -95,6 +95,10 @@ func TestImportingRefusesToApplyOnError(t *testing.T) {
 	t.Cleanup(func() { save.Use(save.Root) }) // opening the learners picks a learner's folder
 	ctx := testContext(t)
 	ctx.TestOpen()
+	// The link opened here (ReloadSaves opens another; the move would
+	// have closed this one first) and the one open at the end.
+	first := ctx.Link
+	t.Cleanup(func() { first.Close(); ctx.Link.Close() })
 	next := ctx.TestScenes(nil)
 	st := memStore{"adventure.json": []byte("here")}
 	in := &move.Incoming{ID: "0123456789abcdef", Files: map[string][]byte{"adventure.json": []byte("brought")}}

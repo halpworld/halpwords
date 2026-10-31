@@ -46,8 +46,7 @@ func TestSignInWithSchoolAccount(t *testing.T) {
 	t.Cleanup(func() { openPage = browser.Open })
 	ctx := testContext(t)
 	files := memFiles{}
-	ctx.Link = link.Open(link.Options{Store: files, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
+	ctx.Link = testLink(t, link.Options{Store: files, Server: srv.URL})
 
 	s := NewSignIn(ctx, "").(*SignIn)
 	if s.ways()[2] != siWaySSO {
@@ -117,8 +116,7 @@ func TestSignInSSOKeepsAskingWhenTheServerIsSlow(t *testing.T) {
 	openPage = func(string) error { return nil }
 	t.Cleanup(func() { openPage = browser.Open })
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
+	ctx.Link = testLink(t, link.Options{Store: memFiles{}, Server: srv.URL})
 	s := NewSignIn(ctx, "").(*SignIn)
 	s.startSSO(ctx)
 	s.answer(ctx, <-s.pending)
@@ -156,8 +154,7 @@ func ssoScreen(t *testing.T) (*SignIn, *game.Context) {
 	openPage = func(string) error { return nil }
 	t.Cleanup(func() { openPage = browser.Open })
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
+	ctx.Link = testLink(t, link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
 	s := NewSignIn(ctx, "").(*SignIn)
 	s.startSSO(ctx)
 	s.answer(ctx, <-s.pending)

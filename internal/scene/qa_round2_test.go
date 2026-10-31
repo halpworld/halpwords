@@ -65,8 +65,7 @@ func TestSignInSSOTakesSlowDown(t *testing.T) {
 	t.Cleanup(srv.Close)
 	openPage = func(string) error { return nil }
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
+	ctx.Link = testLink(t, link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
 	s := NewSignIn(ctx, "").(*SignIn)
 	s.startSSO(ctx)
 	s.answer(ctx, <-s.pending)
@@ -126,7 +125,7 @@ func accountSyncCtx(t *testing.T, f *syncServer) (*Account, *game.Context) {
 	srv := httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(srv.Close)
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
+	ctx.Link = testLink(t, link.Options{Store: &lockedFiles{m: memFiles{}}, Server: srv.URL})
 	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
 		t.Fatal(err)
 	}
