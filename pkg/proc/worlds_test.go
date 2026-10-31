@@ -262,7 +262,7 @@ func TestWorldTexturesPinned(t *testing.T) {
 		"Lava Forge":         "b69ff3e67027a092cb6639d145eb4bd04fa6b36740798bb1b4072c59cb99e508",
 		"Amethyst Vaults":    "b1f6129d6c878456e61693568b22ae66cd5b4ca89e22d638c30a771777b445eb",
 		"Clockwork Workshop": "087266f7f35489791a6edeed68fb8cbd0b13172da4b0bf79f419b1dd3658092a",
-		"Sky Garden":         "69893c58e642807076f83828a4828aa9702c6f27d88d63b24de6c4ef5e01c6ba",
+		"Sky Garden":         "344dac08c92897a42cbb9265bbac934af5f18efaf1d24f16dc0b93d4fd843708",
 		"Sandstone Tomb":     "82f312a7dc1e0978a7b634c129a9ddfc8d4d72dbcf61503711f320edc8033b59",
 		"Whispering Library": "2da9cfb946d95448db0c85408396b69be168c7840225f59acf5dc72d1bc6dfc1",
 	}
@@ -384,6 +384,20 @@ func TestLavaDoesNotGlare(t *testing.T) {
 			if share := float64(n) / float64(len(m.Pix)); share > 0.10 {
 				t.Errorf("seed %d frame %d: %.0f%% of the lava floor is yellow", seed, f, share*100)
 			}
+		}
+	}
+}
+
+// SpriteMinLight is always in [0,1]: unset gives 0.35, and anything else
+// is clamped, NaN included.
+func TestSpriteMinLightClamped(t *testing.T) {
+	for _, c := range []struct{ in, want float64 }{
+		{0, 0.35}, {0.45, 0.45}, {1, 1}, {1.5, 1}, {math.Inf(1), 1},
+		{-0.2, 0}, {math.Inf(-1), 0}, {math.NaN(), 0},
+	} {
+		th := Theme{SpriteLight: c.in}
+		if got := th.SpriteMinLight(); got != c.want {
+			t.Errorf("SpriteLight %v: SpriteMinLight %v, want %v", c.in, got, c.want)
 		}
 	}
 }
