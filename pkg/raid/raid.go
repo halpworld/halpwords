@@ -117,6 +117,18 @@ func Grade(typed string, entry words.Entry, langCode string, usedBackspace bool)
 	return words.Grade(typed, entry, lang, lang.Defaults, usedBackspace)
 }
 
+// GradeAmong is Grade for a word dealt from a set of words, as the game
+// grades one (words.GradeAmong): a one-letter slip that is exactly the
+// answer to another word in others is a Miss, not a Graze. others may be
+// nil, which is Grade.
+func GradeAmong(typed string, entry words.Entry, others []words.Entry, langCode string, usedBackspace bool) words.Result {
+	lang, ok := words.Lookup(langCode)
+	if !ok {
+		lang = &words.Language{Code: langCode}
+	}
+	return words.GradeAmong(typed, entry, others, lang, lang.Defaults, usedBackspace)
+}
+
 // Boss is who a raid fights: one of the dungeon's bosses.
 type Boss struct {
 	Name   string
