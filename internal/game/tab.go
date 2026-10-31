@@ -34,7 +34,9 @@ type Starter struct {
 	tick   int
 }
 
-// holdEvery is how often, in updates, a waiting tab tries the lock again.
+// holdEvery is how often, in updates, a waiting tab checks whether it
+// holds the lock now (the browser hands it over when the other tab
+// closes; browser.HoldTab).
 const holdEvery = 60
 
 // Start is New for first, or a Starter that waits for the other tab. A
