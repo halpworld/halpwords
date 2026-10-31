@@ -518,6 +518,19 @@ func (a *Account) drawPair(dst *ebiten.Image, ctx *game.Context) {
 	f.DrawShadow(dst, hint, dx, dy+h-48-24, 1, pal.Steel)
 }
 
+// pairedWho is the line "Is this you?" asks about: the learner's name,
+// and where they belong when the server said ("family" or "school"), so
+// a child with the same name in both picks the right one (halpwords#110).
+func pairedWho(name, where string) string {
+	switch {
+	case name == "":
+		return "Linked, but no name was set."
+	case where == "":
+		return "Linked to " + name + "."
+	}
+	return "Linked to " + name + " (" + where + ")."
+}
+
 // drawConfirm draws "Is this you?".
 func (a *Account) drawConfirm(dst *ebiten.Image, ctx *game.Context) {
 	f := ctx.Font
@@ -535,10 +548,7 @@ func (a *Account) drawConfirm(dst *ebiten.Image, ctx *game.Context) {
 			dx, dy, pal.Yellow)
 		hint = "Enter try again   N no, unlink   Esc later"
 	default:
-		who := "Linked, but no name was set."
-		if p.name != "" {
-			who = "Linked to " + p.name + "."
-		}
+		who := pairedWho(p.name, ctx.Link.PairedWhere())
 		y := drawLines(dst, f, wrap2(f, who, tw), dx, dy, pal.White)
 		f.DrawShadow(dst, "Is this you?", dx, y+4, 2, pal.Yellow)
 		y += 4 + 2*gfx.LineHeight + 6

@@ -327,6 +327,9 @@ type tokens struct {
 	ExpiresIn        int    `json:"expires_in"`
 	RefreshToken     string `json:"refresh_token"`
 	RefreshExpiresIn int    `json:"refresh_expires_in"`
+	// LinkedTo is only in the answer to a link by QR code, from servers
+	// that send it (pair.go).
+	LinkedTo *LinkedTo `json:"linked_to"`
 }
 
 // keep stores a new pair of tokens, on disk before they are used where
