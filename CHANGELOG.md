@@ -60,6 +60,20 @@ version as its release notes.
   and the door image halpwords-server draws, are byte for byte what they
   were. `pkg/maps` keeps its six themes, so hand-made maps and older games
   are unaffected.
+- `pkg/proc`: other packages can build their own worlds. The types of
+  `Surface.Paint`, `Surface.Mods`, `Surface.Anim` and `Theme.Variants` are
+  exported as `Painter`, `Modifier` and `Animator`, and so are the
+  families, modifiers and animations (`WallBricks`, `FloorLava`,
+  `CeilPipes`, `ModMoss`, `AnimRipples` and the rest). A surface with no
+  `Paint` uses The Crypt's family, so a `Theme` with only the four ramps
+  still draws. No family, `StairsTexture` or `StairsTex` panics on a short
+  or empty ramp: a short ramp repeats its lightest colour, and an empty
+  `Accent` borrows `Base`. Every texture is unchanged, byte for byte.
+- `pkg/proc`: `Theme.SpriteSwap` draws one sprite colour as another in a
+  world (the Ice Halls draw the bat's purple body pink), and
+  `SpriteMinLight` now always returns a value in [0,1]. The Sky Garden's
+  sky gradient no longer runs in straight dither stripes. Nothing else
+  changes; The Crypt and the server's door image are untouched.
 
 - **Hear the word after a miss.** A game linked to an account whose plan
   includes pronunciation downloads an audio pack for each assigned list,

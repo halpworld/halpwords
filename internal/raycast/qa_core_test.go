@@ -1,6 +1,7 @@
 package raycast
 
 import (
+	"image/color"
 	"math"
 	"reflect"
 	"slices"
@@ -305,4 +306,115 @@ func solidSprite() *proc.Indexed {
 		m.Pix[i] = pal.Index(pal.White)
 	}
 	return m
+}
+
+// When the frame number wraps around, sprites drawn long ago (with the
+// frame number that comes round again) no longer hide particles, and
+// sprites drawn on the wrapped frame still do.
+func TestParticlesFrameWrap(t *testing.T) {
+	s := sceneFor(4) // the Lava Forge, full of embers
+	d := 0.51
+	front := []Sprite{{X: s.cam.X + s.cam.DirX*d, Y: s.cam.Y + s.cam.DirY*d, Size: 1, Img: solidSprite()}}
+	const tick = 600
+
+	// What the particles look like with no sprite at all.
+	fresh := New(192, 120)
+	fresh.SetWorld(s.theme)
+	s.draw(fresh, nil, tick)
+
+	r := New(192, 120)
+	r.SetWorld(s.theme)
+	s.draw(r, front, tick) // frame 1: the sprite marks its pixels
+	if r.frame != 1 {
+		t.Fatalf("first frame is %d, want 1", r.frame)
+	}
+	r.frame = math.MaxUint32
+	s.draw(r, nil, tick) // wraps round to frame 1 again
+	if r.frame != 1 {
+		t.Fatalf("wrapped frame is %d, want 1", r.frame)
+	}
+	if !slices.Equal(r.Img.Pix, fresh.Img.Pix) {
+		t.Error("after the frame number wrapped, an old sprite still hid particles")
+	}
+
+	// A sprite drawn on the wrapped frame hides particles as usual.
+	r.frame = math.MaxUint32
+	r.Render(s.level, s.tex, s.cam, front, tick)
+	before := slices.Clone(r.Img.Pix)
+	r.DrawParticles(s.cam, tick)
+	covered := 0
+	for o := range r.spriteAt {
+		if r.spriteAt[o] != r.frame {
+			continue
+		}
+		covered++
+		if !slices.Equal(before[o*4:o*4+4], r.Img.Pix[o*4:o*4+4]) {
+			t.Fatalf("on the wrapped frame a particle drew over a sprite at pixel %d", o)
+		}
+	}
+	if covered == 0 {
+		t.Fatal("the test sprite covered nothing")
+	}
+}
+
+// SetWorld keeps the sprite light inside [0,1], whatever a world asks for.
+func TestSpriteLightClamped(t *testing.T) {
+	r := New(32, 20)
+	for _, v := range []float64{-1, math.NaN(), 1.5, math.Inf(1), math.Inf(-1)} {
+		th := proc.Themes[0]
+		th.SpriteLight = v
+		r.SetWorld(&th)
+		if r.spriteLight < 0 || r.spriteLight > 1 || r.spriteLevel < 0 || r.spriteLevel >= levels {
+			t.Errorf("SpriteLight %v: sprite light %v, level %d", v, r.spriteLight, r.spriteLevel)
+		}
+	}
+}
+
+// A world's sprite swaps draw one colour as another at every light level,
+// and leave the other colours as they were.
+func TestSpriteSwap(t *testing.T) {
+	plain, swapped := New(32, 20), New(32, 20)
+	th := proc.Themes[0]
+	plain.SetWorld(&th)
+	th.SpriteSwap = [][2]color.RGBA{{pal.Purple, pal.Pink}}
+	swapped.SetWorld(&th)
+	purple, pink := pal.Index(pal.Purple), pal.Index(pal.Pink)
+	for lv := range levels {
+		for c := range 256 {
+			want := plain.spriteShade[lv][c]
+			if uint8(c) == purple {
+				want = plain.spriteShade[lv][pink]
+			}
+			if got := swapped.spriteShade[lv][c]; got != want {
+				t.Errorf("level %d colour %d: %d, want %d", lv, c, got, want)
+			}
+		}
+	}
+}
+
+// Bats stay clear of the air in the worlds where they used to sink: in
+// the Ice Halls the body is pink up close, and in the Lava Forge no part
+// of the body is near-black at any distance (#73).
+func TestBatsStandOut(t *testing.T) {
+	r := New(32, 20)
+	body := []color.RGBA{pal.Night, pal.Plum, pal.Purple, pal.Pink} // the bat's ramp
+	for i := range proc.Themes {
+		th := &proc.Themes[i]
+		r.SetWorld(th)
+		switch th.Name {
+		case "Ice Halls":
+			near := r.spriteShade[levels-1][pal.Index(proc.MonsterBody(1))]
+			if near != pal.Index(pal.Pink) {
+				t.Errorf("Ice Halls: bat body up close is %v, want pink", pal.All[near])
+			}
+		case "Lava Forge":
+			for lv := r.spriteLevel; lv < levels; lv++ {
+				for _, c := range body {
+					if l := luminance(pal.All[r.spriteShade[lv][pal.Index(c)]]); l < 0.05 {
+						t.Errorf("Lava Forge level %d: bat colour %v is near-black (luminance %.3f)", lv, c, l)
+					}
+				}
+			}
+		}
+	}
 }

@@ -22,9 +22,11 @@ type Theme struct {
 
 	// The surfaces of the world. A Surface with no Look.Base paints with
 	// the ramps above: Wall and Moss for walls, Floor for floors, and Ceil
-	// with timber beams for ceilings.
+	// with timber beams for ceilings. One with no Paint uses The Crypt's
+	// families: WallBricks, FloorFlagstones and CeilBeams. So a Theme with
+	// only the four ramps, as before the worlds, still draws.
 	Walls    Surface
-	Variants [2][]modifier // added to Walls for wall variants 1 and 2
+	Variants [2][]Modifier // added to Walls for wall variants 1 and 2
 	Floors   Surface
 	Ceiling  Surface
 	Frame    []color.RGBA // door frames and stair steps; nil means Wall
@@ -38,6 +40,11 @@ type Theme struct {
 	// SpriteLight is the least light monsters and props get, however far
 	// away, so they never sink into the fog; 0 means 0.35.
 	SpriteLight float64
+
+	// SpriteSwap recolours sprites in this world: each pair's first colour
+	// is drawn as the second, before light and fog. It lifts a monster
+	// colour that is lost in the world's air.
+	SpriteSwap [][2]color.RGBA
 
 	Prop      func(seed uint64) *Indexed // a decoration standing on the floor
 	PropSize  float64                    // its height in wall heights, at most 0.4
@@ -76,10 +83,10 @@ var Themes = []Theme{
 		Floor:    []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Granite, pal.Stone},
 		Ceil:     []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Mahogany},
 		Moss:     []color.RGBA{pal.Forest, pal.Olive},
-		Walls:    Surface{Paint: wallBricks},
-		Variants: [2][]modifier{{modMoss}, {modCrack}},
-		Floors:   Surface{Paint: floorFlagstones},
-		Ceiling:  Surface{Paint: ceilBeams},
+		Walls:    Surface{Paint: WallBricks},
+		Variants: [2][]Modifier{{ModMoss}, {ModCrack}},
+		Floors:   Surface{Paint: FloorFlagstones},
+		Ceiling:  Surface{Paint: CeilBeams},
 		Fog:      pal.Black,
 		Light:    rgb(255, 239, 216), // today's warm torchlight, exactly
 		Prop:     PropBones, PropSize: 0.35, PropRooms: 0.5,
@@ -91,16 +98,16 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Olive, pal.Forest},
 		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Olive},
 		Moss:  []color.RGBA{pal.Forest, pal.Green},
-		Walls: Surface{Paint: wallEarth, Mods: []modifier{modMoss}, Look: Look{
+		Walls: Surface{Paint: WallEarth, Mods: []Modifier{ModMoss}, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Plum, pal.Mahogany, pal.Brown, pal.Tan},
 			Accent: []color.RGBA{pal.Forest, pal.Green, pal.Lime},
 		}},
-		Variants: [2][]modifier{{modVines}, {modVines, modMoss}},
-		Floors: Surface{Paint: floorCobbles, Look: Look{
+		Variants: [2][]Modifier{{ModVines}, {ModVines, ModMoss}},
+		Floors: Surface{Paint: FloorCobbles, Look: Look{
 			Base:   []color.RGBA{pal.Night, pal.Slate, pal.Granite, pal.Stone, pal.Ash},
 			Accent: []color.RGBA{pal.Forest, pal.Green},
 		}},
-		Ceiling: Surface{Paint: wallBricks, Mods: []modifier{modMoss}, Look: Look{
+		Ceiling: Surface{Paint: WallBricks, Mods: []Modifier{ModMoss}, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Plum, pal.Mahogany, pal.Brown, pal.Bronze},
 			Accent: []color.RGBA{pal.Forest, pal.Olive},
 		}},
@@ -116,16 +123,16 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy, pal.Teal},
 		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy},
 		Moss:  []color.RGBA{pal.Teal, pal.Green},
-		Walls: Surface{Paint: wallCave, Look: Look{
+		Walls: Surface{Paint: WallCave, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy, pal.Teal, pal.Cyan},
 			Accent: []color.RGBA{pal.Navy, pal.Cyan, pal.Ice},
 		}},
-		Variants: [2][]modifier{{modDrips}, {modDrips, modDrips}},
-		Floors: Surface{Paint: floorWater, Anim: animRipples, Look: Look{
+		Variants: [2][]Modifier{{ModDrips}, {ModDrips, ModDrips}},
+		Floors: Surface{Paint: FloorWater, Anim: AnimRipples, Look: Look{
 			Base:   []color.RGBA{pal.Night, pal.Indigo, pal.Navy, pal.Blue},
 			Accent: []color.RGBA{pal.Sky, pal.Cyan},
 		}},
-		Ceiling: Surface{Paint: ceilRock, Look: Look{
+		Ceiling: Surface{Paint: CeilRock, Look: Look{
 			Base: []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy, pal.Teal},
 		}},
 		Frame: []color.RGBA{pal.Black, pal.Night, pal.Navy, pal.Steel, pal.Ice, pal.White},
@@ -141,14 +148,14 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Night, pal.Indigo, pal.Navy, pal.Steel, pal.Ice},
 		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Navy},
 		Moss:  []color.RGBA{pal.Sky, pal.Cyan},
-		Walls: Surface{Paint: wallIce, Look: Look{
+		Walls: Surface{Paint: WallIce, Look: Look{
 			Base: []color.RGBA{pal.Indigo, pal.Navy, pal.Blue, pal.Sky, pal.Cyan, pal.Ice, pal.White},
 		}},
-		Variants: [2][]modifier{{modFrost}, {modCrack}},
-		Floors: Surface{Paint: floorSnow, Look: Look{
+		Variants: [2][]Modifier{{ModFrost}, {ModCrack}},
+		Floors: Surface{Paint: FloorSnow, Look: Look{
 			Base: []color.RGBA{pal.Navy, pal.Steel, pal.Ice, pal.White},
 		}},
-		Ceiling: Surface{Paint: ceilIce, Look: Look{
+		Ceiling: Surface{Paint: CeilIce, Look: Look{
 			Base:   []color.RGBA{pal.Navy, pal.Blue, pal.Steel},
 			Accent: []color.RGBA{pal.Navy, pal.Cyan, pal.Ice, pal.White},
 		}},
@@ -157,8 +164,10 @@ var Themes = []Theme{
 		Light:  rgb(220, 235, 255),
 		Reach:  1.15,
 		Height: 1.5,
-		// The bat and other dark monsters stay clear of the blue fog.
+		// The bat and other dark monsters stay clear of the blue fog; the
+		// purple bat body is drawn pink, which stands out from the indigo.
 		SpriteLight: 0.45,
+		SpriteSwap:  [][2]color.RGBA{{pal.Purple, pal.Pink}},
 		Prop:        PropIce, PropSize: 0.4, PropRooms: 0.5,
 		Particles: ParticleSnow,
 	},
@@ -168,16 +177,16 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Mahogany, pal.Brown},
 		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Mahogany},
 		Moss:  []color.RGBA{pal.Orange, pal.Yellow},
-		Walls: Surface{Paint: wallBasalt, Look: Look{
+		Walls: Surface{Paint: WallBasalt, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Granite, pal.Stone},
 			Accent: []color.RGBA{pal.Red, pal.Orange, pal.Yellow},
 		}},
-		Variants: [2][]modifier{{modGlowCracks}, {modSoot}},
-		Floors: Surface{Paint: floorLava, Anim: animLava, Look: Look{
+		Variants: [2][]Modifier{{ModGlowCracks}, {ModSoot}},
+		Floors: Surface{Paint: FloorLava, Anim: AnimLava, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Mahogany},
 			Accent: []color.RGBA{pal.Red, pal.Orange, pal.Yellow},
 		}},
-		Ceiling: Surface{Paint: ceilRock, Look: Look{
+		Ceiling: Surface{Paint: CeilRock, Look: Look{
 			Base: []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Mahogany, pal.Red},
 		}},
 		Frame: []color.RGBA{pal.Black, pal.Mahogany, pal.Red, pal.Orange, pal.Yellow, pal.White},
@@ -194,16 +203,16 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Plum, pal.Purple},
 		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Plum},
 		Moss:  []color.RGBA{pal.Pink, pal.Skin},
-		Walls: Surface{Paint: wallCrystal, Look: Look{
+		Walls: Surface{Paint: WallCrystal, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Night, pal.Plum, pal.Purple, pal.Pink, pal.Skin},
 			Accent: []color.RGBA{pal.Pink, pal.Skin, pal.White},
 		}},
-		Variants: [2][]modifier{{modVeins}, {modVeins, modVeins}},
-		Floors: Surface{Paint: floorChecker, Look: Look{
+		Variants: [2][]Modifier{{ModVeins}, {ModVeins, ModVeins}},
+		Floors: Surface{Paint: FloorChecker, Look: Look{
 			Base:   []color.RGBA{pal.Night, pal.Indigo, pal.Plum, pal.Purple},
 			Accent: []color.RGBA{pal.Plum, pal.Purple, pal.Pink, pal.Skin},
 		}},
-		Ceiling: Surface{Paint: ceilCrystal, Look: Look{
+		Ceiling: Surface{Paint: CeilCrystal, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Night, pal.Indigo, pal.Plum, pal.Purple},
 			Accent: []color.RGBA{pal.Purple, pal.Pink, pal.Skin},
 		}},
@@ -220,13 +229,13 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Black, pal.Mahogany, pal.Brown, pal.Bronze, pal.Tan},
 		Ceil:  []color.RGBA{pal.Black, pal.Night, pal.Slate, pal.Granite},
 		Moss:  []color.RGBA{pal.Bronze, pal.Tan},
-		Walls: Surface{Paint: wallMetal, Look: Look{
+		Walls: Surface{Paint: WallMetal, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Slate, pal.Granite, pal.Stone, pal.Ash, pal.Steel},
 			Accent: []color.RGBA{pal.Mahogany, pal.Bronze, pal.Tan, pal.Yellow},
 		}},
-		Variants: [2][]modifier{{modGear}, {modPipe}},
-		Floors:   Surface{Paint: floorGrate},
-		Ceiling: Surface{Paint: ceilPipes, Look: Look{
+		Variants: [2][]Modifier{{ModGear}, {ModPipe}},
+		Floors:   Surface{Paint: FloorGrate},
+		Ceiling: Surface{Paint: CeilPipes, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Night, pal.Slate},
 			Accent: []color.RGBA{pal.Mahogany, pal.Bronze, pal.Tan, pal.Yellow},
 		}},
@@ -243,17 +252,17 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Olive, pal.Forest, pal.Green, pal.Lime},
 		Ceil:  []color.RGBA{pal.Navy, pal.Blue, pal.Sky, pal.Cyan},
 		Moss:  []color.RGBA{pal.Pink, pal.Rose},
-		Walls: Surface{Paint: wallHedge, Mods: []modifier{modRaggedTop}, Look: Look{
+		Walls: Surface{Paint: WallHedge, Mods: []Modifier{ModRaggedTop}, Look: Look{
 			Base:   []color.RGBA{pal.Black, pal.Forest, pal.Green, pal.Lime},
 			Accent: []color.RGBA{pal.Pink, pal.Rose, pal.White, pal.Yellow},
 		}},
-		Variants: [2][]modifier{{modFlowers}, {modFlowers, modFlowers}},
-		Floors: Surface{Paint: floorGrass, Look: Look{
+		Variants: [2][]Modifier{{ModFlowers}, {ModFlowers, ModFlowers}},
+		Floors: Surface{Paint: FloorGrass, Look: Look{
 			Base:   []color.RGBA{pal.Olive, pal.Forest, pal.Green, pal.Lime},
 			Accent: []color.RGBA{pal.Yellow, pal.White, pal.Pink},
 		}},
 		// The ceiling is only seen if the sky is turned off.
-		Ceiling: Surface{Paint: ceilSlabs, Look: Look{Base: []color.RGBA{pal.Navy, pal.Blue, pal.Sky, pal.Cyan}}},
+		Ceiling: Surface{Paint: CeilSlabs, Look: Look{Base: []color.RGBA{pal.Navy, pal.Blue, pal.Sky, pal.Cyan}}},
 		Frame:   []color.RGBA{pal.Black, pal.Black, pal.Night, pal.Forest, pal.Night, pal.Forest},
 		// Below 85% luminance everywhere, so the open sky never glares.
 		Fog:   rgb(110, 160, 250),
@@ -271,13 +280,13 @@ var Themes = []Theme{
 		Moss:  []color.RGBA{pal.Teal, pal.Cyan},
 		// Glyphs inlaid with glowing turquoise, and a cool dusk in the air,
 		// so the tomb is not all orange and brown monsters stay visible.
-		Walls: Surface{Paint: wallSandstone, Look: Look{
+		Walls: Surface{Paint: WallSandstone, Look: Look{
 			Base:   []color.RGBA{pal.Mahogany, pal.Brown, pal.Bronze, pal.Tan, pal.Skin},
 			Accent: []color.RGBA{pal.Teal, pal.Cyan},
 		}},
-		Variants: [2][]modifier{{modSandDrift}, {modCrack}},
-		Floors:   Surface{Paint: floorSand},
-		Ceiling: Surface{Paint: ceilSlabs, Look: Look{
+		Variants: [2][]Modifier{{ModSandDrift}, {ModCrack}},
+		Floors:   Surface{Paint: FloorSand},
+		Ceiling: Surface{Paint: CeilSlabs, Look: Look{
 			Base: []color.RGBA{pal.Night, pal.Indigo, pal.Slate, pal.Granite, pal.Stone},
 		}},
 		Frame: []color.RGBA{pal.Black, pal.Black, pal.Night, pal.Navy, pal.Night, pal.Teal},
@@ -292,14 +301,14 @@ var Themes = []Theme{
 		Floor: []color.RGBA{pal.Black, pal.Plum, pal.Mahogany, pal.Brown, pal.Tan},
 		Ceil:  []color.RGBA{pal.Night, pal.Plum, pal.Mahogany},
 		Moss:  []color.RGBA{pal.Ash, pal.Steel},
-		Walls: Surface{Paint: wallBooks, Look: Look{
+		Walls: Surface{Paint: WallBooks, Look: Look{
 			Base: []color.RGBA{pal.Black, pal.Plum, pal.Mahogany, pal.Brown},
 			// Book spines in dark and light pairs.
 			Accent: []color.RGBA{pal.Red, pal.Rose, pal.Navy, pal.Blue, pal.Forest, pal.Green, pal.Bronze, pal.Tan, pal.Purple, pal.Pink, pal.Teal, pal.Cyan},
 		}},
-		Variants: [2][]modifier{{modCobweb}, {modCobweb, modSoot}},
-		Floors:   Surface{Paint: floorPlanks},
-		Ceiling: Surface{Paint: ceilCoffers, Look: Look{
+		Variants: [2][]Modifier{{ModCobweb}, {ModCobweb, ModSoot}},
+		Floors:   Surface{Paint: FloorPlanks},
+		Ceiling: Surface{Paint: CeilCoffers, Look: Look{
 			Base:   []color.RGBA{pal.Night, pal.Plum, pal.Mahogany},
 			Accent: []color.RGBA{pal.Plum, pal.Mahogany, pal.Brown, pal.Tan},
 		}},
@@ -363,8 +372,8 @@ func (t *Theme) Remix(lap int) *Theme {
 	r := *t
 	k := (lap - 1) % 2
 	extra, other := t.Variants[k], t.Variants[1-k]
-	r.Walls.Mods = append(append([]modifier(nil), t.Walls.Mods...), extra...)
-	r.Variants = [2][]modifier{other, append(append([]modifier(nil), other...), extra...)}
+	r.Walls.Mods = append(append([]Modifier(nil), t.Walls.Mods...), extra...)
+	r.Variants = [2][]Modifier{other, append(append([]Modifier(nil), other...), extra...)}
 	r.Fog = mix(t.Fog, t.light(), 0.08)
 	r.PropRooms = t.PropRooms * 1.6
 	return &r
@@ -403,10 +412,17 @@ func (t *Theme) CeilHeight() float64 {
 	return t.Height
 }
 
-// SpriteMinLight is the least light a sprite gets in this world.
+// SpriteMinLight is the least light a sprite gets in this world, in
+// [0,1]: 0.35 when SpriteLight is unset, and SpriteLight clamped to [0,1]
+// otherwise (NaN counts as 0 light).
 func (t *Theme) SpriteMinLight() float64 {
-	if t.SpriteLight == 0 {
+	switch {
+	case t.SpriteLight == 0:
 		return 0.35
+	case !(t.SpriteLight > 0): // negative or NaN
+		return 0
+	case t.SpriteLight > 1:
+		return 1
 	}
 	return t.SpriteLight
 }
@@ -419,8 +435,12 @@ func (t *Theme) FrameRamp() []color.RGBA {
 	return t.Frame
 }
 
-// withLook fills in an empty Look from fallback ramps.
-func withLook(s Surface, base, accent []color.RGBA) Surface {
+// withLook fills in an empty Look from fallback ramps, and a missing
+// painter with paint.
+func withLook(s Surface, paint Painter, base, accent []color.RGBA) Surface {
+	if s.Paint == nil {
+		s.Paint = paint
+	}
 	if s.Look.Base == nil {
 		s.Look.Base = base
 	}
@@ -433,14 +453,14 @@ func withLook(s Surface, base, accent []color.RGBA) Surface {
 // WallTex paints the world's wall: variant 0 is plain, 1 and 2 add the
 // world's variant modifiers.
 func (t *Theme) WallTex(seed uint64, v int) *Indexed {
-	s := withLook(t.Walls, t.Wall, t.Moss)
+	s := withLook(t.Walls, WallBricks, t.Wall, t.Moss)
 	if v > 0 {
-		s.Mods = append(append([]modifier(nil), s.Mods...), t.Variants[v-1]...)
+		s.Mods = append(append([]Modifier(nil), s.Mods...), t.Variants[v-1]...)
 	}
 	return s.Make(seed)
 }
 
-func (t *Theme) floors() Surface { return withLook(t.Floors, t.Floor, t.Moss) }
+func (t *Theme) floors() Surface { return withLook(t.Floors, FloorFlagstones, t.Floor, t.Moss) }
 
 // FloorTex paints the world's floor, the first frame if it is animated.
 func (t *Theme) FloorTex(seed uint64) *Indexed { return t.floors().Make(seed) }
@@ -461,7 +481,7 @@ func (t *Theme) FloorFrames(seed uint64) []*Indexed {
 
 // CeilTex paints the world's ceiling.
 func (t *Theme) CeilTex(seed uint64) *Indexed {
-	return withLook(t.Ceiling, t.Ceil, beamWood).Make(seed)
+	return withLook(t.Ceiling, CeilBeams, t.Ceil, beamWood).Make(seed)
 }
 
 // DoorTex paints a door, or a sealed door, set in the world's wall.
@@ -489,7 +509,8 @@ const (
 )
 
 // SkyTex paints the world's sky panorama, from the top of the sky down to
-// the horizon, with soft clouds that thin out towards the horizon. It
+// the horizon, with soft clouds that thin out towards the horizon and a
+// gradient whose bands waver instead of running in stripes. It
 // returns nil for a world with a ceiling.
 func (t *Theme) SkyTex(seed uint64) *Indexed {
 	if len(t.Sky) == 0 {
@@ -502,7 +523,12 @@ func (t *Theme) SkyTex(seed uint64) *Indexed {
 			fx, fy := float64(x), float64(y)*3 // clouds are wide and flat
 			n := 0.65*wrapNoise(fx, fy, SkyW, 16, seed) + 0.35*wrapNoise(fx, fy, SkyW, 48, seed+1)
 			n -= 0.3 * f * f
-			c := Dither(t.Sky, f, x, y)
+			// The gradient's bands waver with a slow noise, so its dither
+			// doesn't run in straight stripes across the whole sky. The
+			// conversion keeps arm64 from fusing the multiply-add, so the
+			// sky is the same on every platform.
+			g := f + float64(0.15*(wrapNoise(fx, float64(y)*4, SkyW, 16, seed+2)-0.5))
+			c := Dither(t.Sky, g, x, y)
 			switch {
 			case n > 0.62:
 				c = pal.Ice
