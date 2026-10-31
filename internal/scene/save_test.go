@@ -8,6 +8,7 @@ import (
 	"github.com/halpworld/halpwords/assets"
 	"github.com/halpworld/halpwords/internal/dungeon"
 	"github.com/halpworld/halpwords/internal/game"
+	"github.com/halpworld/halpwords/internal/link"
 	"github.com/halpworld/halpwords/internal/pal"
 	"github.com/halpworld/halpwords/internal/profile"
 	"github.com/halpworld/halpwords/internal/rpg"
@@ -22,6 +23,16 @@ func testContext(t *testing.T) *game.Context {
 		t.Fatal(err)
 	}
 	return &game.Context{Lists: lists, Profile: profile.New(), Sound: &game.Sound{Muted: true}}
+}
+
+// testLink opens a link client for a test and closes it when the test
+// ends, so no sync loop, sign-in retry or request of it outlives the
+// test (and is counted by another test's AllocsPerRun).
+func testLink(t *testing.T, o link.Options) *link.Client {
+	t.Helper()
+	c := link.Open(o)
+	t.Cleanup(c.Close)
+	return c
 }
 
 // useTempDir points the save folder at a fresh temporary folder.

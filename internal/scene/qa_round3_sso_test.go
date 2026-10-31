@@ -114,8 +114,7 @@ func qaScreen(t *testing.T, srv *httptest.Server) (*SignIn, *game.Context, *lock
 	ctx := testContext(t)
 	ctx.Input = &input.State{}
 	files := &lockedFiles{m: memFiles{}}
-	ctx.Link = link.Open(link.Options{Store: files, Server: srv.URL})
-	t.Cleanup(ctx.Link.Close)
+	ctx.Link = testLink(t, link.Options{Store: files, Server: srv.URL})
 	return NewSignIn(ctx, "").(*SignIn), ctx, files
 }
 

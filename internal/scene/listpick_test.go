@@ -394,7 +394,7 @@ func shelfLinked(t *testing.T, own bool, lists ...map[string]any) (*game.Context
 	if own {
 		opts.Store, opts.OwnDir = save.Current(), game.WordsDir
 	}
-	ctx.Link = link.Open(opts)
+	ctx.Link = testLink(t, opts)
 	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
 		t.Fatal(err)
 	}

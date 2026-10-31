@@ -66,7 +66,7 @@ func linkedContext(t *testing.T) *game.Context {
 	}))
 	t.Cleanup(srv.Close)
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{}, Server: srv.URL})
 	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestAccountSyncMessageClears(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{}, Server: srv.URL})
 	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestSignInScreenFinishesBeforeTheFirstSync(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{}, Server: srv.URL})
 	a := NewAccount(ctx).(*Account)
 	ctx.Link.Link("ABCD-EFGH")
 	a.linking = true
@@ -260,7 +260,7 @@ func TestSignInScreenFinishesBeforeTheFirstSync(t *testing.T) {
 func TestTitleTellsOfALateDaily(t *testing.T) {
 	ctx := testContext(t)
 	store := memFiles{"link.json": []byte(`{"Refresh":"r","LateDaily":true}`)}
-	ctx.Link = link.Open(link.Options{Store: store, Server: "http://127.0.0.1:1"})
+	ctx.Link = testLink(t, link.Options{Store: store, Server: "http://127.0.0.1:1"})
 	if n := ctx.Link.Status().Note; n != link.LateNote {
 		t.Fatalf("note before the title %q", n)
 	}
@@ -275,7 +275,7 @@ func TestTitleTellsOfALateDaily(t *testing.T) {
 func TestTitleTellsOfARefusedRun(t *testing.T) {
 	ctx := testContext(t)
 	data, _ := json.Marshal(map[string]any{"Refresh": "r", "RunNote": link.ClockRunNote})
-	ctx.Link = link.Open(link.Options{Store: memFiles{"link.json": data}, Server: "http://127.0.0.1:1"})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{"link.json": data}, Server: "http://127.0.0.1:1"})
 	if n := ctx.Link.Status().Note; n != link.ClockRunNote {
 		t.Fatalf("note before the title %q", n)
 	}

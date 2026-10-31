@@ -1857,3 +1857,28 @@ func TestListsETagIsForOneGameVersion(t *testing.T) {
 		t.Errorf("the ETag isn't used by the game that made it (%d 304s)", f.notMod)
 	}
 }
+
+// A request made with its own context (My choices here) stops waiting to
+// try again once the client is closed, so nothing of a closed client
+// lingers for the seconds of its retry waits.
+func TestPauseEndsOnClose(t *testing.T) {
+	f, c, _, _ := linked(t)
+	c.sleep = nil // real waits
+	f.failNext("/api/v1/choices", 503, 503, 503, 503)
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Choices(context.Background())
+		done <- err
+	}()
+	time.Sleep(200 * time.Millisecond) // in its first wait
+	start := time.Now()
+	c.Close()
+	select {
+	case <-done:
+		if d := time.Since(start); d > 2*time.Second {
+			t.Errorf("Choices ended %v after Close", d)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Choices still waiting to retry 5 s after Close")
+	}
+}

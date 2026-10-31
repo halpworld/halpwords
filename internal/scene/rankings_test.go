@@ -52,7 +52,7 @@ func rankContext(t *testing.T) *game.Context {
 	}))
 	t.Cleanup(srv.Close)
 	ctx := testContext(t)
-	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{}, Server: srv.URL})
 	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
 		t.Fatal(err)
 	}

@@ -166,7 +166,7 @@ func TestAISetupFooterAndSchoolWords(t *testing.T) {
 	if got := aiHeading(ctx); !strings.Contains(got, "parents and teachers") {
 		t.Errorf("at home the heading is %q", got)
 	}
-	ctx.Link = link.Open(link.Options{Store: memFiles{"link.json": []byte(`{"Way":"` + link.WayCard + `"}`)}, Server: "http://127.0.0.1:1"})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{"link.json": []byte(`{"Way":"` + link.WayCard + `"}`)}, Server: "http://127.0.0.1:1"})
 	got := aiHeading(ctx)
 	if strings.Contains(got, "parents") || !strings.Contains(got, "teacher") {
 		t.Errorf("at school the heading is %q", got)

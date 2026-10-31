@@ -240,13 +240,25 @@ func TestQACrawlDrawAllocs(t *testing.T) {
 	c.Draw(dst, ctx)
 	// The view itself, which the worlds touched, must not allocate.
 	cam := c.camera()
-	n := testing.AllocsPerRun(20, func() {
+	// AllocsPerRun counts every goroutine's allocations, so the least of
+	// three runs: a goroutine of another test (or the runtime) that
+	// allocates during one run can't fail this one.
+	n := minAllocs(3, 20, func() {
 		c.view.Render(c.level, c.tex, cam, nil, 5)
 		c.view.DrawParticles(cam, 5)
 	})
 	if n != 0 {
 		t.Errorf("Render+DrawParticles allocates %v per frame", n)
 	}
-	full := testing.AllocsPerRun(20, func() { c.Draw(dst, ctx) })
+	full := minAllocs(3, 20, func() { c.Draw(dst, ctx) })
 	t.Logf("full Crawl.Draw: %v allocs per frame", full)
+}
+
+// minAllocs is the least of tries runs of testing.AllocsPerRun(runs, f).
+func minAllocs(tries, runs int, f func()) float64 {
+	n := testing.AllocsPerRun(runs, f)
+	for i := 1; i < tries; i++ {
+		n = min(n, testing.AllocsPerRun(runs, f))
+	}
+	return n
 }

@@ -998,7 +998,8 @@ func (p Peek) School() bool { return IsSchoolWay(p.Way) }
 // IsSchoolWay reports whether a Way is a sign-in at school.
 func IsSchoolWay(w string) bool { return w == WayCard || w == WayClass || w == WaySSO }
 
-// pause waits d between retries, or less when ctx ends first.
+// pause waits d between retries, or less when ctx ends first or the
+// client is closed.
 func (c *Client) pause(ctx context.Context, d time.Duration) {
 	if c.sleep != nil {
 		c.sleep(d)
@@ -1006,8 +1007,15 @@ func (c *Client) pause(ctx context.Context, d time.Duration) {
 	}
 	t := time.NewTimer(d)
 	defer t.Stop()
+	var closed <-chan struct{}
+	if c.life != nil {
+		closed = c.life.Done()
+	}
 	select {
 	case <-t.C:
 	case <-ctx.Done():
+	case <-closed:
+		// Closed: a request made with its own context (My choices, a
+		// sign-in) doesn't wait to try again for a client that is gone.
 	}
 }

@@ -144,7 +144,7 @@ func choicesContext(t *testing.T, site *choicesSite) *game.Context {
 	t.Cleanup(srv.Close)
 	ctx := testContext(t)
 	withFont(t, ctx)
-	ctx.Link = link.Open(link.Options{Store: memFiles{}, Server: srv.URL})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{}, Server: srv.URL})
 	if err := ctx.Link.LinkNow(context.Background(), "ABCD-EFGH"); err != nil {
 		t.Fatal(err)
 	}

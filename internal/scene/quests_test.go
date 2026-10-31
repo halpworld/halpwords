@@ -216,7 +216,7 @@ func TestAssignedQuestsOffered(t *testing.T) {
 		"AccessExp": time.Now().Add(time.Hour), "RefreshExp": time.Now().Add(time.Hour), "NextSeq": 1,
 		"Maps": []map[string]any{{"id": "asg_q1", "map_id": "map_1", "version": 2, "title": "Kit's quest",
 			"floors": 3, "due_at": "2026-12-24T23:59:59Z", "text": string(data)}}})
-	ctx.Link = link.Open(link.Options{Store: memFiles{"link.json": st}, Server: "http://127.0.0.1:1"})
+	ctx.Link = testLink(t, link.Options{Store: memFiles{"link.json": st}, Server: "http://127.0.0.1:1"})
 	s := NewQuests(ctx).(*Quests)
 	if len(s.list) < 2 || s.list[0].assigned == nil || s.list[0].assigned.Title != "Kit's quest" {
 		t.Fatalf("assigned quest not first: %+v", s.list)
