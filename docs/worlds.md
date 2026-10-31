@@ -98,15 +98,27 @@ Garden never follows the Ice Halls.
 | 9 | 5 | Amethyst Vaults | crystal facets with glowing veins / checker / crystal | plum | crystal cluster, sparkles, chimes |
 | 10 | 8 | Sandstone Tomb | glyph blocks (glowing turquoise glyphs) / rippled sand / slabs | cool dusk, not orange | urn, drifting sand, soft wind |
 
-From floor 11 the order repeats as a **second lap**. Each world returns with
-its other wall variants as the base, a denser prop layer and a slightly
-shifted fog, so floor 11 never looks exactly like floor 1. `proc.Lap(depth)`
-gives the lap.
+After the last world the order repeats as a **second lap** (from floor 11
+when this was written; from floor 13 now, see below). Each world returns
+with its other wall variants as the base, a denser prop layer and a slightly
+shifted fog, so a floor on the second lap never looks exactly like its
+first-lap floor. `proc.Lap(depth)` gives the lap.
 
 **More worlds later** cost a table row: pick families, modifiers, ramps,
 light, a prop and particles. Ideas: Candy Caverns, Sunken Temple, Mushroom
 Forest, Star Observatory. Each new world needs an append to `proc.Themes`
 and a place in the floor order.
+
+*Now (#74):* new worlds join the end of the floor order, so floors 1 to 10
+keep their worlds and the second lap starts after the last new world. Each
+also needs a tagline (`internal/scene/arrival.go`), an ambience
+(`internal/audio/ambience.go`, wired in `internal/scene/music.go`) and a
+music palette (`internal/audio/worlds.go`); tests fail if one is missing.
+
+| Floor | Index | World | Walls / floor / ceiling | Fog, light | Prop, particles, ambience |
+|---|---|---|---|---|---|
+| 11 | 10 | Sunken Temple | teal temple bricks with seaweed / teal flagstones / slabs, tall; gold door frames | deep sea green | broken pillar, rising bubbles, bubbles and a deep hum |
+| 12 | 11 | Candy Caverns | pink rock candy with icing drips / gumdrop cobbles / candy rock; dark door frames | dark raspberry | lollipop, sugar sprinkles, fizz |
 
 ## As built
 

@@ -35,6 +35,8 @@ var taglines = map[string]string{
 	"Sky Garden":         "Hedges, flowers and open sky.",
 	"Sandstone Tomb":     "Cool sand and glowing glyphs.",
 	"Whispering Library": "Books whisper. Listen closely.",
+	"Sunken Temple":      "Bubbles rise past ancient stones.",
+	"Candy Caverns":      "Sweet caves. Mind the sprinkles!",
 }
 
 // arrivalHint is the key that skips the card, in its corner.

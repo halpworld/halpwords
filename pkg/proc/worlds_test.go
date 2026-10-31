@@ -16,13 +16,14 @@ func TestFloorOrder(t *testing.T) {
 	want := []string{
 		"The Crypt", "Mossy Cellars", "Flooded Caves", "Lava Forge", "Ice Halls",
 		"Whispering Library", "Sky Garden", "Clockwork Workshop", "Amethyst Vaults", "Sandstone Tomb",
+		"Sunken Temple", "Candy Caverns",
 	}
 	for i, name := range want {
 		if got := ThemeFor(i + 1).Name; got != name {
 			t.Errorf("ThemeFor(%d) = %s, want %s", i+1, got, name)
 		}
-		if got := ThemeFor(i + 11).Name; got != name {
-			t.Errorf("ThemeFor(%d) = %s, want %s on the second lap", i+11, got, name)
+		if got := ThemeFor(i + 1 + len(want)).Name; got != name {
+			t.Errorf("ThemeFor(%d) = %s, want %s on the second lap", i+1+len(want), got, name)
 		}
 	}
 	// Every world is in the order exactly once.
@@ -47,7 +48,8 @@ func TestFloorOrder(t *testing.T) {
 }
 
 func TestLap(t *testing.T) {
-	for depth, want := range map[int]int{-1: 0, 0: 0, 1: 0, 10: 0, 11: 1, 20: 1, 21: 2, 31: 3} {
+	n := len(FloorOrder)
+	for depth, want := range map[int]int{-1: 0, 0: 0, 1: 0, n: 0, n + 1: 1, 2 * n: 1, 2*n + 1: 2, 3*n + 1: 3} {
 		if got := Lap(depth); got != want {
 			t.Errorf("Lap(%d) = %d, want %d", depth, got, want)
 		}
@@ -55,7 +57,7 @@ func TestLap(t *testing.T) {
 	if ThemeFor(1) != &Themes[0] {
 		t.Error("the first lap should use Themes itself")
 	}
-	if ThemeFor(11) == &Themes[0] || ThemeFor(11) != ThemeFor(31) {
+	if ThemeFor(n+1) == &Themes[0] || ThemeFor(n+1) != ThemeFor(3*n+1) {
 		t.Error("laps 2 and 4 should share a remix that is not the first lap's world")
 	}
 }
@@ -265,6 +267,8 @@ func TestWorldTexturesPinned(t *testing.T) {
 		"Sky Garden":         "344dac08c92897a42cbb9265bbac934af5f18efaf1d24f16dc0b93d4fd843708",
 		"Sandstone Tomb":     "82f312a7dc1e0978a7b634c129a9ddfc8d4d72dbcf61503711f320edc8033b59",
 		"Whispering Library": "2da9cfb946d95448db0c85408396b69be168c7840225f59acf5dc72d1bc6dfc1",
+		"Sunken Temple":      "cb4458f007594967907e6fadedcd2a7817c12beaa05b40d39a0dd20fff3a0d0f",
+		"Candy Caverns":      "160fb7e932aaa0c04ebf731662745616ff79840810640308dc642589162cbc1e",
 	}
 	for i := range Themes {
 		th := &Themes[i]
@@ -410,6 +414,23 @@ func TestWorldsNameTheirFamilies(t *testing.T) {
 		th := &Themes[i]
 		if th.Walls.Paint == nil || th.Floors.Paint == nil || th.Ceiling.Paint == nil {
 			t.Errorf("%s: a surface has no Paint", th.Name)
+		}
+	}
+}
+
+// Every world can be reached by going down: each is some floor's world on
+// the first lap, and its remix on the second.
+func TestEveryWorldIsReachable(t *testing.T) {
+	n := len(FloorOrder)
+	for i := range Themes {
+		found := false
+		for d := 1; d <= n; d++ {
+			if ThemeFor(d) == &Themes[i] && ThemeFor(d+n) == World(i, 1) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s is on no floor", Themes[i].Name)
 		}
 	}
 }

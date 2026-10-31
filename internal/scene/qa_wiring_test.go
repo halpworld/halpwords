@@ -62,13 +62,15 @@ func TestQAWiringDescendSwitchesWorld(t *testing.T) {
 	if len(names) < 3 {
 		t.Errorf("worlds seen: %v", names)
 	}
-	// Floor 11 is floor 1's world, remixed: not the same look.
-	a, b := wiringCrawl(t, ctx, 1), wiringCrawl(t, ctx, 11)
+	// The first floor of the second lap is floor 1's world, remixed: not
+	// the same look.
+	lap2 := 1 + len(proc.FloorOrder)
+	a, b := wiringCrawl(t, ctx, 1), wiringCrawl(t, ctx, lap2)
 	if a.theme.Name != b.theme.Name {
-		t.Fatalf("floor 11 is %q, floor 1 %q", b.theme.Name, a.theme.Name)
+		t.Fatalf("floor %d is %q, floor 1 %q", lap2, b.theme.Name, a.theme.Name)
 	}
 	if a.theme == b.theme || a.theme.Fog == b.theme.Fog {
-		t.Error("floor 11 is not a remix of floor 1")
+		t.Errorf("floor %d is not a remix of floor 1", lap2)
 	}
 }
 

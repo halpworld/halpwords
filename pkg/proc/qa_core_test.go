@@ -37,17 +37,18 @@ func TestQAHugeAndOddDepths(t *testing.T) {
 		_ = Lap(d)
 		_ = th.WallTex(1, 2)
 	}
-	if ThemeFor(21) != ThemeFor(41) {
+	n := len(FloorOrder)
+	if ThemeFor(1+n) != ThemeFor(1+3*n) {
 		t.Error("lap 2 and lap 4 should share a remix")
 	}
-	if ThemeFor(11) == ThemeFor(21) {
+	if ThemeFor(1+n) == ThemeFor(1+2*n) {
 		t.Error("laps 1 and 2 should have different remixes")
 	}
-	if ThemeFor(11) != ThemeFor(31) {
+	if ThemeFor(1+n) != ThemeFor(1+3*n) {
 		t.Error("laps 1 and 3 should share a remix")
 	}
-	// Floors 1-10 are the designed worlds, never remixes.
-	for d := 1; d <= 10; d++ {
+	// The first lap's floors are the designed worlds, never remixes.
+	for d := 1; d <= n; d++ {
 		if ThemeFor(d) != &Themes[FloorOrder[d-1]] {
 			t.Errorf("floor %d is not the base world", d)
 		}

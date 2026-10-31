@@ -21,11 +21,13 @@ const (
 	Workshop
 	Vaults
 	Tomb
+	Temple
+	Candy
 	numWorlds
 )
 
 // Worlds lists every world with its own music, for tests and tools.
-var Worlds = []World{Crypt, Cellars, Caves, Forge, Ice, Library, Garden, Workshop, Vaults, Tomb}
+var Worlds = []World{Crypt, Cellars, Caves, Forge, Ice, Library, Garden, Workshop, Vaults, Tomb, Temple, Candy}
 
 // worldNames are the names of the worlds in pkg/proc, so the game can pick
 // a world's music by its name. A test checks they match proc.Themes.
@@ -41,9 +43,11 @@ var worldNames = [numWorlds]string{
 	Workshop: "Clockwork Workshop",
 	Vaults:   "Amethyst Vaults",
 	Tomb:     "Sandstone Tomb",
+	Temple:   "Sunken Temple",
+	Candy:    "Candy Caverns",
 }
 
-var worldIDs = [numWorlds]string{"none", "crypt", "cellars", "caves", "forge", "ice", "library", "garden", "workshop", "vaults", "tomb"}
+var worldIDs = [numWorlds]string{"none", "crypt", "cellars", "caves", "forge", "ice", "library", "garden", "workshop", "vaults", "tomb", "temple", "candy"}
 
 func (w World) String() string {
 	if w >= numWorlds {
@@ -176,6 +180,22 @@ var palettes = [numWorlds]palette{
 		progs: [][]int{{0, 1, 0, 6}, {0, 3, 1, 0}, {0, 6, 1, 0}},
 		lead:  Square, leadV: 0.24, leadDuty: 0.25, busy: 0.28,
 		arp: Triangle, arpV: 0.12, bass: 0, drums: 4,
+	},
+	// Underwater: slow Dorian under a soft triangle pad, a sine lead that
+	// wavers like light through water, no drums.
+	Temple: {
+		root: -9, scale: dorian, bpm: [2]float64{74, 80},
+		progs: [][]int{{0, 3, 4, 0}, {0, 6, 3, 4}, {0, 4, 3, 0}},
+		lead:  Sine, leadV: 0.34, busy: 0.2, vibrato: 0.35,
+		pad: true, padW: Triangle, arpV: 0.12, bass: 0, drums: 0,
+	},
+	// Sweet and bouncy: a quick major tune, a square lead, a sparkling
+	// triangle arpeggio in sixteenths and a light beat.
+	Candy: {
+		root: 0, scale: major, bpm: [2]float64{104, 110},
+		progs: [][]int{{0, 4, 5, 3}, {0, 3, 4, 0}, {0, 5, 3, 4}},
+		lead:  Square, leadV: 0.24, leadDuty: 0.25, busy: 0.38,
+		arp: Triangle, arpV: 0.12, arpEvery: 1, bass: 1, drums: 1,
 	},
 }
 

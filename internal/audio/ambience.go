@@ -22,10 +22,12 @@ const (
 	Ticking                  // a clock ticking, calmly
 	Chimes                   // soft crystal chimes
 	Sand                     // soft wind over sand
+	Bubbles                  // bubbles rising through still water
+	Fizz                     // fizzing sugar and the odd tiny sparkle
 	numAmbiences
 )
 
-var ambienceNames = [numAmbiences]string{"none", "dust", "crickets", "drips", "rumble", "wind", "pages", "birds", "ticking", "chimes", "sand"}
+var ambienceNames = [numAmbiences]string{"none", "dust", "crickets", "drips", "rumble", "wind", "pages", "birds", "ticking", "chimes", "sand", "bubbles", "fizz"}
 
 func (a Ambience) String() string {
 	if a >= numAmbiences {
@@ -35,7 +37,7 @@ func (a Ambience) String() string {
 }
 
 // Ambiences lists every ambience that makes a sound, for tests and tools.
-var Ambiences = []Ambience{Dust, Crickets, Drips, Rumble, Wind, Pages, Birds, Ticking, Chimes, Sand}
+var Ambiences = []Ambience{Dust, Crickets, Drips, Rumble, Wind, Pages, Birds, Ticking, Chimes, Sand, Bubbles, Fizz}
 
 // ambienceCap is the most the ambience layer may reach, against music that
 // peaks near 0.9: it sits well beneath it.
@@ -73,6 +75,11 @@ func RenderAmbience(s Song, rate int, yield func()) []float32 {
 	case Sand:
 		l.bed(0.04, 0.005, 2, 0.7, 0.045)
 		l.bed(0.2, 0.05, 5, 0.9, 0.012)
+	case Bubbles:
+		l.bed(0.008, 0, 2, 0.5, 0.05) // the deep hum of the water
+		l.bubbles(2.4)
+	case Fizz:
+		l.fizz(6)
 	}
 	peak := 0.0
 	for i, v := range l.buf {
@@ -311,6 +318,29 @@ func (l *layer) drips(perSec float64) {
 		l.ping(at, f, 1.5, 0.03, 0.2, amp)
 		// A softer echo off the cave walls.
 		l.ping(at+int(0.19*l.rate), f, 1.5, 0.03, 0.2, amp*0.3)
+	}
+}
+
+// bubbles adds soft rising bloops, alone or in short strings.
+func (l *layer) bubbles(perSec float64) {
+	for _, at := range l.times(perSec / 2) {
+		n := 1 + l.rng.IntN(3)
+		for p := 0; p < n; p++ {
+			f := 260 + l.rng.Float64()*240
+			amp := 0.03 + l.rng.Float64()*0.03
+			l.ping(at+int(float64(p)*0.09*l.rate), f, 2.2, 0.025, 0.12, amp)
+		}
+	}
+}
+
+// fizz adds the tiny pops of fizzing sugar, and now and then a soft high
+// sparkle.
+func (l *layer) fizz(perSec float64) {
+	for _, at := range l.times(perSec) {
+		l.burst(at, 0.002+l.rng.Float64()*0.004, 0.5, 0.02+l.rng.Float64()*0.03)
+	}
+	for _, at := range l.times(perSec / 12) {
+		l.ping(at, 2000+l.rng.Float64()*600, 1.1, 0.04, 0.12, 0.015+l.rng.Float64()*0.01)
 	}
 }
 
