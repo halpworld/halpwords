@@ -185,6 +185,15 @@ version as its release notes.
 
 ### Fixed
 
+- **English contractions in Reverse puzzles.** `I'm` now matches `I am`,
+  `don't` matches `do not`, and so on, in either direction. Shared package
+  `pkg/words`: `Grade` with `words.English` expands contractions on both the
+  typed text and the answer; no API change, so halpwords-server needs no
+  change.
+- **Riddles that gave the answer away or fitted two words.** Reworded
+  `battle`, `war`, `I say`, `I teach`, `son`, `daughter`, `sister`,
+  `brother`, `man` and `woman`. (#45)
+
 - **A server-ended link no longer leaves old play to be sent.** When the
   server answers 401 `invalid_token` to a refresh (a grown-up unlinked the
   game, a family withdrew permission for progress, an adult was removed),
